@@ -114,7 +114,7 @@ class MacOSBackend:
             self.Quartz = Quartz
         except Exception as error:
             self.native_error = str(error)
-        self._element_cache: dict[tuple[str, int], dict[str, Any]] = {}
+        self._element_cache: dict[tuple[str, int, int], dict[str, Any]] = {}
         self._screenshot_cache: dict[str, dict[str, Any]] = {}
         self._installed_cache: tuple[float, list[dict[str, Any]]] | None = None
         self._screenshot_dir = Path(tempfile.gettempdir()) / "zcode-macos-computer-use"
@@ -287,6 +287,11 @@ class MacOSBackend:
         if len(candidates) != 1:
             raise ToolError(f"Expected one current window for id={window_id}; found {len(candidates)}. Re-run list_windows.")
         return candidates[0]
+
+    @staticmethod
+    def _window_key(window: dict[str, Any]) -> tuple[str, int, int]:
+        """Bind observations to one concrete app process and window instance."""
+        return str(window["app"]), int(window["pid"]), int(window["id"])
 
     def tool_get_window(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return self._get_window(arguments["id"], arguments.get("app"))
@@ -594,7 +599,7 @@ class MacOSBackend:
                 walk(child, depth + 1)
 
         walk(root, 0)
-        key = (str(window["app"]), int(window["id"]))
+        key = self._window_key(window)
         generation = uuid.uuid4().hex
         self._element_cache[key] = {"generation": generation, "elements": elements, "created": time.monotonic()}
 
@@ -660,7 +665,7 @@ class MacOSBackend:
             pass
         cached = {
             "id": screenshot_id,
-            "windowKey": (str(window["app"]), int(window["id"])),
+            "windowKey": self._window_key(window),
             "bounds": dict(window["bounds"]),
             "imageWidth": width,
             "imageHeight": height,
@@ -876,7 +881,7 @@ class MacOSBackend:
         if not screenshot_id:
             return None
         cached = self._screenshot_cache.get(str(screenshot_id))
-        key = (str(window["app"]), int(window["id"]))
+        key = self._window_key(window)
         if cached is None or cached["windowKey"] != key:
             raise ToolError("screenshotId is unknown or belongs to another window; re-observe before acting")
         if time.monotonic() - cached["created"] > 300:
@@ -887,7 +892,7 @@ class MacOSBackend:
         return cached
 
     def _invalidate_window_observations(self, window: dict[str, Any]) -> None:
-        key = (str(window["app"]), int(window["id"]))
+        key = self._window_key(window)
         self._element_cache.pop(key, None)
         for screenshot_id, cached in list(self._screenshot_cache.items()):
             if cached["windowKey"] == key:
@@ -927,7 +932,7 @@ class MacOSBackend:
         )
 
     def _cached_element(self, window: dict[str, Any], index: Any) -> Any:
-        key = (str(window["app"]), int(window["id"]))
+        key = self._window_key(window)
         cached = self._element_cache.get(key)
         if not cached:
             raise ToolError("No Accessibility observation exists for this window; call get_window_state with include_text=true")

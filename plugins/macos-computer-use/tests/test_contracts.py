@@ -195,10 +195,11 @@ class ContractTests(unittest.TestCase):
         window = {
             "id": 7,
             "app": "com.example.App",
+            "pid": 70,
             "bounds": {"x": 100, "y": 50, "width": 800, "height": 600},
         }
         backend._screenshot_cache["retina"] = {
-            "windowKey": ("com.example.App", 7),
+            "windowKey": ("com.example.App", 70, 7),
             "bounds": dict(window["bounds"]),
             "imageWidth": 1600,
             "imageHeight": 1200,
@@ -332,9 +333,10 @@ class ContractTests(unittest.TestCase):
         window = {
             "id": 8,
             "app": "com.example.App",
+            "pid": 80,
             "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
         }
-        key = ("com.example.App", 8)
+        key = ("com.example.App", 80, 8)
         backend._element_cache[key] = {"elements": [object()]}
         backend._screenshot_cache["shot"] = {
             "windowKey": key,
@@ -350,8 +352,8 @@ class ContractTests(unittest.TestCase):
 
     def test_accessibility_indexes_expire_with_observation_handles(self):
         backend = MacOSBackend()
-        window = {"id": 8, "app": "com.example.App"}
-        key = ("com.example.App", 8)
+        window = {"id": 8, "app": "com.example.App", "pid": 80}
+        key = ("com.example.App", 80, 8)
         backend._element_cache[key] = {
             "generation": "old",
             "elements": [object()],
@@ -360,6 +362,35 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "Accessibility observation is stale"):
             backend._cached_element(window, 0)
         self.assertNotIn(key, backend._element_cache)
+
+    def test_window_observations_do_not_cross_process_restarts(self):
+        backend = MacOSBackend()
+        old_window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        new_process_window = {**old_window, "pid": 81}
+        old_key = ("com.example.App", 80, 8)
+        backend._screenshot_cache["old-shot"] = {
+            "windowKey": old_key,
+            "bounds": dict(old_window["bounds"]),
+            "imageWidth": 100,
+            "imageHeight": 100,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_test_shot__.png"),
+        }
+        backend._element_cache[old_key] = {
+            "generation": "old-process",
+            "elements": [object()],
+            "created": time.monotonic(),
+        }
+
+        with self.assertRaisesRegex(ToolError, "unknown or belongs to another window"):
+            backend._validate_screenshot("old-shot", new_process_window)
+        with self.assertRaisesRegex(ToolError, "No Accessibility observation exists"):
+            backend._cached_element(new_process_window, 0)
 
 
 if __name__ == "__main__":

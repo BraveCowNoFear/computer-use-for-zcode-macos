@@ -28,7 +28,7 @@ Common flow:
 | Finish task | `end_session({session})` |
 
 Primary window coordinates use the screenshot's window-local pixel space. AX
-indexes are cached against one `(pid, window_id)` observation and go stale on
+indexes are cached against one `(app, pid, window_id)` observation and go stale on
 the next snapshot. Most input tools accept `delivery_mode:"background"`
 (default) or `"foreground"` (last resort).
 
@@ -117,10 +117,12 @@ Do not pass primary handles to fallback tools. A fallback window looks like:
 }
 ```
 
-Fallback screenshot IDs remain valid for five minutes and only for their
-window. Fallback AX indexes belong to the latest text observation for that
-window and expire after the same five-minute ceiling. Any action or subsequent
-observation invalidates them sooner.
+Fallback screenshot IDs remain valid for five minutes and only for their exact
+`(app, pid, window_id)` process/window identity. If an app restarts, re-list and
+re-observe even if macOS happens to reuse the same numeric window ID. Fallback
+AX indexes belong to the latest text observation for that same process/window
+identity and expire after the same five-minute ceiling. Any action or
+subsequent observation invalidates them sooner.
 
 For menu bar, Dock, desktop, or other system UI after the primary desktop route
 fails, use the fallback's own strict loop:
