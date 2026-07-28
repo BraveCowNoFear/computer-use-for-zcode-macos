@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -364,10 +365,26 @@ class RepositoryContractTests(unittest.TestCase):
             '"fallback_visible_result_verified"',
             '"fallback_window_activated"',
             '"fallback_field_focus_verified"',
+            '"fallback_physical_button_clicked"',
+            '"fallback_cursor_restored"',
+            "fixture_button_screenshot_point",
             "require_action_verdict",
             "self.process.kill()",
         ):
             self.assertIn(marker, smoke)
+
+    def test_live_smoke_maps_cocoa_fixture_geometry_into_png_pixels(self):
+        path = PLUGIN / "scripts" / "live-smoke.py"
+        spec = importlib.util.spec_from_file_location("zcode_live_smoke_contract", path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        state = {
+            "window": {"bounds": {"width": 640, "height": 322}},
+            "screenshots": [{"width": 1280, "height": 644}],
+        }
+        self.assertEqual(module.fixture_button_screenshot_point(state), (230.0, 400.0))
 
     def test_github_actions_are_commit_pinned(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

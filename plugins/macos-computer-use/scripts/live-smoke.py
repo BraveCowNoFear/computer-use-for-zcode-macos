@@ -17,6 +17,8 @@ from typing import Any, TextIO
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "live_fixture.py"
 DATA_DIR = Path(os.environ.get("MACOS_CUA_DATA_DIR", str(ROOT / ".local-data")))
+FIXTURE_BUTTON_CENTER_X = 115.0
+FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -71,7 +73,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.19"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.20"},
             },
         )
         self.notify("notifications/initialized")
@@ -117,6 +119,24 @@ def require_action_verdict(result: dict[str, Any], step: str) -> None:
     verified = result.get("verified")
     if effect not in {"confirmed", "unverifiable", "suspected_noop"} or not isinstance(verified, bool):
         raise RuntimeError(f"{step} returned no usable action verdict: {result}")
+
+
+def fixture_button_screenshot_point(state: dict[str, Any]) -> tuple[float, float]:
+    """Map the disposable fixture's Cocoa content point into returned PNG pixels."""
+    window = state["window"]
+    screenshot = state["screenshots"][0]
+    bounds = window["bounds"]
+    width = float(bounds["width"])
+    height = float(bounds["height"])
+    image_width = float(screenshot["width"])
+    image_height = float(screenshot["height"])
+    if min(width, height, image_width, image_height) <= 0:
+        raise RuntimeError(f"Fallback fixture returned invalid screenshot geometry: {state}")
+    frame_y_from_top = height - FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM
+    return (
+        FIXTURE_BUTTON_CENTER_X * image_width / width,
+        frame_y_from_top * image_height / height,
+    )
 
 
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
@@ -258,6 +278,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
 def run_fallback() -> dict[str, Any]:
     client = MCPClient([sys.executable, "-m", "macos_cua.server"])
     report: dict[str, Any] = {"steps": []}
+    original_cursor: dict[str, Any] | None = None
     try:
         initialized = client.initialize()
         client.request("tools/list")
@@ -268,6 +289,7 @@ def run_fallback() -> dict[str, Any]:
             )
         report["serverVersion"] = initialized["serverInfo"]["version"]
         report["steps"].append("fallback_permissions_ready")
+        original_cursor, _ = client.call("get_cursor_position")
 
         windows, _ = client.call("list_windows")
         matches = [window for window in windows if window.get("title") == "ZCode Computer Use Live Smoke"]
@@ -325,10 +347,19 @@ def run_fallback() -> dict[str, Any]:
         tree = state["accessibility"]["tree"]
         if token not in tree:
             raise RuntimeError("Fresh fallback state did not contain the text sent through desktop_type_text")
-        button_index = element_index(tree, "AXButton", "Copy value")
-        clicked, _ = client.call("click", {"window": window, "element_index": button_index})
-        require_action_verdict(clicked, "fallback button click")
-        report["steps"].append("fallback_button_clicked")
+        element_index(tree, "AXButton", "Copy value")
+        click_x, click_y = fixture_button_screenshot_point(state)
+        clicked, _ = client.call(
+            "click",
+            {
+                "window": state["window"],
+                "x": click_x,
+                "y": click_y,
+                "screenshotId": state["screenshots"][0]["id"],
+            },
+        )
+        require_action_verdict(clicked, "fallback physical coordinate click")
+        report["steps"].append("fallback_physical_button_clicked")
 
         final_state, final_content = client.call(
             "get_window_state",
@@ -339,8 +370,24 @@ def run_fallback() -> dict[str, Any]:
         if expected not in final_state["accessibility"]["tree"]:
             raise RuntimeError(f"Fallback final visible/AX result did not contain {expected!r}")
         report["steps"].append("fallback_visible_result_verified")
+        restored, _ = client.call(
+            "move_mouse",
+            {"x": original_cursor["x"], "y": original_cursor["y"], "duration": 0.1},
+        )
+        if restored.get("effect") != "confirmed" or restored.get("verified") is not True:
+            raise RuntimeError(f"fallback cursor restoration was not confirmed: {restored}")
+        original_cursor = None
+        report["steps"].append("fallback_cursor_restored")
         return report
     finally:
+        if original_cursor is not None:
+            try:
+                client.call(
+                    "move_mouse",
+                    {"x": original_cursor["x"], "y": original_cursor["y"], "duration": 0.1},
+                )
+            except Exception:
+                pass
         client.close()
 
 

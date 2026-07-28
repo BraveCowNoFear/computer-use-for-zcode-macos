@@ -158,9 +158,10 @@ Mac with TCC grants, which hosted CI runners do not provide.
 On such a Mac, run the disposable end-to-end gate below. It creates its own
 temporary AppKit window, verifies signed-driver identity plus background
 screenshot/type/click on the primary backend, then exercises full-desktop
-shortcut/text input through the direct fallback. Both paths re-observe and
-verify the visible result before the fixture is closed; no user document is
-touched:
+shortcut/text input plus a real Quartz coordinate click through the direct
+fallback. Both paths re-observe and verify the visible result; the gate restores
+the original pointer position before closing its fixture, and touches no user
+document:
 
 ```bash
 bash plugins/macos-computer-use/scripts/live-smoke.sh
