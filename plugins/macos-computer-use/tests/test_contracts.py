@@ -341,6 +341,58 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(response["result"]["isError"])
         self.assertIn("fresh observation", response["result"]["content"][0]["text"])
 
+    def test_structured_tool_errors_survive_mcp_transport(self):
+        class PartialBackend:
+            def call(self, name, arguments):
+                raise ToolError(
+                    "retry only the remaining suffix",
+                    {
+                        "code": "type_text_incomplete",
+                        "effect": "partial",
+                        "delivered_chars": 32,
+                        "retry_from_character": 32,
+                    },
+                )
+
+        response = MCPServer(PartialBackend()).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "tools/call",
+                "params": {"name": "computer_use_health", "arguments": {}},
+            }
+        )
+        self.assertTrue(response["result"]["isError"])
+        self.assertEqual(response["result"]["structuredContent"]["effect"], "partial")
+        self.assertEqual(response["result"]["structuredContent"]["retry_from_character"], 32)
+
+    def test_partial_unicode_delivery_reports_exact_suffix_and_expires_state(self):
+        backend = MacOSBackend()
+        created = 0
+
+        def create_keyboard_event(_source, _key_code, is_down):
+            nonlocal created
+            created += 1
+            return None if created == 3 else {"down": is_down}
+
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            CGEventCreateKeyboardEvent=create_keyboard_event,
+            CGEventKeyboardSetUnicodeString=lambda *_args: None,
+            CGEventPost=lambda *_args: None,
+        )
+        expired = []
+        backend._activate_current = lambda window: window
+        backend._invalidate_window_observations = lambda window: expired.append(window)
+        window = {"id": 7, "pid": 70}
+        with self.assertRaises(ToolError) as caught:
+            backend.tool_type_text({"window": window, "text": "a" * 40})
+        self.assertEqual(caught.exception.structured_content["effect"], "partial")
+        self.assertEqual(caught.exception.structured_content["requested_chars"], 40)
+        self.assertEqual(caught.exception.structured_content["delivered_chars"], 32)
+        self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
+        self.assertEqual(expired, [window])
+
     def test_mcp_rejects_schema_violations_before_backend_dispatch(self):
         backend = mock.Mock()
         server = MCPServer(backend)

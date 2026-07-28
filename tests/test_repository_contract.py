@@ -272,6 +272,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertLess(skill.index('effect:"suspected_noop"'), skill.index("Background pixel"))
         self.assertIn("`type_text({session,pid,window_id,x,y,text})`", skill)
         self.assertIn("primary driver also has a mutually exclusive pixel form", skill)
+        self.assertIn("Fallback text can also return an MCP error", skill)
+        self.assertIn("never the original full text", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

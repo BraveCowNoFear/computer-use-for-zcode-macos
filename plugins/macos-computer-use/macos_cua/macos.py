@@ -1321,23 +1321,50 @@ class MacOSBackend:
     def tool_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
         text = str(arguments["text"])
-        self._send_text(text)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "characters": len(text)}
+        try:
+            delivered = self._send_text(text)
+        finally:
+            # Activation or a partially delivered chunk changes observable UI
+            # even when the action raises, so no old screenshot/index is safe.
+            self._invalidate_window_observations(window)
+        return {"ok": True, "characters": delivered}
 
-    def _send_text(self, text: str) -> None:
+    def _send_text(self, text: str) -> int:
         Q = self.Quartz
+        delivered = 0
         for offset in range(0, len(text), 32):
             chunk = text[offset : offset + 32]
-            utf16_length = len(chunk.encode("utf-16-le")) // 2
-            down = Q.CGEventCreateKeyboardEvent(None, 0, True)
-            up = Q.CGEventCreateKeyboardEvent(None, 0, False)
-            if down is None or up is None:
-                raise ToolError("macOS could not create a Unicode keyboard event")
-            Q.CGEventKeyboardSetUnicodeString(down, utf16_length, chunk)
-            Q.CGEventKeyboardSetUnicodeString(up, utf16_length, chunk)
-            Q.CGEventPost(Q.kCGHIDEventTap, down)
-            Q.CGEventPost(Q.kCGHIDEventTap, up)
+            try:
+                utf16_length = len(chunk.encode("utf-16-le")) // 2
+                down = Q.CGEventCreateKeyboardEvent(None, 0, True)
+                up = Q.CGEventCreateKeyboardEvent(None, 0, False)
+                if down is None or up is None:
+                    raise ToolError("macOS could not create a Unicode keyboard event")
+                Q.CGEventKeyboardSetUnicodeString(down, utf16_length, chunk)
+                Q.CGEventKeyboardSetUnicodeString(up, utf16_length, chunk)
+                Q.CGEventPost(Q.kCGHIDEventTap, down)
+                # Unicode insertion occurs on key-down; count the chunk before
+                # key-up so a reported key-up failure cannot cause replay.
+                delivered += len(chunk)
+                Q.CGEventPost(Q.kCGHIDEventTap, up)
+            except Exception as error:
+                if delivered:
+                    raise ToolError(
+                        f"type_text incomplete: delivered {delivered} of {len(text)} character(s); "
+                        "retry only the remaining suffix",
+                        {
+                            "code": "type_text_incomplete",
+                            "effect": "partial",
+                            "requested_chars": len(text),
+                            "delivered_chars": delivered,
+                            "retryable": True,
+                            "retry_from_character": delivered,
+                        },
+                    ) from error
+                if isinstance(error, ToolError):
+                    raise
+                raise ToolError(f"macOS could not deliver Unicode text: {error}") from error
+        return delivered
 
     def tool_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
@@ -1461,9 +1488,11 @@ class MacOSBackend:
     def tool_desktop_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
         self._validate_desktop_screenshot(arguments["screenshotId"])
         text = str(arguments["text"])
-        self._send_text(text)
-        self._invalidate_all_observations()
-        return {"ok": True, "characters": len(text)}
+        try:
+            delivered = self._send_text(text)
+        finally:
+            self._invalidate_all_observations()
+        return {"ok": True, "characters": delivered}
 
     def tool_desktop_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])

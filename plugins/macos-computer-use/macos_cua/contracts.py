@@ -8,6 +8,10 @@ from typing import Any
 class ToolError(RuntimeError):
     """A user-correctable Computer Use tool error."""
 
+    def __init__(self, message: str, structured_content: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.structured_content = structured_content
+
 
 WINDOW_SCHEMA: dict[str, Any] = {
     "type": "object",

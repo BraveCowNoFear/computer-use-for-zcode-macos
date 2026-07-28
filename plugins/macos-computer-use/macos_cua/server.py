@@ -154,7 +154,11 @@ class MCPServer:
             return self._result(request_id, result)
         except (ToolError, ValueError, KeyError, TypeError) as error:
             content = {"type": "text", "text": str(error)}
-            return self._result(request_id, {"content": [content], "isError": True})
+            result: dict[str, Any] = {"content": [content], "isError": True}
+            structured = getattr(error, "structured_content", None)
+            if isinstance(structured, dict):
+                result["structuredContent"] = structured
+            return self._result(request_id, result)
         except Exception as error:  # Keep MCP alive after native failures.
             print(traceback.format_exc(), file=sys.stderr, flush=True)
             content = {"type": "text", "text": f"Native Computer Use failure: {error}"}

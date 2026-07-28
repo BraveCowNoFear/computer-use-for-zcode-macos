@@ -131,6 +131,12 @@ and every desktop-state route. Use
 or `{accessibility:false,screen_recording:true}` for pixels alone. Then wait for
 the user to grant the Python/ZCode responsible app before restarting ZCode.
 
+Fallback `type_text` and `desktop_type_text` publish structured
+`code:"type_text_incomplete"`/`effect:"partial"` errors if a later Quartz chunk
+cannot be delivered. The response carries `delivered_chars` and
+`retry_from_character`; all prior observation handles are expired, so refresh
+state and send only that remaining suffix.
+
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
 ```json

@@ -158,6 +158,11 @@ sessionless but keeps screenshot/AX handles in its MCP process; it has no
 failure, discard every handle and begin from `list_windows`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
+Fallback text can also return an MCP error with structured
+`effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles
+have already expired: re-observe and retry only the suffix beginning at
+`retry_from_character`, never the original full text.
+
 Because fallback input is foreground delivery, call `activate_window` before
 its first input (or after a Space/focus change), then capture a new
 `get_window_state` and ground the action in that post-activation state. Do not

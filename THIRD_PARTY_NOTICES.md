@@ -5,6 +5,9 @@
 - Project: `trycua/cua`, component `cua-driver`
 - Source: https://github.com/trycua/cua
 - Tested release: `cua-driver-rs-v0.12.6`
+- Reviewed general Skill: https://github.com/trycua/cua/blob/9eb1f481b8a12cd6ffda2ad5af21653a9e5aa9e5/libs/cua-driver/rust/Skills/cua-driver/SKILL.md
+- Reviewed macOS guidance: https://github.com/trycua/cua/blob/9eb1f481b8a12cd6ffda2ad5af21653a9e5aa9e5/libs/cua-driver/rust/Skills/cua-driver/MACOS.md
+- Reviewed revision: `9eb1f481b8a12cd6ffda2ad5af21653a9e5aa9e5`
 - License: MIT
 
 This repository does not vendor the Cua Driver binary or source. The plugin's
