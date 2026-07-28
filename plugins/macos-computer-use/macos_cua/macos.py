@@ -257,6 +257,7 @@ class MacOSBackend:
         self._screenshot_dir = Path(tempfile.gettempdir()) / "zcode-macos-computer-use"
         self._held_buttons: dict[Any, tuple[Any, Any, float, float]] = {}
         self._held_key_releases: list[Any] = []
+        self._hid_mouse_event_source: Any | None = None
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
@@ -1658,9 +1659,30 @@ class MacOSBackend:
             return Q.kCGMouseButtonCenter, Q.kCGEventOtherMouseDown, Q.kCGEventOtherMouseUp, Q.kCGEventOtherMouseDragged
         raise ToolError(f"Unsupported mouse button: {value}")
 
+    def _mouse_event_source(self) -> Any | None:
+        if self._hid_mouse_event_source is not None:
+            return self._hid_mouse_event_source
+        Q = self.Quartz
+        create = getattr(Q, "CGEventSourceCreate", None)
+        state = getattr(Q, "kCGEventSourceStateHIDSystemState", None)
+        # Lightweight unit fixtures and older bridge shims may not expose the
+        # source API; native PyObjC CI proves the production path does.
+        if create is None or state is None:
+            return None
+        source = create(state)
+        if source is None:
+            raise ToolError("macOS could not create a HID mouse event source")
+        self._hid_mouse_event_source = source
+        return source
+
     def _post_mouse(self, event_type: Any, button: Any, x: float, y: float, click_count: int = 1) -> None:
         Q = self.Quartz
-        event = Q.CGEventCreateMouseEvent(None, event_type, (float(x), float(y)), button)
+        event = Q.CGEventCreateMouseEvent(
+            self._mouse_event_source(),
+            event_type,
+            (float(x), float(y)),
+            button,
+        )
         if event is None:
             raise ToolError("macOS could not create a mouse event")
         if click_count > 1:

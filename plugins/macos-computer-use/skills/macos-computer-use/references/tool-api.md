@@ -163,7 +163,8 @@ leave 30 ms between move, down, and up so foreground apps can consume each
 physical transition before the next one; timed moves and drags publish their
 last interpolated frame at the requested duration boundary. Drag endpoints,
 raw mouse down/up transitions, and final pointer read-back use the same 30 ms
-app-event-loop settlement interval.
+app-event-loop settlement interval. All fallback mouse sequences reuse one
+Quartz `hidSystemState` event source so move/down/drag/up share hardware state.
 
 For a held button, raw `mouse_up` at a changed point posts the corresponding
 dragged event before release; the same endpoint does not invent a drag. It

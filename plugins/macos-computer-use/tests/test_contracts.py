@@ -79,9 +79,11 @@ class ContractTests(unittest.TestCase):
             int(backend.Quartz.CGEventGetFlags(keypad_event))
             & int(backend.Quartz.kCGEventFlagMaskNumericPad)
         )
+        hid_source = backend._mouse_event_source()
+        self.assertIsNotNone(hid_source)
         mouse_events = [
             backend.Quartz.CGEventCreateMouseEvent(
-                None,
+                hid_source,
                 event_type,
                 (11.0, 22.0),
                 backend.Quartz.kCGMouseButtonLeft,
@@ -2159,6 +2161,25 @@ class ContractTests(unittest.TestCase):
             backend._post_mouse("move", "left", 1, 2)
         self.assertEqual(caught.exception.structured_content["code"], "mouse_event_delivery_unknown")
         self.assertEqual(caught.exception.structured_content["effect"], "unverifiable")
+
+    def test_mouse_events_reuse_one_hid_system_event_source(self):
+        source = object()
+        created_events = []
+        create_source = mock.Mock(return_value=source)
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGEventSourceStateHIDSystemState="hid-system-state",
+            kCGHIDEventTap="hid-tap",
+            CGEventSourceCreate=create_source,
+            CGEventCreateMouseEvent=lambda event_source, event_type, point, button: (
+                created_events.append((event_source, event_type, point, button)) or object()
+            ),
+            CGEventPost=lambda *_args: None,
+        )
+        backend._post_mouse("move", "left", 1, 2)
+        backend._post_mouse("down", "left", 1, 2)
+        create_source.assert_called_once_with("hid-system-state")
+        self.assertEqual([event[0] for event in created_events], [source, source])
 
     def test_raw_held_button_moves_as_a_drag_and_releases_on_close(self):
         backend = MacOSBackend()
