@@ -58,7 +58,7 @@ Gatekeeper assessment; disables its telemetry; and launches a plugin-owned daemo
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted` with no user, managed, or session policy
 configured; the socket is private, per-user, and versioned. The fallback
-requires CPython 3.10 or newer, creates a private
+requires CPython 3.10 through 3.15, creates a private
 environment, and installs the complete exact-tested five-package PyObjC 12.2.1
 binary-wheel closure without dependency re-resolution.
 

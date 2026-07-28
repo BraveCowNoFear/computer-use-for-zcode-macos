@@ -7,7 +7,7 @@
 python_is_supported() {
   local python="$1"
   [[ -x "$(command -v "$python" 2>/dev/null || true)" ]] || return 1
-  "$python" -c 'import platform, sys; raise SystemExit(0 if platform.python_implementation() == "CPython" and sys.version_info >= (3, 10) else 1)' \
+  "$python" -c 'import platform, sys; raise SystemExit(0 if platform.python_implementation() == "CPython" and (3, 10) <= sys.version_info < (3, 16) else 1)' \
     >/dev/null 2>&1
 }
 
@@ -20,7 +20,7 @@ require_supported_python() {
   if command -v "$python" >/dev/null 2>&1; then
     detected="$("$python" -c 'import platform, sys; print(f"{platform.python_implementation()} {sys.version.split()[0]}")' 2>/dev/null || printf 'unreadable')"
   fi
-  echo "The direct fallback requires CPython 3.10 or newer; $python is $detected." >&2
+  echo "The direct fallback requires CPython 3.10 through 3.15; $python is $detected." >&2
   return 1
 }
 

@@ -50,7 +50,7 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
 专用 socket 按用户和版本隔离且仅
-当前用户可访问。兜底后端要求 CPython 3.10 或更新版本，会创建私有 Python 环境，且只安装经过测试的
+当前用户可访问。兜底后端要求 CPython 3.10–3.15，会创建私有 Python 环境，且只安装经过测试的
 五包 PyObjC 12.2.1 完整闭包，不会在安装时重新解析出更高版本的传递依赖。
 
 如果当前用户不能写入 `/Applications`，主后端会给出明确诊断，原生兜底仍

@@ -59,6 +59,9 @@ class RepositoryContractTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("--only-binary=:all:", workflow)
         self.assertIn("--no-deps", workflow)
+        common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
+        self.assertIn('(3, 10) <= sys.version_info < (3, 16)', common)
+        self.assertIn("CPython 3.10 through 3.15", common)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_accepts_the_ci_cpython(self):
