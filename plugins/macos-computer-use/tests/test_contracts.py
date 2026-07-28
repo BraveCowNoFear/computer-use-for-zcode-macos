@@ -348,6 +348,19 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn(key, backend._element_cache)
         self.assertNotIn("shot", backend._screenshot_cache)
 
+    def test_accessibility_indexes_expire_with_observation_handles(self):
+        backend = MacOSBackend()
+        window = {"id": 8, "app": "com.example.App"}
+        key = ("com.example.App", 8)
+        backend._element_cache[key] = {
+            "generation": "old",
+            "elements": [object()],
+            "created": time.monotonic() - 301,
+        }
+        with self.assertRaisesRegex(ToolError, "Accessibility observation is stale"):
+            backend._cached_element(window, 0)
+        self.assertNotIn(key, backend._element_cache)
+
 
 if __name__ == "__main__":
     unittest.main()

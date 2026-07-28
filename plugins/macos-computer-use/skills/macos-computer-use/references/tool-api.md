@@ -119,7 +119,8 @@ Do not pass primary handles to fallback tools. A fallback window looks like:
 
 Fallback screenshot IDs remain valid for five minutes and only for their
 window. Fallback AX indexes belong to the latest text observation for that
-window.
+window and expire after the same five-minute ceiling. Any action or subsequent
+observation invalidates them sooner.
 
 For menu bar, Dock, desktop, or other system UI after the primary desktop route
 fails, use the fallback's own strict loop:

@@ -931,6 +931,9 @@ class MacOSBackend:
         cached = self._element_cache.get(key)
         if not cached:
             raise ToolError("No Accessibility observation exists for this window; call get_window_state with include_text=true")
+        if time.monotonic() - float(cached["created"]) > 300:
+            self._element_cache.pop(key, None)
+            raise ToolError("The Accessibility observation is stale; call get_window_state again")
         elements = cached["elements"]
         element_index = int(index)
         if element_index < 0 or element_index >= len(elements):
