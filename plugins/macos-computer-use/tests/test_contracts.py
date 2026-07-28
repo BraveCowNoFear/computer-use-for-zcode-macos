@@ -69,6 +69,41 @@ class ContractTests(unittest.TestCase):
         backend.Quartz.CGEventSetFlags(
             modifier_event, backend.Quartz.kCGEventFlagMaskCommand
         )
+        mouse_events = [
+            backend.Quartz.CGEventCreateMouseEvent(
+                None,
+                event_type,
+                (11.0, 22.0),
+                backend.Quartz.kCGMouseButtonLeft,
+            )
+            for event_type in (
+                backend.Quartz.kCGEventMouseMoved,
+                backend.Quartz.kCGEventLeftMouseDown,
+                backend.Quartz.kCGEventLeftMouseDragged,
+                backend.Quartz.kCGEventLeftMouseUp,
+            )
+        ]
+        self.assertTrue(all(event is not None for event in mouse_events))
+        backend.Quartz.CGEventSetIntegerValueField(
+            mouse_events[1], backend.Quartz.kCGMouseEventClickState, 2
+        )
+        self.assertEqual(
+            backend.Quartz.CGEventGetIntegerValueField(
+                mouse_events[1], backend.Quartz.kCGMouseEventClickState
+            ),
+            2,
+        )
+        scroll_event = backend.Quartz.CGEventCreateScrollWheelEvent(
+            None,
+            backend.Quartz.kCGScrollEventUnitPixel,
+            2,
+            -120,
+            30,
+        )
+        self.assertIsNotNone(scroll_event)
+        backend.Quartz.CGEventSetLocation(scroll_event, (33.0, 44.0))
+        scroll_location = backend.Quartz.CGEventGetLocation(scroll_event)
+        self.assertEqual((float(scroll_location.x), float(scroll_location.y)), (33.0, 44.0))
         self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
         self.assertTrue(hasattr(backend.AppKit, "NSWorkspace"))
         self.assertTrue(hasattr(backend.AppKit, "NSBitmapImageFileTypePNG"))
