@@ -93,7 +93,7 @@ server.
 | `get_window` | `id`, optional `app`/`pid` | Rehydrate a returned window; carry `pid` for exact process binding. |
 | `list_apps` | none | Return installed/running apps and windows. |
 | `launch_app` | `app` | Launch and return matched pid plus current windows. |
-| `get_window_state` | `window` | Return a screenshot by default; request AX text explicitly when needed. |
+| `get_window_state` | `window` | Return a screenshot by default; request AX text explicitly, with optional `max_tree_nodes`/`max_tree_depth`, when needed. |
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
 | `press_key` | `window`, `key` | Press a key or `+`-separated chord; use keysym names such as `plus`, `colon`, or `ISO_Left_Tab` when the symbol conflicts with the separator. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
@@ -120,9 +120,14 @@ desktop captures delete any unpublished partial PNG immediately.
 Window screenshot plus AX text, and all screens in one desktop call, are each
 transactional observations: if any requested channel or display fails, every
 new cache handle and PNG from that failed call is removed.
-Fallback AX observations bound the normal tree and separately cap extra selected
-rows/cells/children at 64; `truncated:true` means re-observe a narrower state
-instead of assuming the omitted selection is actionable.
+Fallback AX observations default to 1,200 rendered nodes and 64 levels, enable
+Chromium/Electron manual/enhanced Accessibility best-effort, and merge the
+window, menu bar, `AXRows`, `AXContents`, and `AXVisibleChildren` into one
+actionable generation. `max_tree_nodes` accepts 1–10,000 and
+`max_tree_depth` accepts 1–256. Extra selected rows/cells/children remain capped
+at 64; `truncated:true` plus `truncation_reasons` means re-observe with the
+specific larger budget or a narrower target instead of assuming omitted items
+are actionable.
 For raw mouse tools, a `screenshotId` without `window` binds the supplied
 coordinates to that exact fresh desktop image; it is never silently ignored.
 When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,

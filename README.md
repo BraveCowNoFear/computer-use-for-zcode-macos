@@ -27,10 +27,10 @@ authorization boundaries.
 | ZCode plugin + marketplace | Installs the Skill and both local stdio MCP servers |
 
 The primary delivery ladder is background Accessibility → background pixels →
-temporary foreground delivery → direct native fallback. This design is adapted
-from the existing Hermes macOS Computer Use Skill and the open-source Cua
-Driver, while the ZCode packaging, unrestricted launcher, fallback runtime, and
-tests live in this repository.
+temporary foreground delivery → direct native fallback. This design is informed
+by the existing Hermes macOS Computer Use Skill, Open Computer Use's native
+macOS implementation, and the open-source Cua Driver, while the ZCode packaging,
+unrestricted launcher, fallback runtime, and tests live in this repository.
 
 ## Install in ZCode
 
@@ -80,6 +80,9 @@ omitting screenshots; pixel and desktop routes still require it.
   indexed Accessibility tree together on both backends.
 - Bind fallback observations to app, pid, CGWindowID, and AXWindowNumber when
   available; refuse ambiguous Accessibility windows instead of guessing.
+- Enable Chromium/Electron Accessibility visibility best-effort, merge window,
+  menu-bar, row, contents, and visible-child AX sources, and expose adjustable
+  1,200-node/64-level observation budgets for large pages and lists.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll.
 - Type Unicode, press Mac shortcuts, and set Accessibility values.
@@ -158,6 +161,8 @@ plugins/macos-computer-use/
 
 Primary background control depends on [Cua Driver](https://github.com/trycua/cua)
 (MIT). The routing model was informed by the
-[historical Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md).
+[historical Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md)
+and the MIT-licensed
+[Open Computer Use macOS Skill and runtime](https://github.com/iFurySt/open-codex-computer-use/tree/a265277f6677ef00a1c597f54616cc3410d8d297/skills/open-computer-use).
 This project is MIT licensed; see [LICENSE](./LICENSE) and
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

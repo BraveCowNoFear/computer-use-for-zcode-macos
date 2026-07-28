@@ -46,6 +46,10 @@ ACCESSIBILITY_REQUIRED_TOOLS = frozenset(
         "mouse_up",
     }
 )
+DEFAULT_AX_TREE_MAX_NODES = 1200
+DEFAULT_AX_TREE_MAX_DEPTH = 64
+MAX_AX_TREE_MAX_NODES = 10_000
+MAX_AX_TREE_MAX_DEPTH = 256
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -720,6 +724,60 @@ class MacOSBackend:
                 return None
         return bool(result) if isinstance(result, bool) else None
 
+    @staticmethod
+    def _ax_equal(left: Any, right: Any) -> bool:
+        if left is right:
+            return True
+        try:
+            return bool(left == right)
+        except Exception:
+            return False
+
+    def _ax_array(self, element: Any, attribute: Any) -> list[Any]:
+        value = self._ax_copy(element, attribute)
+        if value is None:
+            return []
+        return list(value) if isinstance(value, (list, tuple)) else [value]
+
+    def _ax_children(self, element: Any) -> list[Any]:
+        role = str(
+            self._ax_copy(element, self._ax_attr("kAXRoleAttribute", "AXRole"))
+            or ""
+        )
+        rows_attr = self._ax_attr("kAXRowsAttribute", "AXRows")
+        visible_attr = "AXVisibleChildren"
+        rows = self._ax_array(element, rows_attr)
+        visible = self._ax_array(element, visible_attr)
+        attributes: list[Any] = []
+        row_primary_roles = {"AXOutline", "AXList", "AXTable", "AXBrowser"}
+        if not (rows and role in row_primary_roles) and not (
+            visible and role == "AXList"
+        ):
+            attributes.append(self._ax_attr("kAXChildrenAttribute", "AXChildren"))
+        attributes.extend((rows_attr, "AXContents", visible_attr))
+
+        children: list[Any] = []
+        for attribute in attributes:
+            if attribute == rows_attr:
+                values = rows
+            elif attribute == visible_attr:
+                values = visible
+            else:
+                values = self._ax_array(element, attribute)
+            for child in values:
+                if child is None or any(
+                    self._ax_equal(child, existing) for existing in children
+                ):
+                    continue
+                children.append(child)
+        return children
+
+    def _enable_best_effort_accessibility_modes(self, app_element: Any) -> None:
+        # Chromium/Electron can withhold descendants until one of these app-level
+        # Accessibility modes is enabled. Unsupported attributes fail harmlessly.
+        self._ax_set(app_element, "AXManualAccessibility", True)
+        self._ax_set(app_element, "AXEnhancedUserInterface", True)
+
     def _ax_value(self, value: Any, value_type: Any) -> Any:
         if value is None:
             return None
@@ -830,39 +888,64 @@ class MacOSBackend:
             parts.append("actions=" + ",".join(actions[:8]))
         return "  " * depth + " ".join(parts)
 
-    def _accessibility_state(self, window: dict[str, Any]) -> dict[str, Any]:
+    def _accessibility_state(
+        self, window: dict[str, Any], options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        options = options or {}
+        max_nodes = min(
+            MAX_AX_TREE_MAX_NODES,
+            int(options.get("max_tree_nodes", DEFAULT_AX_TREE_MAX_NODES)),
+        )
+        max_depth = min(
+            MAX_AX_TREE_MAX_DEPTH,
+            int(options.get("max_tree_depth", DEFAULT_AX_TREE_MAX_DEPTH)),
+        )
+        AX = self.ApplicationServices
+        app_element = AX.AXUIElementCreateApplication(int(window["pid"]))
+        self._enable_best_effort_accessibility_modes(app_element)
         root = self._ax_window(window)
-        child_attr = self._ax_attr("kAXChildrenAttribute", "AXChildren")
         elements: list[Any] = []
         lines: list[str] = []
-        seen: set[int] = set()
+        seen: dict[int, list[Any]] = {}
         truncated = False
+        truncation_reasons: set[str] = set()
 
         def walk(element: Any, depth: int) -> None:
             nonlocal truncated
-            if depth > 12 or len(elements) >= 350:
+            if depth >= max_depth:
                 truncated = True
+                truncation_reasons.add("max_tree_depth")
                 return
-            identity = id(element)
-            if identity in seen:
+            if len(elements) >= max_nodes:
+                truncated = True
+                truncation_reasons.add("max_tree_nodes")
                 return
-            seen.add(identity)
+            try:
+                identity = hash(element)
+            except Exception:
+                # Keep unhashable wrappers in one equality-checked bucket so a
+                # native AX cycle cannot evade detection through fresh proxies.
+                identity = 0
+            bucket = seen.setdefault(identity, [])
+            if any(self._ax_equal(element, existing) for existing in bucket):
+                return
+            bucket.append(element)
             index = len(elements)
             elements.append(element)
             lines.append(self._format_element(element, index, depth))
-            children = self._ax_copy(element, child_attr) or []
-            if not isinstance(children, (list, tuple)):
-                children = [children]
-            for child in children:
+            for child in self._ax_children(element):
                 walk(child, depth + 1)
 
         walk(root, 0)
+        menu_bar = self._ax_copy(
+            app_element, self._ax_attr("kAXMenuBarAttribute", "AXMenuBar")
+        )
+        if menu_bar is not None and not self._ax_equal(menu_bar, root):
+            walk(menu_bar, 0)
         key = self._window_key(window)
         generation = uuid.uuid4().hex
         self._element_cache[key] = {"generation": generation, "elements": elements, "created": time.monotonic()}
 
-        AX = self.ApplicationServices
-        app_element = AX.AXUIElementCreateApplication(int(window["pid"]))
         focused = self._ax_copy(app_element, self._ax_attr("kAXFocusedUIElementAttribute", "AXFocusedUIElement"))
         focused_line = None
         selected_text = None
@@ -903,6 +986,7 @@ class MacOSBackend:
                 continue
             if len(selected_elements) >= 64:
                 truncated = True
+                truncation_reasons.add("selected_elements")
                 break
             for attr_name, fallback in (
                 ("kAXSelectedChildrenAttribute", "AXSelectedChildren"),
@@ -911,6 +995,7 @@ class MacOSBackend:
             ):
                 if len(selected_elements) >= 64:
                     truncated = True
+                    truncation_reasons.add("selected_elements")
                     break
                 selected = self._ax_copy(container, self._ax_attr(attr_name, fallback)) or []
                 if not isinstance(selected, (list, tuple)):
@@ -918,6 +1003,7 @@ class MacOSBackend:
                 for item in selected:
                     if len(selected_elements) >= 64:
                         truncated = True
+                        truncation_reasons.add("selected_elements")
                         break
                     identity = id(item)
                     if identity in selected_seen:
@@ -938,6 +1024,12 @@ class MacOSBackend:
             "document_text": document_text,
             "generation": generation,
             "truncated": truncated,
+            "truncation_reasons": sorted(truncation_reasons),
+            "tree_limits": {
+                "max_tree_nodes": max_nodes,
+                "max_tree_depth": max_depth,
+                "rendered_nodes": len(lines),
+            },
         }
 
     def _capture_window(self, window: dict[str, Any]) -> dict[str, Any]:
@@ -1016,7 +1108,7 @@ class MacOSBackend:
         include_text = bool(arguments.get("include_text", False))
         try:
             screenshots = [self._capture_window(window)] if include_screenshot else []
-            accessibility = self._accessibility_state(window) if include_text else None
+            accessibility = self._accessibility_state(window, arguments) if include_text else None
             return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
         except Exception:
             # Never retain a screenshot or AX generation that the caller did

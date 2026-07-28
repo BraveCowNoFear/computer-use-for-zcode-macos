@@ -71,7 +71,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.32"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.0"},
             },
         )
         self.notify("notifications/initialized")

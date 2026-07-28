@@ -103,7 +103,7 @@ class ContractTests(unittest.TestCase):
         }
         backend._get_window = lambda value: window
         backend._capture_window = lambda value: {"id": "shot"}
-        backend._accessibility_state = lambda value: {"tree": "[0] AXWindow"}
+        backend._accessibility_state = lambda value, options=None: {"tree": "[0] AXWindow"}
         state = backend.tool_get_window_state({"window": {"id": 7}})
         self.assertEqual(state["screenshots"], [{"id": "shot"}])
         self.assertIsNone(state["accessibility"])
@@ -112,6 +112,14 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(state["accessibility"], {"tree": "[0] AXWindow"})
         definition = next(tool for tool in TOOL_DEFINITIONS if tool["name"] == "get_window_state")
         self.assertFalse(definition["inputSchema"]["properties"]["include_text"]["default"])
+        self.assertEqual(
+            definition["inputSchema"]["properties"]["max_tree_nodes"]["default"],
+            1200,
+        )
+        self.assertEqual(
+            definition["inputSchema"]["properties"]["max_tree_depth"]["default"],
+            64,
+        )
 
     def test_health_keeps_ax_control_available_without_screen_recording(self):
         backend = MacOSBackend()
@@ -810,6 +818,8 @@ class ContractTests(unittest.TestCase):
         server = MCPServer(backend)
         invalid_calls = [
             ("get_window_state", {"window": {"id": 1}, "include_screenshot": "false"}),
+            ("get_window_state", {"window": {"id": 1}, "max_tree_nodes": 10001}),
+            ("get_window_state", {"window": {"id": 1}, "max_tree_depth": 0}),
             ("permission_status", {"unexpected": True}),
             ("click", {"window": {"id": 1}, "click_count": 0}),
             ("drag", {"window": {"id": 1}, "from_x": math.nan, "from_y": 0, "to_x": 1, "to_y": 1}),
@@ -1222,9 +1232,92 @@ class ContractTests(unittest.TestCase):
                 "app": "com.example.App",
                 "pid": 80,
                 "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
-            }
+            },
+            {"max_tree_depth": 13},
         )
         self.assertTrue(state["truncated"])
+        self.assertEqual(state["truncation_reasons"], ["max_tree_depth"])
+        self.assertEqual(state["tree_limits"]["rendered_nodes"], 13)
+
+    def test_accessibility_observation_enables_rich_app_tree_sources(self):
+        backend = MacOSBackend()
+        root, app, ordinary, row, content, visible, menu, menu_item = (
+            object() for _ in range(8)
+        )
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: root
+        backend._ax_set = mock.Mock(return_value=True)
+        names = {
+            root: "root",
+            ordinary: "ordinary",
+            row: "row",
+            content: "content",
+            visible: "visible",
+            menu: "menu",
+            menu_item: "menu_item",
+        }
+        backend._format_element = (
+            lambda element, index, depth: f"[{index}] {names[element]}"
+        )
+        values = {
+            (root, "AXRole"): "AXList",
+            (root, "AXChildren"): [ordinary],
+            (root, "AXRows"): [row],
+            (root, "AXContents"): [row, content],
+            (root, "AXVisibleChildren"): [content, visible],
+            (app, "AXMenuBar"): menu,
+            (app, "AXFocusedUIElement"): None,
+            (menu, "AXChildren"): [menu_item],
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        state = backend._accessibility_state(window)
+        cached = backend._element_cache[("com.example.App", 80, 8)]["elements"]
+        self.assertEqual(cached, [root, row, content, visible, menu, menu_item])
+        self.assertNotIn(ordinary, cached)
+        self.assertEqual(state["tree_limits"]["rendered_nodes"], 6)
+        self.assertFalse(state["truncated"])
+        backend._ax_set.assert_has_calls(
+            [
+                mock.call(app, "AXManualAccessibility", True),
+                mock.call(app, "AXEnhancedUserInterface", True),
+            ]
+        )
+
+    def test_accessibility_node_budget_is_bounded_and_reported(self):
+        backend = MacOSBackend()
+        nodes = [object() for _ in range(6)]
+        app = object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: nodes[0]
+        backend._format_element = lambda element, index, depth: f"[{index}] item"
+        values = {(app, "AXFocusedUIElement"): None}
+        for index, node in enumerate(nodes):
+            values[(node, "AXChildren")] = (
+                [nodes[index + 1]] if index + 1 < len(nodes) else []
+            )
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        state = backend._accessibility_state(
+            {
+                "id": 8,
+                "app": "com.example.App",
+                "pid": 80,
+                "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+            },
+            {"max_tree_nodes": 3},
+        )
+        self.assertTrue(state["truncated"])
+        self.assertEqual(state["truncation_reasons"], ["max_tree_nodes"])
+        self.assertEqual(state["tree_limits"]["rendered_nodes"], 3)
 
     def test_large_accessibility_selection_is_bounded_and_reported(self):
         backend = MacOSBackend()

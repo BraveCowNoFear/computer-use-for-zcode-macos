@@ -26,3 +26,16 @@ upstream license and notices.
 The project's high-level background-control routing was informed by publicly
 documented behavior in the Hermes Skill. No Hermes source text is distributed
 as part of this project.
+
+## Open Computer Use
+
+- Project: `iFurySt/open-codex-computer-use`
+- Reviewed Skill: https://github.com/iFurySt/open-codex-computer-use/blob/a265277f6677ef00a1c597f54616cc3410d8d297/skills/open-computer-use/SKILL.md
+- Reviewed macOS implementation: https://github.com/iFurySt/open-codex-computer-use/blob/a265277f6677ef00a1c597f54616cc3410d8d297/packages/OpenComputerUseKit/Sources/OpenComputerUseKit/AccessibilitySnapshot.swift
+- Reviewed revision: `a265277f6677ef00a1c597f54616cc3410d8d297`
+- License: MIT
+
+The fallback's best-effort Chromium Accessibility modes, merged AX child
+sources, and adjustable tree-budget design were informed by the reviewed native
+implementation. This repository contains an independent Python/PyObjC
+implementation and does not distribute Open Computer Use source or binaries.

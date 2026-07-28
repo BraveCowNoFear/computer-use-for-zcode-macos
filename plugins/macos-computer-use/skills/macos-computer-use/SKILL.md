@@ -213,6 +213,14 @@ index because the consent prompt or System Settings may change focus and layout.
 The fallback retains at most 32 window AX observations; scanning more windows
 evicts the oldest handles, so re-observe the chosen window immediately before
 an indexed action.
+For Chromium/Electron and large native lists, the fallback best-effort enables
+the app's `AXManualAccessibility`/`AXEnhancedUserInterface` modes and merges the
+target window, menu bar, `AXRows`, `AXContents`, and `AXVisibleChildren` into
+one generation.
+Its explicit AX defaults are 1,200 rendered nodes and 64 levels. If
+`truncated:true`, inspect `truncation_reasons` and re-observe with a larger
+`max_tree_nodes` (up to 10,000) or `max_tree_depth` (up to 256) only when the
+task needs the omitted region; every new observation replaces the old indexes.
 
 When the primary desktop path itself is unavailable or refuses a system-UI
 operation, the fallback can control every visible display. Call fallback

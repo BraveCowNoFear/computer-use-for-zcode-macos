@@ -90,6 +90,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "window": WINDOW_SCHEMA,
                 "include_screenshot": {"type": "boolean", "default": True},
                 "include_text": {"type": "boolean", "default": False},
+                "max_tree_nodes": {"type": "integer", "minimum": 1, "maximum": 10000, "default": 1200},
+                "max_tree_depth": {"type": "integer", "minimum": 1, "maximum": 256, "default": 64},
             },
             ["window"],
         ),

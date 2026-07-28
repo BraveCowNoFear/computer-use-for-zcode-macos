@@ -308,6 +308,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('`has_screenshot:false`', skill)
         self.assertIn("Sparse Chromium AX tree", skill)
         self.assertIn("minimized window beeps or ignores Return/Space/Tab", skill)
+        self.assertIn("AXManualAccessibility", skill)
+        self.assertIn("`AXContents`", skill)
+        self.assertIn("`max_tree_nodes` (up to 10,000)", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (
@@ -326,6 +329,15 @@ class RepositoryContractTests(unittest.TestCase):
             text = (ROOT / path).read_text(encoding="utf-8")
             self.assertIn(revision, text, path)
             self.assertNotIn("hermes-agent/tree/main/skills/apple/macos-computer-use", text, path)
+
+    def test_open_computer_use_reference_is_commit_pinned(self):
+        revision = "a265277f6677ef00a1c597f54616cc3410d8d297"
+        for path in ("README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md", "Memory.md"):
+            text = (ROOT / path).read_text(encoding="utf-8")
+            self.assertIn(revision, text, path)
+        notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+        self.assertIn("packages/OpenComputerUseKit/Sources/OpenComputerUseKit/AccessibilitySnapshot.swift", notices)
+        self.assertIn("License: MIT", notices)
 
     def test_live_smoke_sources_compile(self):
         for path in (

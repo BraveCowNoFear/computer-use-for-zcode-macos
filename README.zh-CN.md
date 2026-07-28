@@ -25,8 +25,9 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 | ZCode Plugin + marketplace | 安装 Skill 和两个本地 stdio MCP Server |
 
 动作升级顺序是：后台辅助功能 → 后台像素 → 临时前台 → 原生直接兜底。该
-设计借鉴了现有 Hermes macOS Computer Use Skill 和开源 Cua Driver；ZCode
-打包、无审批启动器、兜底运行时和测试由本项目实现。
+设计借鉴了现有 Hermes macOS Computer Use Skill、Open Computer Use 的原生
+macOS 实现和开源 Cua Driver；ZCode 打包、无审批启动器、兜底运行时和测试由
+本项目实现。
 
 ## 在 ZCode 安装
 
@@ -64,6 +65,9 @@ Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖
 - 发现、启动原生 App，直接取得匹配的 pid/窗口集合，并精确选择工具真实返回的窗口。
 - 兜底观察同时绑定 App、pid、CGWindowID，并在可用时用 AXWindowNumber
   精确关联辅助功能窗口；遇到等价候选会拒绝猜测。
+- 对 Chromium/Electron 尽力开启完整辅助功能可见性，将窗口、菜单栏、行、
+  Contents 和 VisibleChildren 合并为同一代可操作索引；大型页面可调高默认
+  1200 节点、64 层的观察预算。
 - 兜底端与 Codex 核心一致，默认只取截图；需要索引时显式请求辅助功能树，也可按需同时获取两者。
 - 按 AX 元素或窗口内像素点击、双击、右击、拖拽和滚动。
 - 输入 Unicode、使用 Mac 快捷键、直接设置辅助功能控件值。
@@ -132,6 +136,8 @@ plugins/macos-computer-use/
 ## 上游与许可证
 
 后台控制依赖 MIT 许可的 [Cua Driver](https://github.com/trycua/cua)，路由模型
-参考了[历史版 Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md)。
+参考了[历史版 Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md)，
+并核验了 MIT 许可的
+[Open Computer Use macOS Skill 与原生实现](https://github.com/iFurySt/open-codex-computer-use/tree/a265277f6677ef00a1c597f54616cc3410d8d297/skills/open-computer-use)。
 本项目采用 MIT 许可证，详见 [LICENSE](./LICENSE) 和
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
