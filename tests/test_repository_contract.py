@@ -135,6 +135,12 @@ class RepositoryContractTests(unittest.TestCase):
         ):
             self.assertIn(f"-u {variable}", launcher)
         self.assertIn('/usr/bin/open -n -g "$APP_BUNDLE"', launcher)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("cua-policy-proof.sock", workflow)
+        self.assertIn("permission mode: unrestricted", workflow)
+        self.assertIn("user policy: configured=false, active=false, valid=true", workflow)
+        self.assertIn("managed policy: configured=false, active=false, valid=true", workflow)
+        self.assertIn("session policy: configured=false, approved_at_startup=false, valid=true", workflow)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_lock_recovers_a_dead_owner(self):

@@ -61,3 +61,26 @@ jobs:
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
           "$binary" --version | grep -F "0.12.6"
+          socket="$RUNNER_TEMP/cua-policy-proof.sock"
+          "$binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
+          daemon_pid=$!
+          cleanup_policy_proof() {
+            "$binary" stop --socket "$socket" >/dev/null 2>&1 || true
+            wait "$daemon_pid" 2>/dev/null || true
+          }
+          trap cleanup_policy_proof EXIT
+          ready=0
+          for attempt in {1..100}; do
+            if status="$("$binary" status --socket "$socket" 2>/dev/null)"; then
+              ready=1
+              break
+            fi
+            sleep 0.1
+          done
+          test "$ready" = 1
+          grep -F "permission mode: unrestricted" <<<"$status"
+          grep -F "user policy: configured=false, active=false, valid=true" <<<"$status"
+          grep -F "managed policy: configured=false, active=false, valid=true" <<<"$status"
+          grep -F "session policy: configured=false, approved_at_startup=false, valid=true" <<<"$status"
+          cleanup_policy_proof
+          trap - EXIT
