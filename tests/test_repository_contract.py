@@ -302,7 +302,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("architecture: arm64", workflow)
         self.assertIn("os: macos-15-intel", workflow)
         self.assertIn("architecture: x86_64", workflow)
-        self.assertIn('lipo -verify_arch arm64 x86_64 "$binary"', workflow)
+        self.assertIn('lipo "$binary" -verify_arch arm64 x86_64', workflow)
 
 
 if __name__ == "__main__":

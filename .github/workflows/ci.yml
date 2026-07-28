@@ -62,7 +62,7 @@ jobs:
           tar -xzf /tmp/cua-driver-release.tar.gz -C /tmp/cua-driver-release
           app=/tmp/cua-driver-release/cua-driver-rs-0.12.6-darwin-universal/CuaDriver.app
           binary="$app/Contents/MacOS/cua-driver"
-          lipo -verify_arch arm64 x86_64 "$binary"
+          lipo "$binary" -verify_arch arm64 x86_64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
           signing_info="$(codesign -dv --verbose=4 "$app" 2>&1)"
