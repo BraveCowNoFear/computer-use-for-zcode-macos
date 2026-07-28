@@ -59,6 +59,7 @@ SCREENSHOT_RESIZE_TIMEOUT_SECONDS = 5
 MODIFIER_KEY_ORDER = ("command", "control", "option", "shift")
 CLICK_EVENT_SETTLE_SECONDS = 0.03
 MULTICLICK_ADDITIONAL_GAP_SECONDS = 0.05
+TEXT_CHUNK_SETTLE_SECONDS = 0.02
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -2059,6 +2060,10 @@ class MacOSBackend:
                 if isinstance(error, ToolError):
                     raise
                 raise ToolError(f"macOS could not deliver Unicode text: {error}") from error
+            # Pacing is not part of native delivery, so it stays outside the
+            # partial-delivery handler and can never make a completed chunk
+            # look replayable.
+            time.sleep(TEXT_CHUNK_SETTLE_SECONDS)
         return delivered
 
     def tool_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:

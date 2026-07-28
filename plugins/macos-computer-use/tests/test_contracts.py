@@ -884,6 +884,40 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
         self.assertEqual(expired, [window])
 
+    def test_unicode_chunks_settle_after_each_complete_key_pair(self):
+        class Event:
+            def __init__(self, is_down):
+                self.is_down = is_down
+
+        timeline = []
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            CGEventCreateKeyboardEvent=lambda _source, _code, is_down: Event(is_down),
+            CGEventKeyboardSetUnicodeString=lambda event, length, text: timeline.append(
+                ("unicode", event.is_down, length, text)
+            ),
+            CGEventPost=lambda _tap, event: timeline.append(("post", event.is_down)),
+        )
+        with mock.patch(
+            "macos_cua.macos.time.sleep",
+            side_effect=lambda delay: timeline.append(("sleep", delay)),
+        ):
+            delivered = backend._send_text("a" * 33)
+        self.assertEqual(delivered, 33)
+        self.assertEqual(
+            [item for item in timeline if item[0] in {"post", "sleep"}],
+            [
+                ("post", True),
+                ("post", False),
+                ("sleep", 0.02),
+                ("post", True),
+                ("post", False),
+                ("sleep", 0.02),
+            ],
+        )
+        self.assertEqual(backend._held_key_releases, [])
+
     def test_fallback_dispatch_success_is_explicitly_unverifiable(self):
         backend = MacOSBackend()
         window = {"id": 7, "app": "com.example.Editor", "pid": 70}
