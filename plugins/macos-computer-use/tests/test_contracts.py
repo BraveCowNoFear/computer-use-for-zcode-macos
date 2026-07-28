@@ -237,6 +237,41 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["windows"], [expected_window])
         self.assertEqual(result["bundleId"], "com.example.Editor")
 
+    def test_launch_app_expands_user_app_paths_before_open_and_matching(self):
+        resolved = str((Path.home() / "Applications" / "Editor.app").resolve())
+
+        class FakeRunningApp:
+            def bundleIdentifier(self):
+                return "com.example.Editor"
+
+            def processIdentifier(self):
+                return 55
+
+            def localizedName(self):
+                return "Editor"
+
+            def bundleURL(self):
+                return types.SimpleNamespace(path=lambda: resolved)
+
+        bundle = types.SimpleNamespace(bundleIdentifier=lambda: "com.example.Editor")
+        workspace = types.SimpleNamespace(runningApplications=lambda: [FakeRunningApp()])
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSBundle=types.SimpleNamespace(bundleWithPath_=lambda path: bundle),
+            NSWorkspace=types.SimpleNamespace(sharedWorkspace=lambda: workspace),
+        )
+        backend._list_windows = lambda: [
+            {"id": 99, "app": "com.example.Editor", "pid": 55, "bounds": {}}
+        ]
+        with mock.patch("macos_cua.macos.subprocess.run") as launch:
+            launch.return_value = types.SimpleNamespace(returncode=0, stderr="")
+            result = backend.tool_launch_app({"app": "~/Applications/Editor.app"})
+        launch.assert_called_once_with(
+            ["/usr/bin/open", resolved], capture_output=True, text=True, timeout=30
+        )
+        self.assertEqual(result["pid"], 55)
+        self.assertEqual(result["bundleId"], "com.example.Editor")
+
     def test_launch_timeout_invalidates_state_and_reports_unknown_effect(self):
         backend = MacOSBackend()
         backend._invalidate_all_observations = mock.Mock()

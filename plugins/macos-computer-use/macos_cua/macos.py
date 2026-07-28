@@ -568,10 +568,13 @@ class MacOSBackend:
         if app.startswith("process:"):
             raise ToolError("Process-backed identifiers cannot launch an app; use a bundle ID, name, or .app path")
         if app.lower().endswith(".app") or "/" in app:
-            command = ["/usr/bin/open", app]
+            resolved_app_path = str(Path(app).expanduser().resolve())
+            command = ["/usr/bin/open", resolved_app_path]
         elif re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", app):
+            resolved_app_path = None
             command = ["/usr/bin/open", "-b", app]
         else:
+            resolved_app_path = None
             command = ["/usr/bin/open", "-a", app]
         try:
             completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -598,7 +601,8 @@ class MacOSBackend:
         target_path: str | None = None
         target_name: str | None = None
         if app.lower().endswith(".app") or "/" in app:
-            target_path = str(Path(app).expanduser().resolve())
+            assert resolved_app_path is not None
+            target_path = resolved_app_path
             bundle = self.AppKit.NSBundle.bundleWithPath_(target_path)
             bundle_id = bundle.bundleIdentifier() if bundle is not None else None
             target_bundle_id = str(bundle_id) if bundle_id else None

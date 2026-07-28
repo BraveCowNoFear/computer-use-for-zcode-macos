@@ -103,6 +103,10 @@ server.
 | `perform_secondary_action` | `window`, index, `action` | Run listed AX action. |
 | `activate_window` | `window` | Bring app/window forward. |
 
+Fallback `launch_app` accepts a bundle ID, display name, or `.app` path. User
+paths such as `~/Applications/Foo.app` are expanded and resolved before both
+the macOS launch request and process matching.
+
 Extended fallback tools: `computer_use_health`, `permission_status`,
 `request_permissions`, `move_mouse`, `mouse_down`, `mouse_up`,
 `get_cursor_position`, `clipboard_get`, `clipboard_set`, plus the unrestricted
