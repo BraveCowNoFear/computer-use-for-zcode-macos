@@ -63,7 +63,9 @@ class RepositoryContractTests(unittest.TestCase):
         launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         dependency_id = re.search(r'MACOS_CUA_DEPENDENCY_ID="([^"]+)"', common).group(1)
-        lock_digest = hashlib.sha256((PLUGIN / "requirements.txt").read_bytes()).hexdigest()[:12]
+        lock_text = (PLUGIN / "requirements.txt").read_text(encoding="utf-8")
+        canonical_lock = lock_text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+        lock_digest = hashlib.sha256(canonical_lock).hexdigest()[:12]
         self.assertEqual(dependency_id, f"pyobjc-12.2.1-{lock_digest}")
         self.assertIn('DATA_VENV="$DATA_DIR/venv-$DEPENDENCY_ID"', launcher)
         self.assertIn('STAGING_VENV="$DATA_DIR/.venv-$DEPENDENCY_ID.install.$$"', launcher)
