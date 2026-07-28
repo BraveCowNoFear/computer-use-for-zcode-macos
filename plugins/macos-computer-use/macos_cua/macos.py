@@ -62,6 +62,7 @@ MULTICLICK_ADDITIONAL_GAP_SECONDS = 0.05
 TEXT_CHUNK_SETTLE_SECONDS = 0.02
 KEY_CHORD_SETTLE_SECONDS = 0.1
 SCROLL_SETTLE_SECONDS = 0.1
+MAX_KEYBOARD_UNICODE_CHUNK_UNITS = 64
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -172,6 +173,28 @@ def normalize_key_name(value: str) -> str:
         return stripped.lower()
     lowered = re.sub(r"[\s-]+", "_", stripped.lower())
     return KEY_ALIASES.get(lowered, lowered)
+
+
+def unicode_text_chunks(
+    text: str,
+    max_utf16_units: int = MAX_KEYBOARD_UNICODE_CHUNK_UNITS,
+) -> Iterable[str]:
+    """Pack text without splitting a Unicode code point across key events."""
+    if max_utf16_units <= 0:
+        raise ValueError("max_utf16_units must be positive")
+    start = 0
+    current_units = 0
+    for index, character in enumerate(text):
+        character_units = 2 if ord(character) > 0xFFFF else 1
+        if character_units > max_utf16_units:
+            raise ValueError("max_utf16_units is too small for one Unicode code point")
+        if current_units and current_units + character_units > max_utf16_units:
+            yield text[start:index]
+            start = index
+            current_units = 0
+        current_units += character_units
+    if start < len(text):
+        yield text[start:]
 
 
 def parse_key_chord(value: str) -> tuple[int, set[str]]:
@@ -2034,8 +2057,7 @@ class MacOSBackend:
     def _send_text(self, text: str) -> int:
         Q = self.Quartz
         delivered = 0
-        for offset in range(0, len(text), 32):
-            chunk = text[offset : offset + 32]
+        for chunk in unicode_text_chunks(text):
             try:
                 utf16_length = len(chunk.encode("utf-16-le")) // 2
                 down = Q.CGEventCreateKeyboardEvent(None, 0, True)

@@ -198,8 +198,9 @@ cannot be delivered. The response carries `delivered_chars` and
 `retry_from_character`; all prior observation handles are expired, so refresh
 state and send only that remaining suffix.
 Each successfully completed Unicode key pair settles for 20 ms before the next
-chunk, matching the pacing needed by real app event loops without changing the
-literal text or replay boundary.
+chunk. Chunks pack at most 64 UTF-16 units without splitting a Unicode code
+point, matching the reference runtime's event size while preserving literal
+text and the partial-delivery replay boundary.
 
 Fallback `clipboard_set` verifies an exact pasteboard read-back before returning
 `effect:"confirmed"`. A clear-then-write failure is reported as

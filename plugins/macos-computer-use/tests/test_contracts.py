@@ -28,6 +28,7 @@ from macos_cua.macos import (
     MacOSBackend,
     parse_key_chord,
     require_exact_pyobjc_versions,
+    unicode_text_chunks,
 )
 from macos_cua import server as server_module
 from macos_cua.server import MCPServer, serve
@@ -881,12 +882,20 @@ class ContractTests(unittest.TestCase):
         backend._invalidate_window_observations = lambda window: expired.append(window)
         window = {"id": 7, "pid": 70}
         with self.assertRaises(ToolError) as caught:
-            backend.tool_type_text({"window": window, "text": "a" * 40})
+            backend.tool_type_text({"window": window, "text": "a" * 65})
         self.assertEqual(caught.exception.structured_content["effect"], "partial")
-        self.assertEqual(caught.exception.structured_content["requested_chars"], 40)
-        self.assertEqual(caught.exception.structured_content["delivered_chars"], 32)
-        self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
+        self.assertEqual(caught.exception.structured_content["requested_chars"], 65)
+        self.assertEqual(caught.exception.structured_content["delivered_chars"], 64)
+        self.assertEqual(caught.exception.structured_content["retry_from_character"], 64)
         self.assertEqual(expired, [window])
+
+    def test_unicode_chunks_pack_by_utf16_units_without_splitting_codepoints(self):
+        self.assertEqual(list(unicode_text_chunks("a" * 65)), ["a" * 64, "a"])
+        self.assertEqual(list(unicode_text_chunks("😀" * 33)), ["😀" * 32, "😀"])
+        self.assertEqual(list(unicode_text_chunks("a" * 63 + "😀")), ["a" * 63, "😀"])
+        self.assertEqual(list(unicode_text_chunks("")), [])
+        with self.assertRaisesRegex(ValueError, "too small"):
+            list(unicode_text_chunks("😀", 1))
 
     def test_unicode_chunks_settle_after_each_complete_key_pair(self):
         class Event:
@@ -907,8 +916,12 @@ class ContractTests(unittest.TestCase):
             "macos_cua.macos.time.sleep",
             side_effect=lambda delay: timeline.append(("sleep", delay)),
         ):
-            delivered = backend._send_text("a" * 33)
-        self.assertEqual(delivered, 33)
+            delivered = backend._send_text("a" * 65)
+        self.assertEqual(delivered, 65)
+        self.assertEqual(
+            [(item[2], len(item[3])) for item in timeline if item[0] == "unicode"],
+            [(64, 64), (64, 64), (1, 1), (1, 1)],
+        )
         self.assertEqual(
             [item for item in timeline if item[0] in {"post", "sleep"}],
             [
