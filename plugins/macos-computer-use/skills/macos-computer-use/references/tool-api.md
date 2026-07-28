@@ -158,6 +158,13 @@ observation even when native delivery raises. Key-down and mouse-down events are
 registered before posting; matching releases are retried immediately and again
 during MCP shutdown if interruption occurs between the pair.
 
+Fallback action results mirror the primary verdict vocabulary. Quartz input and
+AX actions without a generic post-condition return `effect:"unverifiable"` and
+`verified:false`; `ok:true` means dispatch succeeded, not that the UI outcome is
+complete. Fallback `set_value` returns `confirmed` only after an exact AX value
+read-back; missing or mismatched read-back recommends a freshly grounded pixel
+route and never claims completion.
+
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
 ```json

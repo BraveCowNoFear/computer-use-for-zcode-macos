@@ -1188,7 +1188,7 @@ class MacOSBackend:
         self._activate(window)
         refreshed = self._get_window(window)
         self._invalidate_window_observations(window)
-        return {"ok": True, "window": refreshed}
+        return {"ok": True, "window": refreshed, "effect": "confirmed", "verified": True}
 
     def _validate_screenshot(
         self, screenshot_id: str | None, window: dict[str, Any]
@@ -1368,6 +1368,8 @@ class MacOSBackend:
                         "ok": True,
                         "method": "accessibility",
                         "element_index": int(arguments["element_index"]),
+                        "effect": "unverifiable",
+                        "verified": False,
                     }
                 x, y = self._element_center(element)
             else:
@@ -1383,6 +1385,8 @@ class MacOSBackend:
                 "method": "coordinate",
                 "screenPoint": {"x": x, "y": y},
                 "click_count": count,
+                "effect": "unverifiable",
+                "verified": False,
             }
         finally:
             self._invalidate_window_observations(window)
@@ -1404,7 +1408,12 @@ class MacOSBackend:
         window = self._activate_current(arguments["window"])
         try:
             self._send_key(str(arguments["key"]))
-            return {"ok": True, "key": arguments["key"]}
+            return {
+                "ok": True,
+                "key": arguments["key"],
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_window_observations(window)
 
@@ -1469,7 +1478,12 @@ class MacOSBackend:
             # Activation or a partially delivered chunk changes observable UI
             # even when the action raises, so no old screenshot/index is safe.
             self._invalidate_window_observations(window)
-        return {"ok": True, "characters": delivered}
+        return {
+            "ok": True,
+            "characters": delivered,
+            "effect": "unverifiable",
+            "verified": False,
+        }
 
     def _send_text(self, text: str) -> int:
         Q = self.Quartz
@@ -1526,7 +1540,12 @@ class MacOSBackend:
                 raise ToolError("macOS could not create a scroll event")
             Q.CGEventSetLocation(event, (x, y))
             Q.CGEventPost(Q.kCGHIDEventTap, event)
-            return {"ok": True, "screenPoint": {"x": x, "y": y}}
+            return {
+                "ok": True,
+                "screenPoint": {"x": x, "y": y},
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_window_observations(window)
 
@@ -1537,10 +1556,32 @@ class MacOSBackend:
             value_attr = self._ax_attr("kAXValueAttribute", "AXValue")
             value = str(arguments["value"])
             if self._ax_set(element, value_attr, value):
-                return {
+                result = {
                     "ok": True,
                     "method": "accessibility",
                     "element_index": int(arguments["element_index"]),
+                }
+                observed = self._ax_copy(element, value_attr)
+                if observed is not None and str(observed) == value:
+                    return {**result, "effect": "confirmed", "verified": True}
+                if observed is None:
+                    return {
+                        **result,
+                        "effect": "unverifiable",
+                        "verified": False,
+                        "escalation": {
+                            "recommended": "px",
+                            "reason": "Accessibility value could not be read back",
+                        },
+                    }
+                return {
+                    **result,
+                    "effect": "suspected_noop",
+                    "verified": False,
+                    "escalation": {
+                        "recommended": "px",
+                        "reason": "Accessibility value read-back did not match",
+                    },
                 }
             x, y = self._element_center(element)
             button, down, up, dragged = self._button("left")
@@ -1551,6 +1592,8 @@ class MacOSBackend:
                 "ok": True,
                 "method": "focus-select-type",
                 "element_index": int(arguments["element_index"]),
+                "effect": "unverifiable",
+                "verified": False,
             }
         finally:
             self._invalidate_window_observations(window)
@@ -1570,6 +1613,8 @@ class MacOSBackend:
                 "ok": True,
                 "from": {"x": start[0], "y": start[1]},
                 "to": {"x": end[0], "y": end[1]},
+                "effect": "unverifiable",
+                "verified": False,
             }
         finally:
             self._invalidate_window_observations(window)
@@ -1630,7 +1675,13 @@ class MacOSBackend:
                 raise ToolError(f"Action {arguments['action']!r} is unavailable; supported actions: {actions}")
             if not self._ax_perform(element, matched):
                 raise ToolError(f"Accessibility action failed: {matched}")
-            return {"ok": True, "action": matched, "element_index": int(arguments["element_index"])}
+            return {
+                "ok": True,
+                "action": matched,
+                "element_index": int(arguments["element_index"]),
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_window_observations(window)
 
@@ -1643,7 +1694,13 @@ class MacOSBackend:
         button, down, up, dragged = self._button(button_name)
         try:
             self._click_pointer(button, down, up, dragged, x, y, count)
-            return {"ok": True, "screenPoint": {"x": x, "y": y}, "click_count": count}
+            return {
+                "ok": True,
+                "screenPoint": {"x": x, "y": y},
+                "click_count": count,
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_all_observations()
 
@@ -1651,7 +1708,12 @@ class MacOSBackend:
         self._validate_desktop_screenshot(arguments["screenshotId"])
         try:
             self._send_key(str(arguments["key"]))
-            return {"ok": True, "key": arguments["key"]}
+            return {
+                "ok": True,
+                "key": arguments["key"],
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_all_observations()
 
@@ -1662,7 +1724,12 @@ class MacOSBackend:
             delivered = self._send_text(text)
         finally:
             self._invalidate_all_observations()
-        return {"ok": True, "characters": delivered}
+        return {
+            "ok": True,
+            "characters": delivered,
+            "effect": "unverifiable",
+            "verified": False,
+        }
 
     def tool_desktop_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
@@ -1679,7 +1746,12 @@ class MacOSBackend:
                 raise ToolError("macOS could not create a desktop scroll event")
             Q.CGEventSetLocation(event, (x, y))
             Q.CGEventPost(Q.kCGHIDEventTap, event)
-            return {"ok": True, "screenPoint": {"x": x, "y": y}}
+            return {
+                "ok": True,
+                "screenPoint": {"x": x, "y": y},
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_all_observations()
 
@@ -1697,6 +1769,8 @@ class MacOSBackend:
                 "ok": True,
                 "from": {"x": start[0], "y": start[1]},
                 "to": {"x": end[0], "y": end[1]},
+                "effect": "unverifiable",
+                "verified": False,
             }
         finally:
             self._invalidate_all_observations()
@@ -1758,7 +1832,14 @@ class MacOSBackend:
                         self._held_buttons[held_button] = (held_up, event_type, x, y)
                 if delay:
                     time.sleep(delay)
-            return {"ok": True, "position": {"x": target[0], "y": target[1]}}
+            observed = self._cursor()
+            verified = abs(observed[0] - target[0]) <= 1 and abs(observed[1] - target[1]) <= 1
+            return {
+                "ok": True,
+                "position": {"x": observed[0], "y": observed[1]},
+                "effect": "confirmed" if verified else "suspected_noop",
+                "verified": verified,
+            }
         finally:
             self._invalidate_all_observations()
 
@@ -1769,7 +1850,12 @@ class MacOSBackend:
             raise ToolError("The requested mouse button is already held; call mouse_up before mouse_down again")
         try:
             self._post_mouse_down(button, down, up, dragged, *point)
-            return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+            return {
+                "ok": True,
+                "position": {"x": point[0], "y": point[1]},
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_all_observations()
 
@@ -1779,7 +1865,12 @@ class MacOSBackend:
         try:
             self._post_mouse(up, button, *point)
             self._held_buttons.pop(button, None)
-            return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+            return {
+                "ok": True,
+                "position": {"x": point[0], "y": point[1]},
+                "effect": "unverifiable",
+                "verified": False,
+            }
         finally:
             self._invalidate_all_observations()
 

@@ -158,6 +158,13 @@ sessionless but keeps screenshot/AX handles in its MCP process; it has no
 failure, discard every handle and begin from `list_windows`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
+Fallback action results use the same verdict vocabulary as the primary driver.
+Quartz input and AX actions without a generic post-condition return
+`effect:"unverifiable"`/`verified:false`; refresh state instead of treating
+`ok:true` as completion. Fallback `set_value` returns `effect:"confirmed"` only
+when AX reads back the exact requested value, and returns `suspected_noop` or
+`unverifiable` with `escalation.recommended:"px"` otherwise.
+
 Fallback text can also return an MCP error with structured
 `effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles
 have already expired: re-observe and retry only the suffix beginning at

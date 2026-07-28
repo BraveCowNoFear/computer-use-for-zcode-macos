@@ -502,6 +502,41 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
         self.assertEqual(expired, [window])
 
+    def test_fallback_dispatch_success_is_explicitly_unverifiable(self):
+        backend = MacOSBackend()
+        window = {"id": 7, "app": "com.example.Editor", "pid": 70}
+        backend._activate_current = lambda value: window
+        backend._send_text = lambda text: len(text)
+        backend._invalidate_window_observations = lambda value: None
+        result = backend.tool_type_text({"window": window, "text": "hello"})
+        self.assertEqual(result["effect"], "unverifiable")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["characters"], 5)
+
+    def test_set_value_confirms_exact_ax_readback_and_flags_a_mismatch(self):
+        backend = MacOSBackend()
+        window = {"id": 7, "app": "com.example.Editor", "pid": 70}
+        element = object()
+        backend._activate_current = lambda value: window
+        backend._cached_element = lambda value, index: element
+        backend._ax_attr = lambda name, fallback: fallback
+        backend._ax_set = lambda target, attribute, value: True
+        backend._invalidate_window_observations = lambda value: None
+        backend._ax_copy = lambda target, attribute: "replacement"
+        confirmed = backend.tool_set_value(
+            {"window": window, "element_index": 3, "value": "replacement"}
+        )
+        self.assertEqual(confirmed["effect"], "confirmed")
+        self.assertTrue(confirmed["verified"])
+
+        backend._ax_copy = lambda target, attribute: "old value"
+        mismatch = backend.tool_set_value(
+            {"window": window, "element_index": 3, "value": "replacement"}
+        )
+        self.assertEqual(mismatch["effect"], "suspected_noop")
+        self.assertFalse(mismatch["verified"])
+        self.assertEqual(mismatch["escalation"]["recommended"], "px")
+
     def test_clipboard_set_verifies_the_exact_written_text(self):
         class Pasteboard:
             value = "old"
