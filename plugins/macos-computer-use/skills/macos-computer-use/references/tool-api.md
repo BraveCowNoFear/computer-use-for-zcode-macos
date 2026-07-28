@@ -164,6 +164,10 @@ AX actions without a generic post-condition return `effect:"unverifiable"` and
 complete. Fallback `set_value` returns `confirmed` only after an exact AX value
 read-back; missing or mismatched read-back recommends a freshly grounded pixel
 route and never claims completion.
+App launch and foreground activation conservatively invalidate prior fallback
+observations even when their completion probe fails. A launch timeout or an
+accepted launch that cannot be matched returns a structured unknown effect;
+re-list apps/windows before deciding whether another launch is needed.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 

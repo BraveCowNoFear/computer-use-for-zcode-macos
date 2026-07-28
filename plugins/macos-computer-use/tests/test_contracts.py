@@ -5,6 +5,7 @@ import io
 import json
 import math
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -233,6 +234,19 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["pid"], 55)
         self.assertEqual(result["windows"], [expected_window])
         self.assertEqual(result["bundleId"], "com.example.Editor")
+
+    def test_launch_timeout_invalidates_state_and_reports_unknown_effect(self):
+        backend = MacOSBackend()
+        backend._invalidate_all_observations = mock.Mock()
+        with mock.patch(
+            "macos_cua.macos.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["/usr/bin/open"], 30),
+        ):
+            with self.assertRaises(ToolError) as caught:
+                backend.tool_launch_app({"app": "com.example.Editor"})
+        self.assertEqual(caught.exception.structured_content["code"], "launch_timeout")
+        self.assertEqual(caught.exception.structured_content["effect"], "unverifiable")
+        backend._invalidate_all_observations.assert_called_once_with()
 
     def test_window_order_is_front_to_back_and_zindex_increases_toward_front(self):
         infos = [
@@ -939,6 +953,16 @@ class ContractTests(unittest.TestCase):
         backend._activate = activate
         self.assertEqual(backend._activate_current(before)["bounds"], after["bounds"])
 
+    def test_failed_activation_confirmation_invalidates_the_old_observation(self):
+        backend = MacOSBackend()
+        window = {"id": 8, "app": "com.example.App", "pid": 80}
+        backend._get_window = lambda value: window
+        backend._activate = mock.Mock(side_effect=ToolError("focus changed but not confirmed"))
+        backend._invalidate_window_observations = mock.Mock()
+        with self.assertRaisesRegex(ToolError, "not confirmed"):
+            backend._activate_current(window)
+        backend._invalidate_window_observations.assert_called_once_with(window)
+
     def test_activation_reports_an_explicit_appkit_refusal(self):
         backend = MacOSBackend()
         running = types.SimpleNamespace(activateWithOptions_=lambda options: False)
@@ -1218,6 +1242,19 @@ class ContractTests(unittest.TestCase):
         backend.tool_move_mouse({"x": 5, "y": 6, "duration": 0})
         backend.close()
         self.assertEqual([event[0] for event in events], ["left-down", "left-dragged", "left-up"])
+
+    def test_move_mouse_readback_failure_keeps_dispatched_effect_unknown(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventMouseMoved="moved",
+        )
+        backend._cursor = mock.Mock(side_effect=[(1.0, 2.0), ToolError("cursor read failed")])
+        backend._post_mouse = lambda *args, **kwargs: None
+        result = backend.tool_move_mouse({"x": 5, "y": 6, "duration": 0})
+        self.assertEqual(result["effect"], "unverifiable")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["position"], {"x": 5.0, "y": 6.0})
 
     def test_interrupted_held_move_releases_at_last_delivered_point(self):
         backend = MacOSBackend()

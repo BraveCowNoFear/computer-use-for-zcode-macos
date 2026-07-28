@@ -570,10 +570,26 @@ class MacOSBackend:
             command = ["/usr/bin/open", "-b", app]
         else:
             command = ["/usr/bin/open", "-a", app]
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired as error:
+            raise ToolError(
+                f"The launch request for {app!r} timed out; the app may still have opened",
+                {
+                    "ok": False,
+                    "code": "launch_timeout",
+                    "effect": "unverifiable",
+                    "verified": False,
+                    "app": app,
+                },
+            ) from error
+        finally:
+            # `open` may alter focus or finish asynchronously even when it
+            # returns an error/timeout. No prior desktop/window image is safe.
+            self._installed_cache = None
+            self._invalidate_all_observations()
         if completed.returncode != 0:
             raise ToolError(completed.stderr.strip() or f"Failed to launch {app}")
-        self._installed_cache = None
 
         target_bundle_id: str | None = None
         target_path: str | None = None
@@ -616,7 +632,16 @@ class MacOSBackend:
                     break
             time.sleep(0.1)
         if candidate is None:
-            raise ToolError(f"macOS accepted the launch request for {app!r}, but no matching running app appeared")
+            raise ToolError(
+                f"macOS accepted the launch request for {app!r}, but no matching running app appeared",
+                {
+                    "ok": False,
+                    "code": "launch_not_observed",
+                    "effect": "unverifiable",
+                    "verified": False,
+                    "app": app,
+                },
+            )
         bundle_id = candidate.bundleIdentifier()
         return {
             "ok": True,
@@ -1178,17 +1203,24 @@ class MacOSBackend:
 
     def _activate_current(self, value: Any) -> dict[str, Any]:
         window = self._get_window(value)
-        self._activate(window)
-        # Activation can switch Spaces, reveal a sheet, or let an app reposition
-        # its window. Rehydrate before converting any observed coordinate.
-        return self._get_window(window)
+        try:
+            self._activate(window)
+            # Activation can switch Spaces, reveal a sheet, or let an app reposition
+            # its window. Rehydrate before converting any observed coordinate.
+            return self._get_window(window)
+        except BaseException:
+            # Even a failed confirmation can follow a real Space/focus change.
+            self._invalidate_window_observations(window)
+            raise
 
     def tool_activate_window(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
-        self._activate(window)
-        refreshed = self._get_window(window)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "window": refreshed, "effect": "confirmed", "verified": True}
+        try:
+            self._activate(window)
+            refreshed = self._get_window(window)
+            return {"ok": True, "window": refreshed, "effect": "confirmed", "verified": True}
+        finally:
+            self._invalidate_window_observations(window)
 
     def _validate_screenshot(
         self, screenshot_id: str | None, window: dict[str, Any]
@@ -1832,7 +1864,15 @@ class MacOSBackend:
                         self._held_buttons[held_button] = (held_up, event_type, x, y)
                 if delay:
                     time.sleep(delay)
-            observed = self._cursor()
+            try:
+                observed = self._cursor()
+            except ToolError:
+                return {
+                    "ok": True,
+                    "position": {"x": target[0], "y": target[1]},
+                    "effect": "unverifiable",
+                    "verified": False,
+                }
             verified = abs(observed[0] - target[0]) <= 1 and abs(observed[1] - target[1]) <= 1
             return {
                 "ok": True,
