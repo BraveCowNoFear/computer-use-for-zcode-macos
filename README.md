@@ -82,7 +82,9 @@ omitting screenshots; pixel and desktop routes still require it.
   available; refuse ambiguous Accessibility windows instead of guessing.
 - Enable Chromium/Electron Accessibility visibility best-effort, merge window,
   menu-bar, row, contents, and visible-child AX sources, and expose adjustable
-  1,200-node/64-level observation budgets for large pages and lists.
+  1,200-node/64-level observation budgets for large pages and lists. Compact
+  lines retain subroles, non-default selected/expanded/disabled/settable state,
+  value types, help, placeholders, identifiers, and advertised actions.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll.
 - Type Unicode, press Mac shortcuts, and set Accessibility values.

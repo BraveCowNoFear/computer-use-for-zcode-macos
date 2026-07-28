@@ -879,15 +879,58 @@ class MacOSBackend:
 
     def _format_element(self, element: Any, index: int, depth: int) -> str:
         role = self._short(self._ax_copy(element, self._ax_attr("kAXRoleAttribute", "AXRole"))) or "AXUnknown"
+        subrole = self._short(self._ax_copy(element, self._ax_attr("kAXSubroleAttribute", "AXSubrole")))
         title = self._short(self._ax_copy(element, self._ax_attr("kAXTitleAttribute", "AXTitle")))
         description = self._short(self._ax_copy(element, self._ax_attr("kAXDescriptionAttribute", "AXDescription")))
-        value = self._short(self._ax_copy(element, self._ax_attr("kAXValueAttribute", "AXValue")))
+        help_text = self._short(self._ax_copy(element, self._ax_attr("kAXHelpAttribute", "AXHelp")))
+        raw_value = self._ax_copy(element, self._ax_attr("kAXValueAttribute", "AXValue"))
+        value = self._short(raw_value)
+        placeholder = self._short(
+            self._ax_copy(element, self._ax_attr("kAXPlaceholderValueAttribute", "AXPlaceholderValue"))
+        )
+        identifier = self._short(
+            self._ax_copy(element, self._ax_attr("kAXIdentifierAttribute", "AXIdentifier"))
+        )
         parts = [f"[{index}]", role]
+        if subrole and subrole != role:
+            parts.append(f"subrole={json.dumps(subrole, ensure_ascii=False)}")
         label = title or description
         if label:
             parts.append(json.dumps(label, ensure_ascii=False))
+        if title and description and description != title:
+            parts.append(f"description={json.dumps(description, ensure_ascii=False)}")
+        if help_text and help_text not in {label, description}:
+            parts.append(f"help={json.dumps(help_text, ensure_ascii=False)}")
         if value and value != label:
             parts.append(f"value={json.dumps(value, ensure_ascii=False)}")
+        if placeholder and placeholder not in {label, description, value}:
+            parts.append(f"placeholder={json.dumps(placeholder, ensure_ascii=False)}")
+        if identifier and identifier not in {label, description, value, placeholder}:
+            parts.append(f"identifier={json.dumps(identifier, ensure_ascii=False)}")
+
+        traits: list[str] = []
+        selected = self._ax_copy(element, self._ax_attr("kAXSelectedAttribute", "AXSelected"))
+        expanded = self._ax_copy(element, self._ax_attr("kAXExpandedAttribute", "AXExpanded"))
+        enabled = self._ax_copy(element, self._ax_attr("kAXEnabledAttribute", "AXEnabled"))
+        if selected is not None and bool(selected):
+            traits.append("selected")
+        if expanded is not None and bool(expanded):
+            traits.append("expanded")
+        if enabled is not None and not bool(enabled):
+            traits.append("disabled")
+        settable = self._ax_is_settable(
+            element, self._ax_attr("kAXValueAttribute", "AXValue")
+        )
+        if settable is True:
+            traits.append("settable")
+            if isinstance(raw_value, bool):
+                traits.append("boolean")
+            elif isinstance(raw_value, str):
+                traits.append("string")
+            elif isinstance(raw_value, (int, float)):
+                traits.append("float")
+        if traits:
+            parts.append("traits=" + ",".join(traits))
         actions = [action.removeprefix("AX") for action in self._ax_actions(element)]
         if actions:
             parts.append("actions=" + ",".join(actions[:8]))

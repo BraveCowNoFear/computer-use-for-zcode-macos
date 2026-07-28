@@ -67,6 +67,8 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
         self.assertTrue(hasattr(backend.AppKit, "NSWorkspace"))
         self.assertTrue(hasattr(backend.AppKit, "NSBitmapImageFileTypePNG"))
+        system_wide = backend.ApplicationServices.AXUIElementCreateSystemWide()
+        self.assertTrue(backend._format_element(system_wide, 0, 0).startswith("[0] "))
 
     @unittest.skipUnless(sys.platform == "darwin", "native sips integration runs on macOS CI")
     def test_native_sips_bounds_png_and_rebinds_pixel_dimensions(self):
@@ -251,6 +253,54 @@ class ContractTests(unittest.TestCase):
             definition["inputSchema"]["properties"]["max_tree_depth"]["default"],
             64,
         )
+
+    def test_accessibility_lines_expose_actionable_semantics_compactly(self):
+        backend = MacOSBackend()
+        backend.ApplicationServices = types.SimpleNamespace()
+        values = {
+            "AXRole": "AXTextField",
+            "AXSubrole": "AXSearchField",
+            "AXTitle": "Search",
+            "AXDescription": "Search the web",
+            "AXHelp": "Type a query",
+            "AXValue": "brave",
+            "AXPlaceholderValue": "Query",
+            "AXIdentifier": "omnibox",
+            "AXSelected": True,
+            "AXExpanded": True,
+            "AXEnabled": False,
+        }
+        backend._ax_copy = lambda _element, attribute: values.get(attribute)
+        backend._ax_is_settable = lambda _element, attribute: attribute == "AXValue"
+        backend._ax_actions = lambda _element: ["AXConfirm", "AXShowMenu"]
+        line = backend._format_element(object(), 7, 1)
+        self.assertEqual(
+            line,
+            '  [7] AXTextField subrole="AXSearchField" "Search" '
+            'description="Search the web" help="Type a query" value="brave" '
+            'placeholder="Query" identifier="omnibox" '
+            'traits=selected,expanded,disabled,settable,string actions=Confirm,ShowMenu',
+        )
+
+    def test_accessibility_lines_omit_default_or_duplicate_semantics(self):
+        backend = MacOSBackend()
+        backend.ApplicationServices = types.SimpleNamespace()
+        values = {
+            "AXRole": "AXButton",
+            "AXTitle": "Save",
+            "AXDescription": "Save",
+            "AXHelp": "Save",
+            "AXValue": "Save",
+            "AXPlaceholderValue": "Save",
+            "AXIdentifier": "Save",
+            "AXSelected": False,
+            "AXExpanded": False,
+            "AXEnabled": True,
+        }
+        backend._ax_copy = lambda _element, attribute: values.get(attribute)
+        backend._ax_is_settable = lambda _element, _attribute: False
+        backend._ax_actions = lambda _element: ["AXPress"]
+        self.assertEqual(backend._format_element(object(), 2, 0), '[2] AXButton "Save" actions=Press')
 
     def test_health_keeps_ax_control_available_without_screen_recording(self):
         backend = MacOSBackend()

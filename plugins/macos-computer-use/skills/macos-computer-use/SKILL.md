@@ -211,6 +211,11 @@ Screen Recording is not, `computer_use_health.axControlReady` remains true and
 `get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
 coordinate and desktop routes remain unavailable until Screen Recording is
 granted.
+Fallback AX lines expose compact `traits=` values such as `selected`,
+`expanded`, `disabled`, `settable`, and the editable value type. Prefer an
+enabled, correctly expanded control and use its advertised `actions=` before
+falling back to pixels; placeholder/help/identifier fields disambiguate sparse
+or icon-only controls but do not survive the next observation as handles.
 Requesting a native permission invalidates every fallback screenshot and AX
 index because the consent prompt or System Settings may change focus and layout.
 The fallback retains at most 32 window AX observations; scanning more windows

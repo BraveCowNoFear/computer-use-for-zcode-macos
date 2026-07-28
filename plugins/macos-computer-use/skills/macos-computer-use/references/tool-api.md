@@ -133,6 +133,11 @@ actionable generation. `max_tree_nodes` accepts 1–10,000 and
 at 64; `truncated:true` plus `truncation_reasons` means re-observe with the
 specific larger budget or a narrower target instead of assuming omitted items
 are actionable.
+Each rendered AX line keeps the raw role/index plus compact, non-default
+semantics: subrole, distinct description/help/placeholder/identifier, value,
+`selected`/`expanded`/`disabled`/`settable` traits, editable value type, and up
+to eight advertised actions. Duplicate defaults are omitted to keep the tree
+groundable at the 1,200-node default.
 For raw mouse tools, a `screenshotId` without `window` binds the supplied
 coordinates to that exact fresh desktop image; it is never silently ignored.
 When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
