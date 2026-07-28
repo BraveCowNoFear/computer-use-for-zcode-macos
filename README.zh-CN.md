@@ -35,10 +35,11 @@ macOS 实现和开源 Cua Driver；ZCode 打包、无审批启动器、兜底运
 2. 点击 **+**，添加 `BraveCowNoFear/computer-use-for-zcode-macos` 或本仓库 Git URL。
 3. 安装并启用 **macos-computer-use**。
 4. 对需要连续执行、不希望 ZCode 逐条确认的任务选择 **Full Access**。
-5. 新建任务并输入：
+5. 新建任务，在输入框键入 `/`，从“技能”分组选择 **macos-computer-use**，
+   然后输入：
 
    ```text
-   $macos-computer-use 检查 macOS 权限，打开备忘录，新建一条标题为“旅行清单”的备忘录，并确认它已经可见
+   检查 macOS 权限，打开备忘录，新建一条标题为“旅行清单”的备忘录，并确认它已经可见
    ```
 
 6. macOS 询问时给 `CuaDriver.app` 授予“辅助功能”和“屏幕录制”，然后重启
@@ -59,6 +60,10 @@ CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip �
 Plugin 不会覆盖全局 `/Applications/CuaDriver.app`，也不会停止用户无关的
 Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖辅助功能树的任务可显式关闭截图，在未授予
 “屏幕录制”时继续；像素和全桌面路径仍需要该授权。
+
+本项目结构遵循 ZCode 当前的
+[Plugin 与 Marketplace 规范](https://zcode.z.ai/cn/docs/plugin)，包括
+`.zcode-plugin/plugin.json`、`.mcp.json` 以及官方支持的 Plugin 根目录/数据目录模板变量。
 
 ## 能做什么
 

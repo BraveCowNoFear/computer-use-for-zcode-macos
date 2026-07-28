@@ -40,10 +40,11 @@ unrestricted launcher, fallback runtime, and tests live in this repository.
 3. Install and enable **macos-computer-use**.
 4. Select **Full Access** for a task that should run without ZCode command
    confirmations.
-5. Start a new task and ask:
+5. Start a new task, type `/`, choose **macos-computer-use** from the **Skills**
+   group, then ask:
 
    ```text
-   $macos-computer-use check macOS permissions, open Notes, create a note called Trip checklist, and verify it is visible
+   Check macOS permissions, open Notes, create a note called Trip checklist, and verify it is visible
    ```
 
 6. Grant Accessibility and Screen Recording to `CuaDriver.app` when macOS asks,
@@ -72,6 +73,11 @@ The plugin never replaces a global `/Applications/CuaDriver.app` or stops the
 user's unrelated Cua daemons. macOS TCC cannot be bypassed by any plugin.
 Accessibility-only tasks can continue without Screen Recording by explicitly
 omitting screenshots; pixel and desktop routes still require it.
+
+This layout follows ZCode's current
+[plugin and marketplace specification](https://zcode.z.ai/en/docs/plugin),
+including `.zcode-plugin/plugin.json`, `.mcp.json`, and the supported plugin
+root/data template variables.
 
 ## What agents can do
 
