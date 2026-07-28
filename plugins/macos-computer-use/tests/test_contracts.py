@@ -232,6 +232,37 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["windows"], [expected_window])
         self.assertEqual(result["bundleId"], "com.example.Editor")
 
+    def test_window_order_is_front_to_back_and_zindex_increases_toward_front(self):
+        infos = [
+            {"layer": 0, "onscreen": True, "id": 10},
+            {"layer": 1, "onscreen": True, "id": 99},
+            {"layer": 0, "onscreen": True, "id": 20},
+            {"layer": 0, "onscreen": False, "id": 30},
+        ]
+
+        class FakeQuartz:
+            kCGWindowListOptionAll = 1
+            kCGWindowListExcludeDesktopElements = 2
+            kCGNullWindowID = 0
+            kCGWindowLayer = "layer"
+            kCGWindowIsOnscreen = "onscreen"
+
+            @staticmethod
+            def CGWindowListCopyWindowInfo(options, window_id):
+                return infos
+
+        backend = MacOSBackend()
+        backend.Quartz = FakeQuartz
+        backend._require_native = lambda: None
+        backend._window_from_info = lambda info, z_index: {
+            "id": info["id"],
+            "ownerName": "Example",
+            "zIndex": z_index,
+        }
+        windows = backend._list_windows()
+        self.assertEqual([window["id"] for window in windows], [10, 20, 30])
+        self.assertEqual([window["zIndex"] for window in windows], [2, 1, 0])
+
     def test_installed_app_cache_never_caches_running_state_or_pid(self):
         class FakeRunningApp:
             def bundleIdentifier(self):

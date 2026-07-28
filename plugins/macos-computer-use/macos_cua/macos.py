@@ -398,6 +398,10 @@ class MacOSBackend:
             if window is not None and window["ownerName"] not in {"Window Server", "Dock"}:
                 window["onScreen"] = bool(info.get(Q.kCGWindowIsOnscreen, False))
                 windows.append(window)
+        # CGWindowListCopyWindowInfo is front-to-back, while the Codex
+        # Screenshot contract defines larger zIndex values as visually above.
+        for index, window in enumerate(windows):
+            window["zIndex"] = len(windows) - index - 1
         return windows
 
     def tool_list_windows(self, arguments: dict[str, Any]) -> list[dict[str, Any]]:
