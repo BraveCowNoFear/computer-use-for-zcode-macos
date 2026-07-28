@@ -45,14 +45,20 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(
             requirements,
             [
+                'pyobjc-core==12.2.1; sys_platform == "darwin"',
                 'pyobjc-framework-Cocoa==12.2.1; sys_platform == "darwin"',
+                'pyobjc-framework-CoreText==12.2.1; sys_platform == "darwin"',
                 'pyobjc-framework-Quartz==12.2.1; sys_platform == "darwin"',
                 'pyobjc-framework-ApplicationServices==12.2.1; sys_platform == "darwin"',
             ],
         )
         for script in ("install.sh", "run-mcp.sh"):
-            self.assertIn("--only-binary=:all:", (PLUGIN / "scripts" / script).read_text(encoding="utf-8"))
-        self.assertIn("--only-binary=:all:", (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+            source = (PLUGIN / "scripts" / script).read_text(encoding="utf-8")
+            self.assertIn("--only-binary=:all:", source)
+            self.assertIn("--no-deps", source)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("--only-binary=:all:", workflow)
+        self.assertIn("--no-deps", workflow)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_accepts_the_ci_cpython(self):

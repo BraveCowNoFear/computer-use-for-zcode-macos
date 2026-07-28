@@ -144,7 +144,7 @@ verifies its pinned SHA-256, installs signed `/Applications/CuaDriver.app`, and
 disables upstream telemetry. It may need the current macOS user to have write
 access to `/Applications`. The fallback requires CPython 3.10 or newer, creates
 a private Python environment, and installs the exact tested PyObjC 12.2.1
-binary wheels.
+five-package binary-wheel closure with dependency resolution disabled.
 
 Required macOS grants:
 

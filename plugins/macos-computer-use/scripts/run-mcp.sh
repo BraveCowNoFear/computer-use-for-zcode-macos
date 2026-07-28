@@ -10,7 +10,7 @@ source "$ROOT/scripts/runtime-common.sh"
 DEV_PYTHON="$ROOT/.venv/bin/python3"
 DATA_PYTHON="$DATA_DIR/venv/bin/python3"
 VERSION_FILE="$DATA_DIR/runtime-version"
-RUNTIME_VERSION="0.4.1"
+RUNTIME_VERSION="0.4.2"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
@@ -31,7 +31,7 @@ else
       require_supported_python python3
       python3 -m venv "$DATA_DIR/venv"
       require_supported_python "$DATA_PYTHON"
-      "$DATA_PYTHON" -m pip install --disable-pip-version-check --only-binary=:all: --quiet -r "$ROOT/requirements.txt" >&2
+      "$DATA_PYTHON" -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --quiet -r "$ROOT/requirements.txt" >&2
       printf '%s' "$RUNTIME_VERSION" > "$VERSION_FILE"
     fi
     release_runtime_lock "$LOCK_DIR"
