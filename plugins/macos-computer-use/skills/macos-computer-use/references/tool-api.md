@@ -212,6 +212,9 @@ App launch and foreground activation conservatively invalidate prior fallback
 observations even when their completion probe fails. A launch timeout or an
 accepted launch that cannot be matched returns a structured unknown effect;
 re-list apps/windows before deciding whether another launch is needed.
+Exact-window activation first performs `AXRaise`. If unsupported, it sets the
+bound window's `AXMain=true` and then `AXFocused=true`; frontmost pid and focused
+AXWindowNumber must still match before any input is sent.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 

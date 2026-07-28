@@ -1446,6 +1446,38 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "refused to activate"):
             backend._activate({"pid": 80})
 
+    def test_activation_falls_back_from_raise_to_main_then_focused(self):
+        target = object()
+        running = types.SimpleNamespace(activateWithOptions_=lambda _options: True)
+        frontmost = types.SimpleNamespace(processIdentifier=lambda: 80)
+        workspace = types.SimpleNamespace(frontmostApplication=lambda: frontmost)
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSRunningApplication=types.SimpleNamespace(
+                runningApplicationWithProcessIdentifier_=lambda _pid: running
+            ),
+            NSApplicationActivateIgnoringOtherApps=2,
+            NSApplicationActivateAllWindows=1,
+            NSWorkspace=types.SimpleNamespace(sharedWorkspace=lambda: workspace),
+        )
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda _pid: "application"
+        )
+        backend._ax_window = lambda _window: target
+        backend._ax_perform = mock.Mock(return_value=False)
+        backend._ax_set = mock.Mock(side_effect=[False, True])
+        backend._ax_copy = lambda element, attribute: {
+            ("application", "AXFocusedWindow"): target,
+            (target, "AXWindowNumber"): 8,
+        }.get((element, attribute))
+        window = {"id": 8, "pid": 80}
+        backend._activate(window)
+        backend._ax_perform.assert_called_once_with(target, "AXRaise")
+        self.assertEqual(
+            backend._ax_set.call_args_list,
+            [mock.call(target, "AXMain", True), mock.call(target, "AXFocused", True)],
+        )
+
     def test_accessibility_window_prefers_the_exact_cg_window_number(self):
         backend = MacOSBackend()
         first, second = object(), object()

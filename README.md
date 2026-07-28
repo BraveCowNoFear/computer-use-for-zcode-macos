@@ -91,7 +91,9 @@ omitting screenshots; pixel and desktop routes still require it.
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.
 - Keep normal app work in the background; escalate to foreground only after a
-  verified delivery failure.
+  verified delivery failure. Foreground fallback raises the exact bound AX
+  window, then tries its main/focused attributes for apps without `AXRaise`,
+  and confirms the focused pid/window ID before sending input.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.

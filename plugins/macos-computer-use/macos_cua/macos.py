@@ -1444,7 +1444,21 @@ class MacOSBackend:
         if activated is False:
             raise ToolError("macOS refused to activate the target app; re-observe before sending input")
         target_ax_window = self._ax_window(window)
-        self._ax_perform(target_ax_window, self._ax_attr("kAXRaiseAction", "AXRaise"))
+        raised = self._ax_perform(
+            target_ax_window, self._ax_attr("kAXRaiseAction", "AXRaise")
+        )
+        if not raised:
+            made_main = self._ax_set(
+                target_ax_window,
+                self._ax_attr("kAXMainAttribute", "AXMain"),
+                True,
+            )
+            if not made_main:
+                self._ax_set(
+                    target_ax_window,
+                    self._ax_attr("kAXFocusedAttribute", "AXFocused"),
+                    True,
+                )
         workspace = self.AppKit.NSWorkspace.sharedWorkspace()
         deadline = time.monotonic() + 0.6
         while time.monotonic() < deadline:
