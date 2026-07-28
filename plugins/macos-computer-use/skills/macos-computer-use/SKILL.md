@@ -89,6 +89,12 @@ coordinates are window-local pixels in the exact returned image: top-left
 origin, x right, y down. Never reuse an old element index or pixel after layout,
 focus, content, selection, dialog, or window changes.
 
+For fallback `click`, `scroll`, `drag`, or raw mouse coordinates read from a
+window screenshot, preserve that same window and always pass its fresh
+`screenshotId`. The ID binds image pixels to the current Retina scale and
+window bounds; omitting it changes the coordinate space to logical Quartz
+points. Never infer that the server will recover the image binding for you.
+
 MCP image blocks are already rendered by the host. Inspect them directly; do
 not decode, print, or re-emit their base64 payload just to see the screenshot.
 

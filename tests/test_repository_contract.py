@@ -260,6 +260,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("Input timeout means outcome unknown", skill)
         self.assertIn("Request only the signal needed", skill)
         self.assertIn("include_screenshot:true,include_text:false", skill)
+        self.assertIn("always pass its fresh\n`screenshotId`", skill)
+        self.assertIn("omitting it changes the coordinate space", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (
