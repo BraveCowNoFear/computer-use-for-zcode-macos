@@ -86,7 +86,9 @@ omitting screenshots; pixel and desktop routes still require it.
   lines retain subroles, non-default selected/expanded/disabled/settable state,
   value types, help, placeholders, identifiers, and advertised actions.
 - Click AX elements or window-local pixels, double/right-click, drag, and
-  scroll.
+  scroll. Direct fallback clicks, drag starts, and raw mouse-down actions first
+  move the pointer to the grounded point, matching the physical hover/down
+  sequence used by a person.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.

@@ -151,6 +151,9 @@ When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
 pass that window's fresh `screenshotId` too so Retina pixels map to logical
 Quartz points. The core `click`, `scroll`, and `drag` tools accept the same
 field; always include it when x/y came from a returned screenshot.
+Fallback `click`, `drag`, and `mouse_down` post `MouseMoved` at the resolved
+point before button-down. Multi-click repeats this move/down/up sequence for
+each click, preserving native hover behavior and click counts.
 
 Fallback startup sequence:
 

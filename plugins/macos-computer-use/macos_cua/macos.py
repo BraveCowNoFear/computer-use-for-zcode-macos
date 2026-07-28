@@ -1651,6 +1651,13 @@ class MacOSBackend:
         if button in self._held_buttons:
             raise ToolError("The requested mouse button is already held; release it with mouse_up before clicking")
         for click_number in range(1, count + 1):
+            self._post_mouse(
+                getattr(self.Quartz, "kCGEventMouseMoved", "moved"),
+                button,
+                x,
+                y,
+                click_number,
+            )
             self._post_mouse_down(button, down, up, dragged, x, y, click_number)
             try:
                 self._post_mouse(up, button, x, y, click_number)
@@ -2086,6 +2093,11 @@ class MacOSBackend:
         button, down, up, dragged = self._button("left")
         if button in self._held_buttons:
             raise ToolError("The left mouse button is already held; release it with mouse_up before dragging")
+        self._post_mouse(
+            getattr(self.Quartz, "kCGEventMouseMoved", "moved"),
+            button,
+            *start,
+        )
         self._post_mouse_down(button, down, up, dragged, *start)
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
@@ -2365,6 +2377,11 @@ class MacOSBackend:
         if button in self._held_buttons:
             raise ToolError("The requested mouse button is already held; call mouse_up before mouse_down again")
         try:
+            self._post_mouse(
+                getattr(self.Quartz, "kCGEventMouseMoved", "moved"),
+                button,
+                *point,
+            )
             self._post_mouse_down(button, down, up, dragged, *point)
             return {
                 "ok": True,

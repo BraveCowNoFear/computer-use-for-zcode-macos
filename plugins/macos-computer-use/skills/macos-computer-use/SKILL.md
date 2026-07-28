@@ -118,6 +118,9 @@ points. Never infer that the server will recover the image binding for you.
 The fallback may downsample a large PNG for MCP transport; the returned
 `width`/`height` and `screenshotId` describe that published image exactly, so
 use its visible pixel coordinates rather than the Mac's native backing size.
+Fallback clicks, drag starts, and raw `mouse_down` calls post a real pointer
+move to the grounded point before the button-down event, so hover-sensitive
+controls receive the same move/down sequence as physical mouse use.
 
 MCP image blocks are already rendered by the host. Inspect them directly; do
 not decode, print, or re-emit their base64 payload just to see the screenshot.

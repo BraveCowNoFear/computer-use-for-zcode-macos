@@ -1744,7 +1744,7 @@ class ContractTests(unittest.TestCase):
         backend._post_mouse = post
         with self.assertRaisesRegex(RuntimeError, "injected drag failure"):
             backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
-        self.assertEqual(events[0][0], "down")
+        self.assertEqual([events[0][0], events[1][0]], ["moved", "down"])
         self.assertEqual(events[-1][0], "up")
         self.assertFalse(backend._held_buttons)
 
@@ -1770,7 +1770,7 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(caught.exception.structured_content["release_pending"])
         self.assertIn("button", backend._held_buttons)
         backend.close()
-        self.assertEqual(events, ["down", "dragged", "up", "up"])
+        self.assertEqual(events, ["moved", "down", "dragged", "up", "up"])
         self.assertFalse(backend._held_buttons)
 
     def test_optional_pointer_coordinates_must_be_paired(self):
@@ -1824,7 +1824,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["effect"], "partial")
         self.assertIn("button", backend._held_buttons)
         backend.close()
-        self.assertEqual(events, ["down", "up", "up", "up"])
+        self.assertEqual(events, ["moved", "down", "up", "up", "up"])
         self.assertFalse(backend._held_buttons)
 
     def test_transient_click_release_failure_is_retried_without_replaying_click(self):
@@ -1841,7 +1841,7 @@ class ContractTests(unittest.TestCase):
 
         backend._post_mouse = post
         backend._click_pointer("button", "down", "up", "dragged", 1, 2, 1)
-        self.assertEqual(events, ["down", "up", "up"])
+        self.assertEqual(events, ["moved", "down", "up", "up"])
         self.assertFalse(backend._held_buttons)
 
     def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
@@ -1874,7 +1874,10 @@ class ContractTests(unittest.TestCase):
         backend.tool_mouse_down({"x": 1, "y": 2})
         backend.tool_move_mouse({"x": 5, "y": 6, "duration": 0})
         backend.close()
-        self.assertEqual([event[0] for event in events], ["left-down", "left-dragged", "left-up"])
+        self.assertEqual(
+            [event[0] for event in events],
+            ["moved", "left-down", "left-dragged", "left-up"],
+        )
 
     def test_move_mouse_readback_failure_keeps_dispatched_effect_unknown(self):
         backend = MacOSBackend()
@@ -1962,7 +1965,7 @@ class ContractTests(unittest.TestCase):
             backend.tool_mouse_down({"x": 3, "y": 4})
         with self.assertRaisesRegex(ToolError, "already held"):
             backend._click_pointer("left-button", "left-down", "left-up", "left-dragged", 3, 4, 1)
-        self.assertEqual(events, ["left-down"])
+        self.assertEqual(events, ["moved", "left-down"])
         backend.close()
 
     def test_invalid_click_count_never_posts_an_event(self):
