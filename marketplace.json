@@ -1,0 +1,15 @@
+{
+  "name": "brave-cow-zcode-plugins",
+  "description": "Local-first agent tools for ZCode",
+  "plugins": [
+    {
+      "name": "macos-computer-use",
+      "source": "./plugins/macos-computer-use",
+      "description": "Full local mouse, keyboard, screenshot, window, and Accessibility control for macOS",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["macos", "computer-use", "desktop-control", "mcp"],
+      "strict": true
+    }
+  ]
+}

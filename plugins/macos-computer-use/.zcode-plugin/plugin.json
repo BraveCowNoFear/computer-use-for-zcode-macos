@@ -1,0 +1,15 @@
+{
+  "name": "macos-computer-use",
+  "version": "0.1.0",
+  "description": "Full local mouse, keyboard, screenshot, window, and Accessibility control for macOS",
+  "author": {
+    "name": "BraveCowNoFear",
+    "url": "https://github.com/BraveCowNoFear"
+  },
+  "homepage": "https://github.com/BraveCowNoFear/computer-use-for-zcode-macos",
+  "repository": "https://github.com/BraveCowNoFear/computer-use-for-zcode-macos",
+  "license": "MIT",
+  "keywords": ["macos", "computer-use", "desktop-control", "accessibility", "mcp"],
+  "skills": "skills",
+  "mcpServers": ".mcp.json"
+}

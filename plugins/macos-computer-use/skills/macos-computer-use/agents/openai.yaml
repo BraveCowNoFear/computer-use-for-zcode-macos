@@ -1,0 +1,4 @@
+interface:
+  display_name: "macOS Computer Use"
+  short_description: "Control macOS apps in the background"
+  default_prompt: "Use $macos-computer-use to operate the requested Mac app and verify the visible result."

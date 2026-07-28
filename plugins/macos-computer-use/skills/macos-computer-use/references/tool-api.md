@@ -1,0 +1,126 @@
+# Tool API and routing
+
+## Primary: Cua Driver background MCP
+
+The `macos-computer-use` MCP is the primary surface. It is pinned to the tested
+Cua Driver 0.12.6 contract at install time, while a compatible existing driver
+may be reused. Inspect `tools/list` for the live schemas instead of guessing
+optional fields.
+
+Common flow:
+
+| Intent | Tool and key fields |
+| --- | --- |
+| Permission status | `check_permissions({prompt:false})` |
+| Begin task | `start_session({session, capture_scope})` |
+| Launch app | `launch_app({bundle_id})` |
+| List app windows | `list_windows({pid})` |
+| Snapshot | `get_window_state({session, pid, window_id})` |
+| Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
+| AX click | `click({session, pid, window_id, element_index})` |
+| Pixel click | `click({session, pid, window_id, x, y})` |
+| Desktop click | `click({session, x, y, scope:"desktop"})` with no pid/window |
+| Enter text | `type_text({session, pid, window_id, element_index, text})` |
+| Shortcut | `hotkey({session,pid,window_id,keys:["cmd","c"]})` |
+| One key | `press_key({session,pid,window_id,key:"return",modifiers:[]})` |
+| Non-text AX value | `set_value({session, pid, window_id, element_index, value})` |
+| Finish task | `end_session({session})` |
+
+Primary window coordinates use the screenshot's window-local pixel space. AX
+indexes are cached against one `(pid, window_id)` observation and go stale on
+the next snapshot. Most input tools accept `delivery_mode:"background"`
+(default) or `"foreground"` (last resort).
+
+Desktop state and desktop-scope input are also part of this primary MCP, not a
+third server. For menu bar/Dock/system UI, pair a fresh `get_desktop_state`
+with a windowless `scope:"desktop"` action. Browser tools such as
+`get_browser_state`, `browser_click`, and `browser_type`—when advertised by the
+live primary `tools/list`—also belong to this same MCP.
+
+The plugin launches a dedicated daemon with:
+
+```text
+serve --permission-mode unrestricted --dangerously-bypass-approvals
+```
+
+This removes Cua Driver's runtime human-approval prompts. It does not and cannot
+forge macOS TCC consent or remove capability limits compiled into a dependency.
+`check_permissions({prompt:false})` is the MCP inspection call;
+`prompt:true` is deliberately refused by the dependency. The signed app's
+startup onboarding is responsible for requesting TCC grants.
+
+## Fallback: direct Quartz/PyObjC MCP
+
+The `macos-computer-use-fallback` MCP ships 22 local tools. Its Codex-compatible
+core is:
+
+| Tool | Required input | Purpose |
+| --- | --- | --- |
+| `list_windows` | none | Return targetable windows front-to-back. |
+| `get_window` | `id`, optional `app` | Rehydrate a returned window. |
+| `list_apps` | none | Return installed/running apps and windows. |
+| `launch_app` | `app` | Launch by bundle ID, display name, or `.app` path. |
+| `get_window_state` | `window` | Return screenshot; `include_text=true` adds AX. |
+| `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
+| `press_key` | `window`, `key` | Press a key or `+`-separated chord. |
+| `type_text` | `window`, `text` | Send literal Unicode. |
+| `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll. |
+| `set_value` | `window`, `element_index`, `value` | Set editable AX value. |
+| `drag` | `window`, start/end coordinates | Left-button drag. |
+| `perform_secondary_action` | `window`, index, `action` | Run listed AX action. |
+| `activate_window` | `window` | Bring app/window forward. |
+
+Extended fallback tools: `computer_use_health`, `permission_status`,
+`request_permissions`, `move_mouse`, `mouse_down`, `mouse_up`,
+`get_cursor_position`, `clipboard_get`, and `clipboard_set`.
+
+Fallback startup sequence:
+
+```text
+computer_use_health → permission_status → launch_app/list_windows → get_window
+→ get_window_state(include_text=true) → one action → get_window_state
+```
+
+The fallback is stateless and has no session cleanup tool. If its permissions
+are missing, call `request_permissions` once and wait for the user to grant the
+Python/ZCode responsible app before restarting ZCode.
+
+Do not pass primary handles to fallback tools. A fallback window looks like:
+
+```json
+{
+  "id": 123,
+  "app": "com.apple.TextEdit",
+  "title": "Untitled",
+  "pid": 456,
+  "bounds": {"x": 100, "y": 80, "width": 900, "height": 700}
+}
+```
+
+Fallback screenshot IDs remain valid for five minutes and only for their
+window. Fallback AX indexes belong to the latest text observation for that
+window.
+
+## Installation and permissions
+
+The primary first-run launcher downloads the versioned upstream installer,
+verifies its pinned SHA-256, installs signed `/Applications/CuaDriver.app`, and
+disables upstream telemetry. It may need the current macOS user to have write
+access to `/Applications`. The fallback creates a private Python environment
+and installs PyObjC.
+
+Required macOS grants:
+
+1. Privacy & Security → Accessibility for `CuaDriver.app` (and Python/ZCode if
+   the direct fallback is used).
+2. Privacy & Security → Screen Recording for the same responsible app.
+
+Restart ZCode after changing a TCC grant. Full Disk Access is unrelated to GUI
+control; grant it to ZCode only when the user's file operation itself needs it.
+
+Source-checkout diagnostics:
+
+```bash
+bash plugins/macos-computer-use/scripts/install.sh
+bash plugins/macos-computer-use/scripts/doctor.sh
+```

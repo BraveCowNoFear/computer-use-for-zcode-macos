@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+        python: ["3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install native dependencies
+        run: python -m pip install -r plugins/macos-computer-use/requirements.txt
+      - name: Compile runtime
+        run: python -m compileall -q plugins/macos-computer-use/macos_cua
+      - name: Validate shell launchers
+        if: runner.os != 'Windows'
+        run: bash -n plugins/macos-computer-use/scripts/*.sh
+      - name: Run all tests
+        run: python -m unittest discover -s tests -v && python -m unittest discover -s plugins/macos-computer-use/tests -v
+        shell: bash
+      - name: MCP runtime smoke test
+        run: PYTHONPATH=plugins/macos-computer-use python -m macos_cua.server --self-test
+        shell: bash
+      - name: Verify pinned Cua Driver installer
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/trycua/cua/cua-driver-rs-v0.12.6/libs/cua-driver/scripts/_install-rust.sh -o /tmp/cua-driver-installer.sh
+          echo "351878e9d7ac1b915b77572ba906102be10a6d93293073ad3e98544817984069  /tmp/cua-driver-installer.sh" | shasum -a 256 -c -
