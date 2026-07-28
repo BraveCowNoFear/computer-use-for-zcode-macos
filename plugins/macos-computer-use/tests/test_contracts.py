@@ -744,6 +744,31 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "require both"):
             backend._optional_point({"window": {"id": 1}})
 
+    def test_raw_pointer_honors_desktop_screenshot_bindings(self):
+        backend = MacOSBackend()
+        backend._desktop_bounds = lambda: {"x": -400, "y": 0, "width": 800, "height": 600}
+        backend._screenshot_cache["desktop"] = {
+            "scope": "desktop",
+            "windowKey": None,
+            "bounds": {"x": -400, "y": 0, "width": 800, "height": 600},
+            "imageWidth": 1600,
+            "imageHeight": 1200,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_desktop_shot__.png"),
+        }
+        self.assertEqual(
+            backend._optional_point({"x": 800, "y": 600, "screenshotId": "desktop"}),
+            (0.0, 300.0),
+        )
+        with self.assertRaisesRegex(ToolError, "direct desktop observation"):
+            backend._optional_point({"x": 1, "y": 2, "screenshotId": "unknown"})
+
+    def test_cursor_read_failure_is_explicit(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(CGEventCreate=lambda source: None)
+        with self.assertRaisesRegex(ToolError, "cursor position"):
+            backend._cursor()
+
     def test_failed_click_release_is_retained_for_shutdown_cleanup(self):
         backend = MacOSBackend()
         events = []

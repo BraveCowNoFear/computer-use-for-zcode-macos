@@ -1428,6 +1428,8 @@ class MacOSBackend:
     def _cursor(self) -> tuple[float, float]:
         Q = self.Quartz
         event = Q.CGEventCreate(None)
+        if event is None:
+            raise ToolError("macOS could not read the current cursor position")
         point = Q.CGEventGetLocation(event)
         return float(point.x), float(point.y)
 
@@ -1446,6 +1448,10 @@ class MacOSBackend:
             window = self._get_window(arguments["window"])
             return self._relative_point(
                 window, arguments["x"], arguments["y"], arguments.get("screenshotId")
+            )
+        if arguments.get("screenshotId") is not None:
+            return self._desktop_relative_point(
+                arguments["x"], arguments["y"], arguments["screenshotId"]
             )
         return float(arguments["x"]), float(arguments["y"])
 

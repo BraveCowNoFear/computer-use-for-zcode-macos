@@ -88,6 +88,8 @@ desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
 `desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
 `get_desktop_state` returns one image and screenshot ID per active display so
 mixed Retina/non-Retina layouts do not share an incorrect global scale.
+For raw mouse tools, a `screenshotId` without `window` binds the supplied
+coordinates to that exact fresh desktop image; it is never silently ignored.
 When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
 pass that window's fresh `screenshotId` too so Retina pixels map to logical
 Quartz points. The core `click`, `scroll`, and `drag` tools accept the same
