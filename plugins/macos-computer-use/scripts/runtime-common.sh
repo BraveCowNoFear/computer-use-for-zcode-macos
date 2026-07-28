@@ -4,7 +4,7 @@
 # atomic on macOS without requiring flock. The PID marker lets a later ZCode
 # process recover a lock left behind by a killed installer.
 
-MACOS_CUA_RUNTIME_VERSION="0.8.3"
+MACOS_CUA_RUNTIME_VERSION="0.8.4"
 
 python_is_supported() {
   local python="$1"

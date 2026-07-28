@@ -298,7 +298,7 @@ class ContractTests(unittest.TestCase):
         responses = [json.loads(line) for line in target.getvalue().splitlines()]
         self.assertEqual([item["id"] for item in responses], [1, 2])
 
-    def test_key_chords_support_mac_modifiers_and_numpad(self):
+    def test_key_chords_support_mac_modifiers_numpad_and_shifted_keysyms(self):
         key, modifiers = parse_key_chord("Command+Shift+period")
         self.assertEqual(key, 47)
         self.assertEqual(modifiers, {"command", "shift"})
@@ -306,6 +306,12 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(parse_key_chord("greater"), (47, {"shift"}))
         self.assertEqual(parse_key_chord("less"), (43, {"shift"}))
         self.assertEqual(parse_key_chord("question"), (44, {"shift"}))
+        self.assertEqual(parse_key_chord("Command+plus"), (24, {"command", "shift"}))
+        self.assertEqual(parse_key_chord("Meta_L+colon"), (41, {"command", "shift"}))
+        self.assertEqual(parse_key_chord("ISO_Left_Tab"), (48, {"shift"}))
+        for symbol in "!@#$%^&*()_{}|:\"<>?~":
+            _, modifiers = parse_key_chord(symbol)
+            self.assertEqual(modifiers, {"shift"}, symbol)
 
     def test_retina_screenshot_pixels_map_to_logical_window_points(self):
         backend = MacOSBackend()

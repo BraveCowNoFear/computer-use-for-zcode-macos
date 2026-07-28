@@ -51,16 +51,39 @@ KEY_ALIASES: dict[str, str] = {
 }
 
 MODIFIER_ALIASES: dict[str, str] = {
-    "cmd": "command", "command": "command", "meta": "command", "super": "command", "os": "command",
+    "cmd": "command", "cmd_l": "command", "cmd_r": "command",
+    "command": "command", "command_l": "command", "command_r": "command",
+    "meta": "command", "meta_l": "command", "meta_r": "command",
+    "super": "command", "super_l": "command", "super_r": "command",
+    "os": "command", "os_l": "command", "os_r": "command",
     "control": "control", "ctrl": "control", "control_l": "control", "control_r": "control",
     "shift": "shift", "shift_l": "shift", "shift_r": "shift",
     "alt": "option", "option": "option", "alt_l": "option", "alt_r": "option",
 }
 
 SHIFTED_KEY_ALIASES: dict[str, str] = {
-    "greater": ".",
-    "less": ",",
-    "question": "/",
+    "!": "1", "exclam": "1",
+    "@": "2", "at": "2",
+    "#": "3", "numbersign": "3",
+    "$": "4", "dollar": "4",
+    "%": "5", "percent": "5",
+    "^": "6", "asciicircum": "6",
+    "&": "7", "ampersand": "7",
+    "*": "8", "asterisk": "8",
+    "(": "9", "parenleft": "9",
+    ")": "0", "parenright": "0",
+    "_": "-", "underscore": "-",
+    "plus": "=",
+    "{": "[", "braceleft": "[",
+    "}": "]", "braceright": "]",
+    "|": "\\", "bar": "\\",
+    ":": ";", "colon": ";",
+    '"': "'", "quotedbl": "'",
+    "<": ",", "less": ",",
+    ">": ".", "greater": ".",
+    "?": "/", "question": "/",
+    "~": "`", "asciitilde": "`",
+    "iso_left_tab": "tab",
 }
 
 

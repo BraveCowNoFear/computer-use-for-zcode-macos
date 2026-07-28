@@ -73,7 +73,7 @@ core is:
 | `launch_app` | `app` | Launch and return matched pid plus current windows. |
 | `get_window_state` | `window` | Return a screenshot by default; request AX text explicitly when needed. |
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
-| `press_key` | `window`, `key` | Press a key or `+`-separated chord. |
+| `press_key` | `window`, `key` | Press a key or `+`-separated chord; use keysym names such as `plus`, `colon`, or `ISO_Left_Tab` when the symbol conflicts with the separator. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
 | `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll. |
 | `set_value` | `window`, `element_index`, `value` | Set editable AX value. |
