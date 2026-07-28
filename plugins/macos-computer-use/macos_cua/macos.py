@@ -26,6 +26,26 @@ PYOBJC_DISTRIBUTIONS = (
     "pyobjc-framework-Quartz",
     "pyobjc-framework-ApplicationServices",
 )
+ACCESSIBILITY_REQUIRED_TOOLS = frozenset(
+    {
+        "click",
+        "press_key",
+        "type_text",
+        "scroll",
+        "set_value",
+        "drag",
+        "perform_secondary_action",
+        "activate_window",
+        "desktop_click",
+        "desktop_press_key",
+        "desktop_type_text",
+        "desktop_scroll",
+        "desktop_drag",
+        "move_mouse",
+        "mouse_down",
+        "mouse_up",
+    }
+)
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -215,6 +235,14 @@ class MacOSBackend:
             raise ToolError(f"Unknown tool: {name}")
         if name not in {"computer_use_health", "permission_status"}:
             self._require_native()
+        requires_accessibility = name in ACCESSIBILITY_REQUIRED_TOOLS or (
+            name == "get_window_state" and bool(arguments.get("include_text", False))
+        )
+        if requires_accessibility and not self._permission_status()["accessibility"]:
+            raise ToolError(
+                "Accessibility permission is not granted. Run request_permissions with "
+                "accessibility=true, grant it in System Settings, and restart ZCode."
+            )
         return method(arguments)
 
     def _require_native(self) -> None:

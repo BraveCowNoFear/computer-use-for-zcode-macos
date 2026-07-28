@@ -17,6 +17,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 
 from macos_cua.contracts import CORE_CODEX_TOOL_NAMES, TOOL_DEFINITIONS, TOOL_NAMES, ToolError
 from macos_cua.macos import (
+    ACCESSIBILITY_REQUIRED_TOOLS,
     EXPECTED_PYOBJC_VERSION,
     PYOBJC_DISTRIBUTIONS,
     MacOSBackend,
@@ -170,6 +171,29 @@ class ContractTests(unittest.TestCase):
             {"accessibility": False, "screen_recording": True, "open_settings": False}
         )
         self.assertEqual(prompts, {"accessibility": 1, "screenRecording": 1})
+
+    def test_input_and_ax_actions_fail_fast_without_accessibility(self):
+        backend = MacOSBackend()
+        backend.native_error = None
+        backend.AppKit = object()
+        backend.ApplicationServices = object()
+        backend.Quartz = object()
+        backend._permission_status = lambda: {"accessibility": False, "screenRecording": True}
+        action = mock.Mock(return_value={"ok": True})
+        backend.tool_click = action
+        with self.assertRaisesRegex(ToolError, "Accessibility permission is not granted"):
+            backend.call("click", {"window": {"id": 1}, "x": 1, "y": 2})
+        action.assert_not_called()
+        self.assertIn("mouse_up", ACCESSIBILITY_REQUIRED_TOOLS)
+
+        state = mock.Mock(return_value={"screenshots": []})
+        backend.tool_get_window_state = state
+        with self.assertRaisesRegex(ToolError, "Accessibility permission is not granted"):
+            backend.call("get_window_state", {"window": {"id": 1}, "include_text": True})
+        self.assertEqual(
+            backend.call("get_window_state", {"window": {"id": 1}, "include_text": False}),
+            {"screenshots": []},
+        )
 
     def test_launch_app_returns_the_running_pid_and_exact_windows(self):
         class FakeRunningApp:

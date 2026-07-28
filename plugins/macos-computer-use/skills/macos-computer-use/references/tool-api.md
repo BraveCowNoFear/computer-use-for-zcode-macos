@@ -164,6 +164,10 @@ and never overwrites a global `/Applications` app. The fallback requires CPython
 five-package binary-wheel closure with dependency resolution disabled.
 Every supported wheel variant is pinned by its PyPI SHA-256 and installation
 uses hash-required mode.
+Every fallback synthetic-input or AX action also checks Accessibility before
+dispatch. Screenshot-only observation remains independent, but missing TCC is
+an explicit tool error rather than a silently discarded input reported as
+successful.
 The automatic first-run path builds and self-tests a staging environment before
 atomically publishing it to a plugin-versioned runtime directory, so an
 interrupted install is never reused as healthy.
