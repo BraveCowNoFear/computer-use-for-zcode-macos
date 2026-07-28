@@ -157,6 +157,12 @@ Every fallback input attempt conservatively expires its prior window or desktop
 observation even when native delivery raises. Key-down and mouse-down events are
 registered before posting; matching releases are retried immediately and again
 during MCP shutdown if interruption occurs between the pair.
+If both immediate release attempts fail, structured
+`click_release_incomplete`, `key_release_incomplete`, `drag_incomplete`, or
+`drag_release_incomplete` errors report a partial effect and whether a release
+remains pending. Re-observe instead of replaying the full click/key/drag.
+Native post failures that cannot prove whether macOS accepted the event use a
+`*_delivery_unknown` code with `effect:"unverifiable"`.
 
 Fallback action results mirror the primary verdict vocabulary. Quartz input and
 AX actions without a generic post-condition return `effect:"unverifiable"` and

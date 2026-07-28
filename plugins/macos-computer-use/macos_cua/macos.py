@@ -1348,7 +1348,17 @@ class MacOSBackend:
             raise ToolError("macOS could not create a mouse event")
         if click_count > 1:
             Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventClickState, click_count)
-        Q.CGEventPost(Q.kCGHIDEventTap, event)
+        try:
+            Q.CGEventPost(Q.kCGHIDEventTap, event)
+        except Exception as error:
+            raise ToolError(
+                f"macOS could not confirm mouse event delivery: {error}",
+                {
+                    "code": "mouse_event_delivery_unknown",
+                    "effect": "unverifiable",
+                    "verified": False,
+                },
+            ) from error
 
     def _click_pointer(
         self,
@@ -1366,16 +1376,25 @@ class MacOSBackend:
             self._post_mouse_down(button, down, up, dragged, x, y, click_number)
             try:
                 self._post_mouse(up, button, x, y, click_number)
-            except Exception:
+            except Exception as first_error:
                 # Retry release once now; if it still fails, close() retains
                 # the registered button and releases it on MCP shutdown.
                 try:
                     self._post_mouse(up, button, x, y, click_number)
-                except Exception:
-                    pass
+                except Exception as retry_error:
+                    raise ToolError(
+                        f"click may have landed but its mouse release could not be confirmed: {retry_error}",
+                        {
+                            "code": "click_release_incomplete",
+                            "effect": "partial",
+                            "verified": False,
+                            "requested_clicks": count,
+                            "completed_clicks": click_number - 1,
+                            "release_pending": True,
+                        },
+                    ) from first_error
                 else:
                     self._held_buttons.pop(button, None)
-                raise
             else:
                 self._held_buttons.pop(button, None)
             if click_number < count:
@@ -1496,29 +1515,50 @@ class MacOSBackend:
         self._held_key_releases.append(up)
         try:
             Q.CGEventPost(Q.kCGHIDEventTap, down)
-        except BaseException:
+        except BaseException as error:
             try:
                 Q.CGEventPost(Q.kCGHIDEventTap, up)
             except Exception:
                 pass
             else:
                 self._forget_key_release(up)
+            if isinstance(error, Exception):
+                raise ToolError(
+                    f"macOS could not confirm keyboard event delivery: {error}",
+                    {
+                        "code": "key_event_delivery_unknown",
+                        "effect": "unverifiable",
+                        "verified": False,
+                    },
+                ) from error
             raise
 
     def _post_key_up(self, up: Any) -> None:
         Q = self.Quartz
         try:
             Q.CGEventPost(Q.kCGHIDEventTap, up)
-        except BaseException:
+        except BaseException as first_error:
             # Retry once immediately; retain the event for close() if the
             # release still cannot be posted.
             try:
                 Q.CGEventPost(Q.kCGHIDEventTap, up)
-            except Exception:
-                pass
+            except Exception as retry_error:
+                if isinstance(first_error, Exception):
+                    raise ToolError(
+                        f"key press may have landed but its release could not be confirmed: {retry_error}",
+                        {
+                            "code": "key_release_incomplete",
+                            "effect": "partial",
+                            "verified": False,
+                            "release_pending": True,
+                        },
+                    ) from first_error
+                raise
             else:
                 self._forget_key_release(up)
-            raise
+                if not isinstance(first_error, Exception):
+                    raise first_error
+                return
         else:
             self._forget_key_release(up)
 
@@ -1592,7 +1632,17 @@ class MacOSBackend:
             if event is None:
                 raise ToolError("macOS could not create a scroll event")
             Q.CGEventSetLocation(event, (x, y))
-            Q.CGEventPost(Q.kCGHIDEventTap, event)
+            try:
+                Q.CGEventPost(Q.kCGHIDEventTap, event)
+            except Exception as error:
+                raise ToolError(
+                    f"macOS could not confirm scroll delivery: {error}",
+                    {
+                        "code": "scroll_delivery_unknown",
+                        "effect": "unverifiable",
+                        "verified": False,
+                    },
+                ) from error
             return {
                 "ok": True,
                 "screenPoint": {"x": x, "y": y},
@@ -1693,20 +1743,47 @@ class MacOSBackend:
                 self._held_buttons[button] = (up, dragged, last[0], last[1])
                 if delay:
                     time.sleep(delay)
-        except BaseException:
+        except BaseException as error:
             # A failed/interrupted drag must not leave the physical button held.
+            release_pending = True
             try:
                 self._post_mouse(up, button, *last)
             except Exception:
                 pass
             else:
                 self._held_buttons.pop(button, None)
+                release_pending = False
+            if isinstance(error, Exception):
+                raise ToolError(
+                    f"drag was only partially delivered: {error}",
+                    {
+                        "code": "drag_incomplete",
+                        "effect": "partial",
+                        "verified": False,
+                        "release_pending": release_pending,
+                        "last_position": {"x": last[0], "y": last[1]},
+                    },
+                ) from error
             raise
         try:
             self._post_mouse(up, button, *end)
-        except Exception:
-            # Retain the held state so close() can retry the release.
-            raise
+        except Exception as first_error:
+            # A transient release failure is safe to retry once. If both
+            # attempts fail, retain the held state so close() can retry it.
+            try:
+                self._post_mouse(up, button, *end)
+            except Exception as retry_error:
+                raise ToolError(
+                    f"drag reached its endpoint but the mouse release could not be confirmed: {retry_error}",
+                    {
+                        "code": "drag_release_incomplete",
+                        "effect": "partial",
+                        "verified": False,
+                        "release_pending": True,
+                    },
+                ) from first_error
+            else:
+                self._held_buttons.pop(button, None)
         else:
             self._held_buttons.pop(button, None)
 
@@ -1798,7 +1875,17 @@ class MacOSBackend:
             if event is None:
                 raise ToolError("macOS could not create a desktop scroll event")
             Q.CGEventSetLocation(event, (x, y))
-            Q.CGEventPost(Q.kCGHIDEventTap, event)
+            try:
+                Q.CGEventPost(Q.kCGHIDEventTap, event)
+            except Exception as error:
+                raise ToolError(
+                    f"macOS could not confirm desktop scroll delivery: {error}",
+                    {
+                        "code": "scroll_delivery_unknown",
+                        "effect": "unverifiable",
+                        "verified": False,
+                    },
+                ) from error
             return {
                 "ok": True,
                 "screenPoint": {"x": x, "y": y},

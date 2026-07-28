@@ -632,8 +632,10 @@ class ContractTests(unittest.TestCase):
 
         backend.Quartz = types.SimpleNamespace(kCGHIDEventTap="hid", CGEventPost=post)
         backend._post_key_down(down, up)
-        with self.assertRaisesRegex(RuntimeError, "injected key-up failure"):
+        with self.assertRaisesRegex(ToolError, "injected key-up failure") as caught:
             backend._post_key_up(up)
+        self.assertEqual(caught.exception.structured_content["code"], "key_release_incomplete")
+        self.assertEqual(caught.exception.structured_content["effect"], "partial")
         self.assertEqual(backend._held_key_releases, [up])
         backend.close()
         self.assertEqual(backend._held_key_releases, [])
@@ -1181,8 +1183,10 @@ class ContractTests(unittest.TestCase):
                 raise RuntimeError("injected release failure")
 
         backend._post_mouse = post
-        with self.assertRaisesRegex(RuntimeError, "injected drag failure"):
+        with self.assertRaisesRegex(ToolError, "injected drag failure") as caught:
             backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
+        self.assertEqual(caught.exception.structured_content["code"], "drag_incomplete")
+        self.assertTrue(caught.exception.structured_content["release_pending"])
         self.assertIn("button", backend._held_buttons)
         backend.close()
         self.assertEqual(events, ["down", "dragged", "up", "up"])
@@ -1233,12 +1237,43 @@ class ContractTests(unittest.TestCase):
                 raise RuntimeError("injected release failure")
 
         backend._post_mouse = post
-        with self.assertRaisesRegex(RuntimeError, "injected release failure"):
+        with self.assertRaisesRegex(ToolError, "injected release failure") as caught:
             backend._click_pointer("button", "down", "up", "dragged", 1, 2, 1)
+        self.assertEqual(caught.exception.structured_content["code"], "click_release_incomplete")
+        self.assertEqual(caught.exception.structured_content["effect"], "partial")
         self.assertIn("button", backend._held_buttons)
         backend.close()
         self.assertEqual(events, ["down", "up", "up", "up"])
         self.assertFalse(backend._held_buttons)
+
+    def test_transient_click_release_failure_is_retried_without_replaying_click(self):
+        backend = MacOSBackend()
+        events = []
+        up_failures = 1
+
+        def post(event, button, x, y, click_count=1):
+            nonlocal up_failures
+            events.append(event)
+            if event == "up" and up_failures:
+                up_failures -= 1
+                raise ToolError("transient release failure")
+
+        backend._post_mouse = post
+        backend._click_pointer("button", "down", "up", "dragged", 1, 2, 1)
+        self.assertEqual(events, ["down", "up", "up"])
+        self.assertFalse(backend._held_buttons)
+
+    def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            CGEventCreateMouseEvent=lambda *args: object(),
+            CGEventPost=mock.Mock(side_effect=RuntimeError("native post failed")),
+        )
+        with self.assertRaisesRegex(ToolError, "native post failed") as caught:
+            backend._post_mouse("move", "left", 1, 2)
+        self.assertEqual(caught.exception.structured_content["code"], "mouse_event_delivery_unknown")
+        self.assertEqual(caught.exception.structured_content["effect"], "unverifiable")
 
     def test_raw_held_button_moves_as_a_drag_and_releases_on_close(self):
         backend = MacOSBackend()

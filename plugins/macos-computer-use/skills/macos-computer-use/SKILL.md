@@ -169,6 +169,12 @@ Fallback text can also return an MCP error with structured
 `effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles
 have already expired: re-observe and retry only the suffix beginning at
 `retry_from_character`, never the original full text.
+Other fallback input failures also preserve delivery truth. Treat
+`click_release_incomplete`, `key_release_incomplete`, `drag_incomplete`, and
+`drag_release_incomplete` as partial actions that may already have changed the
+UI; re-observe and do not replay the whole action. A `*_delivery_unknown` result
+is unverifiable rather than a confirmed no-op. Pending key/button releases are
+retried during MCP shutdown.
 
 Fallback `clipboard_set` reads the pasteboard back and returns
 `effect:"confirmed"` only for an exact match. If the clear succeeds but the
