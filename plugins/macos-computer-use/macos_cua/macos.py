@@ -98,6 +98,9 @@ KEY_CODES: dict[str, int] = {
     "help": 114, "home": 115, "pageup": 116, "forwarddelete": 117, "f4": 118, "end": 119,
     "f2": 120, "pagedown": 121, "f1": 122, "left": 123, "right": 124, "down": 125, "up": 126,
 }
+NUMERIC_PAD_KEY_CODES = frozenset(
+    code for name, code in KEY_CODES.items() if name.startswith("kp_")
+)
 
 KEY_ALIASES: dict[str, str] = {
     "enter": "return", "esc": "escape", "backspace": "delete", "back_space": "delete",
@@ -1842,6 +1845,12 @@ class MacOSBackend:
             )
             primary_down_flags = active_flags
             primary_up_flags = active_flags
+            if key_code in NUMERIC_PAD_KEY_CODES:
+                numeric_pad_flag = int(
+                    getattr(Q, "kCGEventFlagMaskNumericPad", 0)
+                )
+                primary_down_flags |= numeric_pad_flag
+                primary_up_flags |= numeric_pad_flag
             if primary_modifier is not None:
                 primary_flag = self._modifier_flags({primary_modifier})
                 primary_down_flags |= primary_flag

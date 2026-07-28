@@ -69,6 +69,15 @@ class ContractTests(unittest.TestCase):
         backend.Quartz.CGEventSetFlags(
             modifier_event, backend.Quartz.kCGEventFlagMaskCommand
         )
+        keypad_event = backend.Quartz.CGEventCreateKeyboardEvent(None, 82, True)
+        self.assertIsNotNone(keypad_event)
+        backend.Quartz.CGEventSetFlags(
+            keypad_event, backend.Quartz.kCGEventFlagMaskNumericPad
+        )
+        self.assertTrue(
+            int(backend.Quartz.CGEventGetFlags(keypad_event))
+            & int(backend.Quartz.kCGEventFlagMaskNumericPad)
+        )
         mouse_events = [
             backend.Quartz.CGEventCreateMouseEvent(
                 None,
@@ -1184,6 +1193,30 @@ class ContractTests(unittest.TestCase):
         )
         backend._send_key("Command")
         self.assertEqual(posts, [(55, True, 1), (55, False, 0)])
+        self.assertEqual(backend._held_key_releases, [])
+
+    def test_numeric_keypad_key_preserves_its_hardware_region_flag(self):
+        class Event:
+            def __init__(self, code, down):
+                self.code = code
+                self.down = down
+                self.flags = 0
+
+        posts = []
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            kCGEventFlagMaskCommand=1,
+            kCGEventFlagMaskControl=2,
+            kCGEventFlagMaskShift=4,
+            kCGEventFlagMaskAlternate=8,
+            kCGEventFlagMaskNumericPad=16,
+            CGEventCreateKeyboardEvent=lambda _source, code, down: Event(code, down),
+            CGEventSetFlags=lambda event, flags: setattr(event, "flags", flags),
+            CGEventPost=lambda _tap, event: posts.append((event.code, event.down, event.flags)),
+        )
+        backend._send_key("KP_0")
+        self.assertEqual(posts, [(82, True, 16), (82, False, 16)])
         self.assertEqual(backend._held_key_releases, [])
 
     def test_key_chord_creation_failure_releases_posted_modifiers(self):
