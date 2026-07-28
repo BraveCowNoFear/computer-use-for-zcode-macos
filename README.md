@@ -65,7 +65,8 @@ binary-wheel closure without dependency re-resolution.
 All published CPython 3.10–3.15 wheel variants are allowlisted by SHA-256, and
 pip runs in hash-required mode.
 First-run dependencies are built and self-tested in a staging environment,
-then atomically published to a plugin-versioned runtime directory.
+then atomically published to a plugin-versioned runtime directory without
+writing the user's shared pip cache.
 
 The plugin never replaces a global `/Applications/CuaDriver.app` or stops the
 user's unrelated Cua daemons. macOS TCC cannot be bypassed by any plugin.

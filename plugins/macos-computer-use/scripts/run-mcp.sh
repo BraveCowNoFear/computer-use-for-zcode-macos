@@ -43,7 +43,7 @@ else
       python3 -m venv "$STAGING_VENV"
       STAGING_PYTHON="$STAGING_VENV/bin/python3"
       require_supported_python "$STAGING_PYTHON"
-      "$STAGING_PYTHON" -m pip install --disable-pip-version-check --require-hashes --no-deps --only-binary=:all: --quiet -r "$ROOT/requirements.txt" >&2
+      "$STAGING_PYTHON" -m pip install --disable-pip-version-check --no-cache-dir --require-hashes --no-deps --only-binary=:all: --quiet -r "$ROOT/requirements.txt" >&2
       PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$STAGING_PYTHON" -m macos_cua.server --self-test >&2
       if [[ -e "$DATA_VENV" ]] || [[ -L "$DATA_VENV" ]]; then
         rm -rf -- "$DATA_VENV"

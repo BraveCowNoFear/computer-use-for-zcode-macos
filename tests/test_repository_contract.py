@@ -91,6 +91,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("--only-binary=:all:", source)
         self.assertIn("--no-deps", source)
         self.assertIn("--require-hashes", source)
+        self.assertIn("--no-cache-dir", source)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("--only-binary=:all:", workflow)
         self.assertIn("--no-deps", workflow)
