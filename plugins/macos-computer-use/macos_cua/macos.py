@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from importlib import metadata
 import json
+import math
 import os
 import re
 import shutil
@@ -1648,6 +1649,54 @@ class MacOSBackend:
                 },
             ) from error
 
+    @staticmethod
+    def _quantize_scroll_delta(value: Any) -> int:
+        number = float(value)
+        if not math.isfinite(number):
+            raise ToolError("scroll deltas must be finite")
+        return int(math.copysign(math.floor(abs(number) + 0.5), number))
+
+    def _post_scroll(
+        self,
+        x: float,
+        y: float,
+        scroll_x: Any,
+        scroll_y: Any,
+        scope: str,
+    ) -> tuple[int, int]:
+        # The public contract uses positive X/right and positive Y/down.
+        # Quartz's wheel axes use the opposite content direction and integer
+        # pixel deltas, so quantize symmetrically before reversing both axes.
+        pixel_x = self._quantize_scroll_delta(scroll_x)
+        pixel_y = self._quantize_scroll_delta(scroll_y)
+        if pixel_x == 0 and pixel_y == 0:
+            raise ToolError(
+                "scrollX and scrollY quantize to a zero-pixel event; use an absolute delta of at least 0.5"
+            )
+        Q = self.Quartz
+        event = Q.CGEventCreateScrollWheelEvent(
+            None,
+            Q.kCGScrollEventUnitPixel,
+            2,
+            -pixel_y,
+            -pixel_x,
+        )
+        if event is None:
+            raise ToolError(f"macOS could not create a {scope} scroll event")
+        Q.CGEventSetLocation(event, (x, y))
+        try:
+            Q.CGEventPost(Q.kCGHIDEventTap, event)
+        except Exception as error:
+            raise ToolError(
+                f"macOS could not confirm {scope} scroll delivery: {error}",
+                {
+                    "code": "scroll_delivery_unknown",
+                    "effect": "unverifiable",
+                    "verified": False,
+                },
+            ) from error
+        return pixel_x, pixel_y
+
     def _click_pointer(
         self,
         button: Any,
@@ -2014,31 +2063,17 @@ class MacOSBackend:
             x, y = self._relative_point(
                 window, arguments["x"], arguments["y"], arguments.get("screenshotId")
             )
-            Q = self.Quartz
-            event = Q.CGEventCreateScrollWheelEvent(
-                None,
-                Q.kCGScrollEventUnitPixel,
-                2,
-                int(round(-float(arguments["scrollY"]))),
-                int(round(-float(arguments["scrollX"]))),
+            delivered_x, delivered_y = self._post_scroll(
+                x,
+                y,
+                arguments["scrollX"],
+                arguments["scrollY"],
+                "window",
             )
-            if event is None:
-                raise ToolError("macOS could not create a scroll event")
-            Q.CGEventSetLocation(event, (x, y))
-            try:
-                Q.CGEventPost(Q.kCGHIDEventTap, event)
-            except Exception as error:
-                raise ToolError(
-                    f"macOS could not confirm scroll delivery: {error}",
-                    {
-                        "code": "scroll_delivery_unknown",
-                        "effect": "unverifiable",
-                        "verified": False,
-                    },
-                ) from error
             return {
                 "ok": True,
                 "screenPoint": {"x": x, "y": y},
+                "deliveredDelta": {"x": delivered_x, "y": delivered_y},
                 "effect": "unverifiable",
                 "verified": False,
             }
@@ -2285,31 +2320,17 @@ class MacOSBackend:
     def tool_desktop_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
         try:
-            Q = self.Quartz
-            event = Q.CGEventCreateScrollWheelEvent(
-                None,
-                Q.kCGScrollEventUnitPixel,
-                2,
-                int(round(-float(arguments["scrollY"]))),
-                int(round(-float(arguments["scrollX"]))),
+            delivered_x, delivered_y = self._post_scroll(
+                x,
+                y,
+                arguments["scrollX"],
+                arguments["scrollY"],
+                "desktop",
             )
-            if event is None:
-                raise ToolError("macOS could not create a desktop scroll event")
-            Q.CGEventSetLocation(event, (x, y))
-            try:
-                Q.CGEventPost(Q.kCGHIDEventTap, event)
-            except Exception as error:
-                raise ToolError(
-                    f"macOS could not confirm desktop scroll delivery: {error}",
-                    {
-                        "code": "scroll_delivery_unknown",
-                        "effect": "unverifiable",
-                        "verified": False,
-                    },
-                ) from error
             return {
                 "ok": True,
                 "screenPoint": {"x": x, "y": y},
+                "deliveredDelta": {"x": delivered_x, "y": delivered_y},
                 "effect": "unverifiable",
                 "verified": False,
             }

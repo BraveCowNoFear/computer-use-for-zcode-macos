@@ -191,6 +191,55 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b"bounded-png")
             self.assertEqual(list(path.parent.glob(".*.png")), [])
 
+    def test_scroll_quantization_posts_a_nonzero_physical_pixel_event(self):
+        class Event:
+            location = None
+
+        created = []
+        posted = []
+
+        def create(_source, unit, axes, vertical, horizontal):
+            created.append((unit, axes, vertical, horizontal))
+            return Event()
+
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGScrollEventUnitPixel="pixel",
+            kCGHIDEventTap="hid",
+            CGEventCreateScrollWheelEvent=create,
+            CGEventSetLocation=lambda event, point: setattr(event, "location", point),
+            CGEventPost=lambda tap, event: posted.append((tap, event.location)),
+        )
+        delivered = backend._post_scroll(10.0, 20.0, 2.5, -1.5, "window")
+        self.assertEqual(delivered, (3, -2))
+        self.assertEqual(created, [("pixel", 2, 2, -3)])
+        self.assertEqual(posted, [("hid", (10.0, 20.0))])
+
+    def test_scroll_never_posts_an_event_that_quantizes_to_zero(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGScrollEventUnitPixel="pixel",
+            kCGHIDEventTap="hid",
+            CGEventCreateScrollWheelEvent=mock.Mock(),
+        )
+        with self.assertRaisesRegex(ToolError, "zero-pixel event"):
+            backend._post_scroll(10.0, 20.0, 0.49, -0.49, "desktop")
+        backend.Quartz.CGEventCreateScrollWheelEvent.assert_not_called()
+
+    def test_unknown_scroll_delivery_retains_an_unverifiable_verdict(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGScrollEventUnitPixel="pixel",
+            kCGHIDEventTap="hid",
+            CGEventCreateScrollWheelEvent=lambda *_args: object(),
+            CGEventSetLocation=lambda *_args: None,
+            CGEventPost=mock.Mock(side_effect=RuntimeError("injected scroll failure")),
+        )
+        with self.assertRaisesRegex(ToolError, "injected scroll failure") as caught:
+            backend._post_scroll(10.0, 20.0, 1, 2, "desktop")
+        self.assertEqual(caught.exception.structured_content["code"], "scroll_delivery_unknown")
+        self.assertEqual(caught.exception.structured_content["effect"], "unverifiable")
+
     def test_bounded_png_keeps_the_original_when_sips_fails(self):
         class Rep:
             def pixelsWide(self):

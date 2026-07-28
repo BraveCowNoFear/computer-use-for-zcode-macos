@@ -97,7 +97,7 @@ server.
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
 | `press_key` | `window`, `key` | Press a key or `+`-separated chord; use keysym names such as `plus`, `colon`, or `ISO_Left_Tab` when the symbol conflicts with the separator. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
-| `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll. |
+| `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll; `deliveredDelta` reports symmetric integer quantization, and an all-zero quantized event is rejected. |
 | `set_value` | `window`, `element_index`, `value` | Set editable AX value. |
 | `drag` | `window`, start/end coordinates | Left-button drag. |
 | `perform_secondary_action` | `window`, index, `action` | Run listed AX action. |
@@ -119,6 +119,9 @@ Extended fallback tools: `computer_use_health`, `permission_status`,
 `get_cursor_position`, `clipboard_get`, `clipboard_set`, plus the unrestricted
 desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
 `desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
+Window and desktop scroll results expose the integer `deliveredDelta`; if both
+requested axes quantize to zero, no event is posted and the call asks for a
+larger delta instead of reporting a false delivery.
 `get_desktop_state` returns one image and screenshot ID per active display so
 mixed Retina/non-Retina layouts do not share an incorrect global scale.
 Fallback screenshots are published only after complete capture/encoding inside
