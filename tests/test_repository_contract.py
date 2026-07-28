@@ -265,9 +265,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('`effect:"confirmed"` with `verified:true`', skill)
         self.assertIn('`effect:"unverifiable"` with `verified:false`', skill)
         self.assertIn('`effect:"suspected_noop"`', skill)
+        self.assertIn('`effect:"partial"` with `code:"type_text_incomplete"`', skill)
+        self.assertIn("retry only the remaining suffix", skill)
         self.assertIn('`escalation.recommended:"px"`', skill)
         self.assertIn('`escalation.recommended:"foreground"`', skill)
         self.assertLess(skill.index('effect:"suspected_noop"'), skill.index("Background pixel"))
+        self.assertIn("`type_text({session,pid,window_id,x,y,text})`", skill)
+        self.assertIn("primary driver also has a mutually exclusive pixel form", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

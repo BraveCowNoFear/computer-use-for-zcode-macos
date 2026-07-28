@@ -36,10 +36,18 @@ Pinned 0.12.6 action responses expose a structured delivery verdict. Interpret
 `effect:"confirmed"` plus `verified:true` as an AX post-condition read-back;
 `effect:"unverifiable"` plus `verified:false` as dispatched but still requiring
 fresh-state verification; and `effect:"suspected_noop"` as the signal to leave
-the AX rung. Follow `escalation.recommended:"px"` or `"foreground"` by
+the AX rung. `effect:"partial"` with `code:"type_text_incomplete"` reports
+`delivered_chars` and `retry_from_character`; observe, then submit only the
+remaining suffix. Follow `escalation.recommended:"px"` or `"foreground"` by
 re-observing and changing delivery once. A degraded state response likewise
 routes to screenshot-grounded pixels. These fields optimize routing but never
 replace the post-action `get_window_state` completion evidence.
+
+For Electron/Catalyst or an AX text path recommending `px`, primary
+`type_text({session,pid,window_id,x,y,text})` pixel-focuses the fresh screenshot
+coordinate and types in one action. Its x/y form is mutually exclusive with
+`element_index`. Open a closed control first and re-observe before this call;
+otherwise its focus click can leave the text in the old field.
 
 Desktop state and desktop-scope input are also part of this primary MCP, not a
 third server. For menu bar/Dock/system UI, pair a fresh `get_desktop_state`

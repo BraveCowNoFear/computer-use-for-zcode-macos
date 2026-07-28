@@ -79,6 +79,9 @@ Every action uses a fresh point-in-time loop:
    - `effect:"suspected_noop"`, `escalation.recommended:"px"`, or a state
      response with `degraded:true` means cross to a freshly grounded pixel
      action instead of repeating the same AX action.
+   - `effect:"partial"` with `code:"type_text_incomplete"` means some text was
+     already delivered. Re-observe, then retry only the remaining suffix from
+     `retry_from_character`/`delivered_chars`; never resend the whole string.
    - `escalation.recommended:"foreground"` means re-observe, then repeat that
      action once with `delivery_mode:"foreground"`.
    If an older response omits these fields, decide only from the refreshed state.
@@ -93,8 +96,14 @@ delivery rung instead of declaring success from the tree alone.
 A focus click is still an action: re-observe before typing. When possible, use
 one primary `type_text` call with the fresh editable `element_index` so it
 focuses and types atomically instead of issuing a separate click first. The
-Codex-shaped fallback `type_text` has no `element_index`: click its field,
-re-observe and verify focus, then type.
+primary driver also has a mutually exclusive pixel form:
+`type_text({session,pid,window_id,x,y,text})`. Use it to focus and type in one
+call on Electron, Catalyst, canvas, or any AX path returning `unverifiable` with
+`recommended:"px"`; take x/y from fresh pixels and verify the rendered text.
+If the control is closed or collapsed, open it first, re-observe, and only then
+use pixel typing so text cannot leak into the previously focused field. The
+Codex-shaped fallback `type_text` has no `element_index` or atomic x/y:
+click its field, re-observe and verify focus, then type.
 
 Element indexes/tokens are invalid after the next observation. Screenshot
 coordinates are window-local pixels in the exact returned image: top-left
