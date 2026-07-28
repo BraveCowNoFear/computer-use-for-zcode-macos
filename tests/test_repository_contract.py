@@ -222,6 +222,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("prompt:true`, which the driver refuses", skill)
         self.assertIn('scope:"desktop"', skill)
         self.assertIn("fallback is\nstateless", skill)
+        self.assertIn("screenshot as the final truth", skill)
+        self.assertIn("global menu bar belongs to the frontmost app", skill)
+        self.assertIn("Never send selection keys\n  from the pre-open observation", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

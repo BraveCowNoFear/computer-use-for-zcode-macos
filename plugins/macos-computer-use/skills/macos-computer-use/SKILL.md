@@ -69,6 +69,11 @@ Every action uses a fresh point-in-time loop:
 4. Immediately call `get_window_state` again and verify the visible or AX
    result before continuing.
 
+Treat the refreshed screenshot as the final truth for visible outcomes. AX can
+briefly echo a requested value before Electron, Catalyst, or a custom-drawn app
+has rendered it; if pixels and AX disagree, continue observing or change the
+delivery rung instead of declaring success from the tree alone.
+
 A focus click is still an action: re-observe before typing. When possible, use
 one `type_text` call with the fresh editable `element_index` so it focuses and
 types atomically instead of issuing a separate click first.
@@ -83,6 +88,12 @@ session, use `get_desktop_state({session})`, then a windowless input such as
 `click({session, x, y, scope:"desktop"})`. Derive x/y from that exact desktop
 screenshot and verify with a fresh `get_desktop_state`. Do not attach an
 unrelated app pid/window to a desktop action.
+
+The global menu bar belongs to the frontmost app. Before choosing one of its
+menus, activate the intended app and refresh desktop state; when the app must
+stay in the background, prefer its in-window control or an advertised AX action
+because a background app's global menu command can silently target something
+else.
 
 ## Delivery ladder
 
@@ -133,6 +144,10 @@ These direct tools intentionally have no app, window, or target restriction.
   `press_key({session,pid,window_id,key:"return",modifiers:[]})`. The fallback
   instead accepts one `+`-separated chord such as `Command+c` in `press_key`.
 - Focus or select the intended text field from fresh state before typing.
+- For a closed pop-up, combo box, or menu, open it first and re-observe the
+  expanded state before choosing an item or typing. Never send selection keys
+  from the pre-open observation: if opening failed, they can land in the old
+  focused field.
 - Use `set_value` for non-text controls whose AX value can be replaced.
 - Use `scroll`, `drag`, double-click, or right-click primitives rather than
   imitating them with unrelated clicks.
