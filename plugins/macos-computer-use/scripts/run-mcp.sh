@@ -8,8 +8,8 @@ DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}"
 source "$ROOT/scripts/runtime-common.sh"
 
 DEV_PYTHON="$ROOT/.venv/bin/python3"
-RUNTIME_VERSION="$MACOS_CUA_RUNTIME_VERSION"
-DATA_VENV="$DATA_DIR/venv-$RUNTIME_VERSION"
+DEPENDENCY_ID="$MACOS_CUA_DEPENDENCY_ID"
+DATA_VENV="$DATA_DIR/venv-$DEPENDENCY_ID"
 DATA_PYTHON="$DATA_VENV/bin/python3"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -28,7 +28,7 @@ else
   if ! macos_cua_native_runtime_ready "$DATA_PYTHON" "$ROOT"; then
     LOCK_DIR="$DATA_DIR/install.lock"
     acquire_runtime_lock "$LOCK_DIR" "macOS Computer Use dependency installer" 240 30
-    STAGING_VENV="$DATA_DIR/.venv-$RUNTIME_VERSION.install.$$"
+    STAGING_VENV="$DATA_DIR/.venv-$DEPENDENCY_ID.install.$$"
     cleanup_dependency_install() {
       if [[ -n "${STAGING_VENV:-}" ]] && [[ -d "$STAGING_VENV" ]]; then
         rm -rf -- "$STAGING_VENV"

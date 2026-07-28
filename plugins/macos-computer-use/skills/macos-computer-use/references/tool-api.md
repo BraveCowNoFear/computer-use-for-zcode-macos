@@ -287,8 +287,10 @@ dispatch. Screenshot-only observation remains independent, but missing TCC is
 an explicit tool error rather than a silently discarded input reported as
 successful.
 The automatic first-run path builds and self-tests a staging environment before
-atomically publishing it to a plugin-versioned runtime directory, so an
-interrupted install is never reused as healthy.
+atomically publishing it to a dependency-closure-versioned runtime directory,
+so an interrupted install is never reused as healthy. Plugin-only releases
+reuse the same tested PyObjC path; the identifier changes only with the native
+wheel closure, limiting reinstall and TCC executable-path churn.
 
 Required macOS grants:
 

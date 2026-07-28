@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -56,19 +57,23 @@ class RepositoryContractTests(unittest.TestCase):
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertEqual(re.search(r'__version__ = "([^"]+)"', package).group(1), expected)
         self.assertEqual(re.search(r'MACOS_CUA_RUNTIME_VERSION="([^"]+)"', common).group(1), expected)
-        self.assertIn('RUNTIME_VERSION="$MACOS_CUA_RUNTIME_VERSION"', launcher)
+        self.assertIn('DEPENDENCY_ID="$MACOS_CUA_DEPENDENCY_ID"', launcher)
 
-    def test_fallback_first_run_is_versioned_and_atomically_published(self):
+    def test_fallback_first_run_is_dependency_versioned_and_atomically_published(self):
         launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
-        self.assertIn('DATA_VENV="$DATA_DIR/venv-$RUNTIME_VERSION"', launcher)
-        self.assertIn('STAGING_VENV="$DATA_DIR/.venv-$RUNTIME_VERSION.install.$$"', launcher)
+        common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
+        dependency_id = re.search(r'MACOS_CUA_DEPENDENCY_ID="([^"]+)"', common).group(1)
+        lock_digest = hashlib.sha256((PLUGIN / "requirements.txt").read_bytes()).hexdigest()[:12]
+        self.assertEqual(dependency_id, f"pyobjc-12.2.1-{lock_digest}")
+        self.assertIn('DATA_VENV="$DATA_DIR/venv-$DEPENDENCY_ID"', launcher)
+        self.assertIn('STAGING_VENV="$DATA_DIR/.venv-$DEPENDENCY_ID.install.$$"', launcher)
         self.assertIn('"$STAGING_PYTHON" -m macos_cua.server --self-test', launcher)
         self.assertIn('mv "$STAGING_VENV" "$DATA_VENV"', launcher)
         self.assertNotIn("runtime-version", launcher)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("Verify automatic fallback first run", workflow)
         self.assertIn('MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-mcp.sh', workflow)
-        self.assertIn('test -x "$data/venv-$version/bin/python3"', workflow)
+        self.assertIn('test -x "$data/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', workflow)
         self.assertIn("macos_cua_native_runtime_ready", launcher)
 
     def test_fallback_dependencies_are_exact_binary_wheels(self):
@@ -198,7 +203,7 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
-        self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_RUNTIME_VERSION/bin/python3"', smoke)
+        self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', smoke)
         self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', smoke)
         self.assertIn('macos_cua_native_runtime_ready "$DATA_PYTHON" "$ROOT"', smoke)
         self.assertNotIn("source-checkout runtime is not installed", smoke)

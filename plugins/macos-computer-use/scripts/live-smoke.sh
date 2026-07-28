@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/runtime-common.sh"
 DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}"
 DEV_PYTHON="$ROOT/.venv/bin/python3"
-DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_RUNTIME_VERSION/bin/python3"
+DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"
 
 if macos_cua_native_runtime_ready "$DEV_PYTHON" "$ROOT"; then
   PYTHON="$DEV_PYTHON"

@@ -55,7 +55,9 @@ SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI T
 当前用户可访问。兜底后端要求 CPython 3.10–3.15，会创建私有 Python 环境，且只安装经过测试的
 五包 PyObjC 12.2.1 完整闭包，不会在安装时重新解析出更高版本的传递依赖。
 CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip 强制使用 hash 模式。
-首次启动会先在临时环境内完成安装与自检，再原子发布到按 Plugin 版本隔离的运行时目录，且不写用户共享的 pip 缓存。
+首次启动会先在临时环境内完成安装与自检，再原子发布到按“依赖闭包版本”隔离的
+运行时目录，且不写用户共享的 pip 缓存。仅更新 Skill、文档等 Plugin 内容时复用
+同一路径；只有经过测试的原生 wheel 闭包变化时才更换，避免无谓重装和 Python TCC 路径抖动。
 
 Plugin 不会覆盖全局 `/Applications/CuaDriver.app`，也不会停止用户无关的
 Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖辅助功能树的任务可显式关闭截图，在未授予

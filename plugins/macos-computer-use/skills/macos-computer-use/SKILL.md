@@ -21,6 +21,10 @@ and its dedicated daemon reports `permission mode: unrestricted` with no user,
 managed, or bounded-session policy configured. A merely reachable socket or
 an unrestricted label above a hidden policy ceiling is not enough.
 
+Load [tool-api.md](references/tool-api.md) only when switching to the direct
+fallback, using its raw input/desktop tools, or diagnosing installation and
+permissions. Ordinary primary-backend tasks do not need that reference.
+
 ## Start a primary session
 
 1. Call `check_permissions({prompt:false})` for a read-only status check. If a
@@ -110,20 +114,12 @@ coordinates are window-local pixels in the exact returned image: top-left
 origin, x right, y down. Never reuse an old element index or pixel after layout,
 focus, content, selection, dialog, or window changes.
 
-For fallback `click`, `scroll`, `drag`, or raw mouse coordinates read from a
-window screenshot, preserve that same window and always pass its fresh
-`screenshotId`. The ID binds image pixels to the current Retina scale and
-window bounds; omitting it changes the coordinate space to logical Quartz
-points. Never infer that the server will recover the image binding for you.
-The fallback may downsample a large PNG for MCP transport; the returned
-`width`/`height` and `screenshotId` describe that published image exactly, so
-use its visible pixel coordinates rather than the Mac's native backing size.
-Fallback clicks, drag starts, and raw `mouse_down` calls post a real pointer
-move to the grounded point before the button-down event, so hover-sensitive
-controls receive the same move/down sequence as physical mouse use.
-When raw `mouse_up` supplies a point different from the held endpoint, the
-fallback posts a final dragged event before release. A failed release is retried
-once and retained for shutdown cleanup if native delivery remains unconfirmed.
+For fallback pixel or raw pointer input, preserve the observed window and
+always pass its fresh
+`screenshotId`; returned image dimensions define the exact Retina coordinate
+space; omitting it changes the coordinate space to logical Quartz points.
+Before the first raw mouse action, use the reference for its
+move/down/drag/up and incomplete-release semantics.
 
 MCP image blocks are already rendered by the host. Inspect them directly; do
 not decode, print, or re-emit their base64 payload just to see the screenshot.
@@ -167,38 +163,15 @@ sessionless but keeps screenshot/AX handles in its MCP process; it has no
 failure, discard every handle and begin from `list_windows`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
-Fallback action results use the same verdict vocabulary as the primary driver.
-Quartz input and AX actions without a generic post-condition return
-`effect:"unverifiable"`/`verified:false`; refresh state instead of treating
-`ok:true` as completion. Fallback `set_value` returns `effect:"confirmed"` only
-when AX reads back the exact requested value, and returns `suspected_noop` or
-`unverifiable` with `escalation.recommended:"px"` otherwise.
-When an element advertises `AXPress` or another requested AX action but native
-delivery does not report success, fallback returns `suspected_noop` and never
-adds a pixel click in that same call. Re-observe first; use the recommended
-pixel rung only if fresh state proves the AX action did not land.
-Fallback `set_value` follows the same one-rung rule. It uses focus/select/type
-immediately only when Accessibility explicitly reports the value attribute is
-not settable. A settable or unknown attribute whose write returns failure yields
-`suspected_noop`; re-observe before using the pixel/keyboard route.
-
-Fallback text can also return an MCP error with structured
-`effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles
-have already expired: re-observe and retry only the suffix beginning at
-`retry_from_character`, never the original full text.
-Other fallback input failures also preserve delivery truth. Treat
-`click_release_incomplete`, `key_release_incomplete`, `drag_incomplete`, and
-`drag_release_incomplete` as partial actions that may already have changed the
-UI; re-observe and do not replay the whole action. A `*_delivery_unknown` result
-is unverifiable rather than a confirmed no-op. Pending key/button releases are
-retried during MCP shutdown.
-
-Fallback `clipboard_set` reads the pasteboard back and returns
-`effect:"confirmed"` only for an exact match. If the clear succeeds but the
-write or read-back fails, treat `effect:"partial"` plus
-`code:"clipboard_update_incomplete"` or `clipboard_verification_mismatch` as a
-changed clipboard: inspect it with `clipboard_get` before deciding whether to
-retry.
+Fallback actions use the same `confirmed`/`unverifiable`/`suspected_noop`/
+`partial` vocabulary. Preserve the one-rung invariant: a failed advertised AX
+action or settable-value write never adds pixel/keyboard delivery in the same
+call. Refresh before crossing rungs. For partial text, retry only the reported
+suffix; for any incomplete release, unknown delivery, raw input, or clipboard
+error, follow the exact structured-code table in the reference and never replay
+the whole action blindly.
+Fallback text can also return an MCP error with `code:"type_text_incomplete"`;
+after re-observing, retry only its reported suffix, never the original full text.
 
 Because fallback input is foreground delivery, call `activate_window` before
 its first input (or after a Space/focus change), then capture a new
@@ -209,41 +182,17 @@ then `AXFocused` attributes. Input still starts only after frontmost pid and
 focused window ID read back as the exact target; these compatibility rungs are
 not treated as proof by themselves.
 
-Fallback `launch_app` returns the matched running pid and its current windows;
-select it directly only when exactly one task-matching window remains, and
-preserve the whole
-window object, including `pid`, so a recycled macOS window number cannot rebind
-to a restarted process. Its
-`get_window_state` defaults to a screenshot without AX text, matching the Codex
-core. Explicitly select only the needed channel using the same signal-routing
-rule as the primary path. When Accessibility is granted but
-Screen Recording is not, `computer_use_health.axControlReady` remains true and
-`get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
-coordinate and desktop routes remain unavailable until Screen Recording is
-granted.
-Conversely, Screen Recording alone reports `pixelObservationReady:true` and
-`desktopObservationReady:true` for screenshot-only inspection while
-`inputControlReady` and `fullComputerUseReady` remain false until Accessibility
-is granted. Use the granular fields instead of treating one TCC grant as the
-other.
-Fallback AX lines expose compact `traits=` values such as `selected`,
-`expanded`, `disabled`, `settable`, and the editable value type. Prefer an
-enabled, correctly expanded control and use its advertised `actions=` before
-falling back to pixels; placeholder/help/identifier fields disambiguate sparse
-or icon-only controls but do not survive the next observation as handles.
-Requesting a native permission invalidates every fallback screenshot and AX
-index because the consent prompt or System Settings may change focus and layout.
-The fallback retains at most 32 window AX observations; scanning more windows
-evicts the oldest handles, so re-observe the chosen window immediately before
-an indexed action.
-For Chromium/Electron and large native lists, the fallback best-effort enables
-the app's `AXManualAccessibility`/`AXEnhancedUserInterface` modes and merges the
-target window, menu bar, `AXRows`, `AXContents`, and `AXVisibleChildren` into
-one generation.
-Its explicit AX defaults are 1,200 rendered nodes and 64 levels. If
-`truncated:true`, inspect `truncation_reasons` and re-observe with a larger
-`max_tree_nodes` (up to 10,000) or `max_tree_depth` (up to 256) only when the
-task needs the omitted region; every new observation replaces the old indexes.
+Fallback `launch_app` returns the matched pid/windows. Choose only one
+task-matching candidate and preserve the whole
+window object, including `pid`, so a recycled window number cannot bind a
+restarted process. Its state call defaults to screenshot-only, matching Codex; request
+only the channel needed. Read granular health independently: Accessibility
+enables AX/input, Screen Recording enables pixel/desktop observation, and
+`fullComputerUseReady` requires both. Permission requests invalidate all
+handles. When an AX tree is truncated or Chromium remains sparse, use the
+reference's tree-budget and merged-source guidance before increasing scope.
+That path enables `AXManualAccessibility`, includes `AXContents`, and permits
+`max_tree_nodes` (up to 10,000) only when the omitted region is task-relevant.
 
 When the primary desktop path itself is unavailable or refuses a system-UI
 operation, the fallback can control every visible display. Call fallback
