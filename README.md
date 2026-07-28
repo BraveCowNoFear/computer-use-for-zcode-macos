@@ -51,8 +51,9 @@ tests live in this repository.
    the Python/ZCode responsible app.
 
 On first start, the primary launcher downloads the pinned Cua Driver installer,
-checks its SHA-256, installs signed `/Applications/CuaDriver.app`, disables its
-telemetry, and launches a plugin-owned daemon with
+its helper, and the universal release archive; checks all three SHA-256 values;
+installs signed `/Applications/CuaDriver.app`; verifies its code signature and
+Gatekeeper assessment; disables its telemetry; and launches a plugin-owned daemon with
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted`; the socket is private, per-user, and
@@ -107,7 +108,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
-also imports the native fallback and verifies the pinned primary integration.
+also imports the native fallback and verifies the pinned primary installer,
+helper, and release-archive checksum contract.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

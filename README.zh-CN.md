@@ -43,8 +43,9 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 6. macOS 询问时给 `CuaDriver.app` 授予“辅助功能”和“屏幕录制”，然后重启
    ZCode。若启用原生兜底，系统也可能要求给对应的 Python/ZCode 进程授权。
 
-第一次启动时，主启动器会下载固定版本的 Cua Driver 安装器，校验 SHA-256，
-安装签名的 `/Applications/CuaDriver.app`，关闭其遥测，然后以
+第一次启动时，主启动器会下载固定版本的 Cua Driver 安装器、辅助脚本和通用
+发布归档，逐一校验 SHA-256，安装签名的 `/Applications/CuaDriver.app`，再验证
+代码签名和 Gatekeeper 评估，关闭其遥测，然后以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
 专用守护进程。只有版本和工具面与测试版本完全一致，并且实时状态回读为
 `permission mode: unrestricted` 时才会复用；专用 socket 按用户和版本隔离且仅
@@ -92,7 +93,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
 
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
-兜底并检查固定版本的主后端集成。真实的后台“截图 → 点击/输入 → 再截图”
+兜底，并检查固定版本的安装器、辅助脚本和发布归档校验契约。真实的后台
+“截图 → 点击/输入 → 再截图”
 闭环必须在已解锁且授予 TCC 的交互式 Mac 上测试，托管 CI 无法伪造这一点。
 
 在这样的 Mac 上，可运行下面的一键闭环门禁。它只创建项目自带的临时 AppKit

@@ -34,4 +34,20 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           curl -fsSL https://raw.githubusercontent.com/trycua/cua/cua-driver-rs-v0.12.6/libs/cua-driver/scripts/_install-rust.sh -o /tmp/cua-driver-installer.sh
+          curl -fsSL https://raw.githubusercontent.com/trycua/cua/cua-driver-rs-v0.12.6/libs/cua-driver/scripts/_install-common.sh -o /tmp/cua-driver-installer-common.sh
+          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/checksums.txt -o /tmp/cua-driver-checksums.txt
+          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/cua-driver-rs-0.12.6-darwin-universal.tar.gz -o /tmp/cua-driver-release.tar.gz
           echo "351878e9d7ac1b915b77572ba906102be10a6d93293073ad3e98544817984069  /tmp/cua-driver-installer.sh" | shasum -a 256 -c -
+          echo "5bc3aa010eb8667a099b582a9ada9a8f93001745b842cc7cf3cc6c472520cf29  /tmp/cua-driver-installer-common.sh" | shasum -a 256 -c -
+          echo "21486096e0c5901cafcaaf652144308abb3f088a2d9785941585a002c571233f  /tmp/cua-driver-checksums.txt" | shasum -a 256 -c -
+          echo "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  /tmp/cua-driver-release.tar.gz" | shasum -a 256 -c -
+          grep -F "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  cua-driver-rs-0.12.6-darwin-universal.tar.gz" /tmp/cua-driver-checksums.txt
+          mkdir -p /tmp/cua-driver-release
+          tar -xzf /tmp/cua-driver-release.tar.gz -C /tmp/cua-driver-release
+          app=/tmp/cua-driver-release/cua-driver-rs-0.12.6-darwin-universal/CuaDriver.app
+          binary="$app/Contents/MacOS/cua-driver"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
+          codesign --verify --deep --strict "$app"
+          spctl --assess --type execute "$app"
+          "$binary" --version | grep -F "0.12.6"

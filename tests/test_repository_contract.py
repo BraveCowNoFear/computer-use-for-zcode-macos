@@ -45,6 +45,13 @@ class RepositoryContractTests(unittest.TestCase):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(encoding="utf-8")
         self.assertIn('CUA_VERSION="0.12.6"', launcher)
         self.assertRegex(launcher, r'INSTALLER_SHA256="[0-9a-f]{64}"')
+        self.assertRegex(launcher, r'INSTALLER_COMMON_SHA256="[0-9a-f]{64}"')
+        self.assertRegex(launcher, r'ASSET_SHA256="[0-9a-f]{64}"')
+        self.assertIn('ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"', launcher)
+        self.assertIn('PATH="$CURL_SHIM_DIR:$PATH"', launcher)
+        self.assertIn('verify_sha256 "$ASSET" "$ASSET_SHA256"', launcher)
+        self.assertIn("codesign --verify --deep --strict", launcher)
+        self.assertIn("spctl --assess --type execute", launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -84,6 +91,36 @@ class RepositoryContractTests(unittest.TestCase):
         )
         completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_pinned_curl_only_intercepts_the_exact_release_asset(self):
+        shim = (PLUGIN / "scripts" / "pinned-curl" / "curl").read_text(encoding="utf-8")
+        self.assertIn('requested_url" == "$asset_url', shim)
+        self.assertIn('exec "$REAL_CURL" "$@"', shim)
+        self.assertNotIn("eval", shim)
+
+    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
+    def test_pinned_curl_serves_the_verified_local_archive(self):
+        shim = PLUGIN / "scripts" / "pinned-curl" / "curl"
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / "asset.tar.gz"
+            output = Path(directory) / "output.tar.gz"
+            asset.write_bytes(b"verified-release-bytes")
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "PINNED_CUA_ASSET_URL": "https://example.invalid/pinned.tar.gz",
+                    "PINNED_CUA_ASSET_PATH": str(asset),
+                }
+            )
+            completed = subprocess.run(
+                ["bash", str(shim), "-fsSL", "-o", str(output), environment["PINNED_CUA_ASSET_URL"]],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=environment,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(output.read_bytes(), asset.read_bytes())
 
     def test_skill_routes_primary_then_direct_fallback(self):
         skill = (PLUGIN / "skills" / "macos-computer-use" / "SKILL.md").read_text(encoding="utf-8")

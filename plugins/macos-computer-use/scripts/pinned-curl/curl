@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+# The pinned upstream installer invokes `curl` itself. Intercept only the exact
+# Cua Driver release asset so the bytes it installs are the archive already
+# downloaded and SHA-256 verified by run-cua-driver.sh. All non-code downloads
+# (for example post-install help text) continue through the system curl.
+
+REAL_CURL="/usr/bin/curl"
+asset_url="${PINNED_CUA_ASSET_URL:-}"
+asset_path="${PINNED_CUA_ASSET_PATH:-}"
+requested_url=""
+output_path=""
+expect_output=0
+
+for argument in "$@"; do
+  if [[ "$expect_output" == "1" ]]; then
+    output_path="$argument"
+    expect_output=0
+    continue
+  fi
+  case "$argument" in
+    -o|--output)
+      expect_output=1
+      ;;
+    --output=*)
+      output_path="${argument#--output=}"
+      ;;
+    https://*|http://*)
+      requested_url="$argument"
+      ;;
+  esac
+done
+
+if [[ -n "$asset_url" && "$requested_url" == "$asset_url" ]]; then
+  if [[ ! -f "$asset_path" ]]; then
+    echo "Pinned Cua Driver asset is missing: $asset_path" >&2
+    exit 1
+  fi
+  if [[ -n "$output_path" ]]; then
+    /bin/cp "$asset_path" "$output_path"
+  else
+    /bin/cat "$asset_path"
+  fi
+  exit 0
+fi
+
+exec "$REAL_CURL" "$@"

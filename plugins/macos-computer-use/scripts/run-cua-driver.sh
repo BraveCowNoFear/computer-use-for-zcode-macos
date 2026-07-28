@@ -12,11 +12,19 @@ CUA_VERSION="0.12.6"
 CUA_TAG="cua-driver-rs-v${CUA_VERSION}"
 INSTALLER_URL="https://raw.githubusercontent.com/trycua/cua/${CUA_TAG}/libs/cua-driver/scripts/_install-rust.sh"
 INSTALLER_SHA256="351878e9d7ac1b915b77572ba906102be10a6d93293073ad3e98544817984069"
+INSTALLER_COMMON_URL="https://raw.githubusercontent.com/trycua/cua/${CUA_TAG}/libs/cua-driver/scripts/_install-common.sh"
+INSTALLER_COMMON_SHA256="5bc3aa010eb8667a099b582a9ada9a8f93001745b842cc7cf3cc6c472520cf29"
+ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"
+ASSET_URL="https://github.com/trycua/cua/releases/download/${CUA_TAG}/${ASSET_NAME}"
+ASSET_SHA256="c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f"
 BIN_DIR="$DATA_DIR/cua-driver-bin"
 PLUGIN_BIN="$BIN_DIR/cua-driver"
 APP_BUNDLE="/Applications/CuaDriver.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/cua-driver"
 INSTALLER="$DATA_DIR/installers/cua-driver-${CUA_VERSION}.sh"
+INSTALLER_COMMON="$DATA_DIR/installers/_install-common.sh"
+ASSET="$DATA_DIR/installers/$ASSET_NAME"
+CURL_SHIM_DIR="$ROOT/scripts/pinned-curl"
 LOCK_DIR="$DATA_DIR/cua-driver-install.lock"
 SOCKET_DIR="/tmp/zcode-cua-${UID}"
 SOCKET="$SOCKET_DIR/v${CUA_VERSION}.sock"
@@ -33,6 +41,9 @@ fi
 has_required_surface() {
   local candidate="$1"
   [[ -x "$candidate" ]] || return 1
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)" == "com.trycua.driver" ]] || return 1
+  /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || return 1
+  /usr/sbin/spctl --assess --type execute "$APP_BUNDLE" >/dev/null 2>&1 || return 1
   local version
   version="$($candidate --version 2>/dev/null | tail -n 1)" || return 1
   version="${version##* }"
@@ -65,12 +76,12 @@ resolve_existing_binary() {
   return 1
 }
 
-verify_installer() {
-  local actual
-  actual="$(/usr/bin/shasum -a 256 "$INSTALLER" | /usr/bin/awk '{print $1}')"
-  if [[ "$actual" != "$INSTALLER_SHA256" ]]; then
-    echo "Refusing to run the Cua Driver installer: SHA-256 mismatch." >&2
-    echo "Expected $INSTALLER_SHA256 but received $actual." >&2
+verify_sha256() {
+  local path="$1" expected="$2" label="$3" actual
+  actual="$(/usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}')"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Refusing to use the Cua Driver $label: SHA-256 mismatch." >&2
+    echo "Expected $expected but received $actual." >&2
     exit 1
   fi
 }
@@ -87,7 +98,21 @@ install_driver() {
       exit 1
     }
     curl -fsSL "$INSTALLER_URL" -o "$INSTALLER"
-    verify_installer
+    curl -fsSL "$INSTALLER_COMMON_URL" -o "$INSTALLER_COMMON"
+    curl -fsSL "$ASSET_URL" -o "$ASSET"
+    verify_sha256 "$INSTALLER" "$INSTALLER_SHA256" "installer"
+    verify_sha256 "$INSTALLER_COMMON" "$INSTALLER_COMMON_SHA256" "installer helper"
+    verify_sha256 "$ASSET" "$ASSET_SHA256" "release archive"
+    [[ -x "$CURL_SHIM_DIR/curl" ]] || {
+      echo "Pinned curl shim is not executable: $CURL_SHIM_DIR/curl" >&2
+      exit 1
+    }
+    # The verified upstream installer normally downloads its release archive
+    # itself without checking a digest. Route that one exact URL to our already
+    # verified local copy while leaving all other curl behavior unchanged.
+    PINNED_CUA_ASSET_URL="$ASSET_URL" \
+    PINNED_CUA_ASSET_PATH="$ASSET" \
+    PATH="$CURL_SHIM_DIR:$PATH" \
     CUA_DRIVER_RS_VERSION="$CUA_VERSION" \
     CUA_DRIVER_RS_INSTALL_DIR="$BIN_DIR" \
     CUA_DRIVER_RS_NO_MODIFY_PATH=1 \
