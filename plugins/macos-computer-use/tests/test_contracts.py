@@ -90,6 +90,20 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(state["screenshots"], [{"id": "shot"}])
         self.assertEqual(state["accessibility"], {"tree": "[0] AXWindow"})
 
+    def test_health_keeps_ax_control_available_without_screen_recording(self):
+        backend = MacOSBackend()
+        backend.native_error = None
+        backend.AppKit = object()
+        backend.ApplicationServices = object()
+        backend.Quartz = object()
+        backend._permission_status = lambda: {"accessibility": True, "screenRecording": False}
+        health = backend.tool_computer_use_health({})
+        self.assertTrue(health["ok"])
+        self.assertTrue(health["axControlReady"])
+        self.assertFalse(health["pixelObservationReady"])
+        self.assertFalse(health["desktopObservationReady"])
+        self.assertIn("AX-only", health["message"])
+
     def test_launch_app_returns_the_running_pid_and_exact_windows(self):
         class FakeRunningApp:
             def bundleIdentifier(self):

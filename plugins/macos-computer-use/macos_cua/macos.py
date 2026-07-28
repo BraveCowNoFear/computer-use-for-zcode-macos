@@ -148,18 +148,25 @@ class MacOSBackend:
             and self.ApplicationServices is not None
         )
         permissions = self._permission_status() if native else {"accessibility": False, "screenRecording": False}
+        ax_ready = bool(native and permissions["accessibility"])
+        pixel_ready = bool(ax_ready and permissions["screenRecording"])
         return {
-            "ok": bool(native and permissions["accessibility"] and permissions["screenRecording"]),
+            "ok": ax_ready,
             "platform": "darwin",
             "nativeDependencies": native,
             "nativeError": self.native_error,
             **permissions,
+            "axControlReady": ax_ready,
+            "pixelObservationReady": pixel_ready,
+            "desktopObservationReady": pixel_ready,
             "localOnly": True,
             "extraConfirmationLayer": False,
             "message": (
-                "Ready for live macOS control."
-                if native and permissions["accessibility"] and permissions["screenRecording"]
-                else "Install dependencies and grant Accessibility plus Screen Recording, then restart ZCode."
+                "Ready for AX and pixel-based live macOS control."
+                if pixel_ready
+                else "Ready for AX-only control; grant Screen Recording only when screenshots or pixels are needed."
+                if ax_ready
+                else "Install dependencies and grant Accessibility, then restart ZCode."
             ),
         }
 

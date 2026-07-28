@@ -24,10 +24,14 @@ an unrestricted label above a hidden policy ceiling is not enough.
 ## Start a primary session
 
 1. Call `check_permissions({prompt:false})` for a read-only status check. If a
-   grant is missing, explain the macOS dialogs, then call
-   `check_permissions({prompt:true,probe_direct_capture:false})` once to request
-   Accessibility and Screen Recording under the signed driver's TCC identity.
-   After those grants are enabled and ZCode is restarted, call
+   Accessibility grant is missing, explain the macOS dialog, then call
+   `check_permissions({prompt:true,probe_direct_capture:false})` once under the
+   signed driver's TCC identity. If Accessibility is granted but Screen
+   Recording is not, continue with AX-only state using
+   `get_window_state({include_screenshot:false,...})` when the task can be
+   completed and verified from the tree. Request Screen Recording only when the
+   task needs pixels, a screenshot, desktop state, or visual verification.
+   After Screen Recording is enabled and ZCode is restarted, call
    `check_permissions({prompt:true})` once to verify direct capture; on macOS
    Tahoe this may raise its separate ScreenCaptureKit consent. If no system UI
    appears, direct the user to run `scripts/install.sh` from this checkout once.
@@ -107,7 +111,11 @@ Fallback `launch_app` returns the matched running pid and its current windows;
 select one of those exact windows directly when present. Its
 `get_window_state` returns both the screenshot and indexed AX tree by default,
 matching the primary observe-first contract. Disable either only as an explicit
-performance choice.
+performance or permission-aware choice. When Accessibility is granted but
+Screen Recording is not, `computer_use_health.axControlReady` remains true and
+`get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
+coordinate and desktop routes remain unavailable until Screen Recording is
+granted.
 
 When the primary desktop path itself is unavailable or refuses a system-UI
 operation, the fallback can control every visible display. Call fallback
@@ -151,8 +159,9 @@ outcome authoritative.
 - `off_space`, minimized, or hidden window: keep AX background control when it
   verifies; use desktop/foreground only when the requested outcome needs it.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
-- Missing fallback permission: call `request_permissions` once, let the user
-  grant Python/ZCode Accessibility and Screen Recording, then restart ZCode.
+- Missing fallback Accessibility: call `request_permissions` once, let the user
+  grant Python/ZCode Accessibility, then restart ZCode. Request Screen
+  Recording as well only when pixels/screenshots are required.
 - Primary reports a non-unrestricted or policy-constrained daemon: let the
   launcher stop only its versioned plugin socket and recreate it without
   inherited Cua policy variables; do not reuse a global/default daemon.

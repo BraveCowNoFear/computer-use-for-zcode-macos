@@ -63,7 +63,8 @@ environment, and installs the exact tested PyObjC 12.2.1 binary wheels.
 
 If `/Applications` is not writable, the background backend reports that exact
 diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed
-by any plugin.
+by any plugin. Accessibility-only tasks can continue without Screen Recording
+by explicitly omitting screenshots; pixel and desktop routes still require it.
 
 ## What agents can do
 

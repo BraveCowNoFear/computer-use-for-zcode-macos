@@ -97,8 +97,13 @@ computer_use_health → permission_status → launch_app/list_windows → get_wi
 ```
 
 The fallback is stateless and has no session cleanup tool. If its permissions
-are missing, call `request_permissions` once and wait for the user to grant the
-Python/ZCode responsible app before restarting ZCode.
+are missing, read the granular health fields first. Accessibility alone makes
+`axControlReady=true`; use `get_window_state` with
+`include_screenshot:false` for an AX-completable task. Screen Recording is
+required for `pixelObservationReady`, window screenshots, coordinate grounding,
+and every desktop-state route. Call `request_permissions` only for the grant the
+requested task actually needs, then wait for the user to grant the Python/ZCode
+responsible app before restarting ZCode.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
