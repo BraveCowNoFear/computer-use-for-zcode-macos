@@ -66,7 +66,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "launch_app",
-        "description": "Launch an app by bundle ID, display name, or .app path.",
+        "description": "Launch an app by bundle ID, display name, or .app path and return its pid and current windows.",
         "inputSchema": _object({"app": {"type": "string"}}, ["app"]),
     },
     {
@@ -76,7 +76,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "window": WINDOW_SCHEMA,
                 "include_screenshot": {"type": "boolean", "default": True},
-                "include_text": {"type": "boolean", "default": False},
+                "include_text": {"type": "boolean", "default": True},
             },
             ["window"],
         ),

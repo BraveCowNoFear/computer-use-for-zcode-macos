@@ -103,6 +103,12 @@ with `get_window`, then use its own
 stateless and has no `start_session`/`end_session`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
+Fallback `launch_app` returns the matched running pid and its current windows;
+select one of those exact windows directly when present. Its
+`get_window_state` returns both the screenshot and indexed AX tree by default,
+matching the primary observe-first contract. Disable either only as an explicit
+performance choice.
+
 When the primary desktop path itself is unavailable or refuses a system-UI
 operation, the fallback can control every visible display. Call fallback
 `get_desktop_state`, choose the returned per-display screenshot containing the

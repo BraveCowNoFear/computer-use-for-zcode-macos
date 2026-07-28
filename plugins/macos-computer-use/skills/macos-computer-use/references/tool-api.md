@@ -70,8 +70,8 @@ core is:
 | `list_windows` | none | Return targetable windows front-to-back. |
 | `get_window` | `id`, optional `app` | Rehydrate a returned window. |
 | `list_apps` | none | Return installed/running apps and windows. |
-| `launch_app` | `app` | Launch by bundle ID, display name, or `.app` path. |
-| `get_window_state` | `window` | Return screenshot; `include_text=true` adds AX. |
+| `launch_app` | `app` | Launch and return matched pid plus current windows. |
+| `get_window_state` | `window` | Return screenshot and AX by default; either can be disabled explicitly. |
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
 | `press_key` | `window`, `key` | Press a key or `+`-separated chord. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
@@ -93,7 +93,7 @@ Fallback startup sequence:
 
 ```text
 computer_use_health → permission_status → launch_app/list_windows → get_window
-→ get_window_state(include_text=true) → one action → get_window_state
+→ get_window_state → one action → get_window_state
 ```
 
 The fallback is stateless and has no session cleanup tool. If its permissions

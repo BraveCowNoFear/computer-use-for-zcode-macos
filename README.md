@@ -68,7 +68,8 @@ by any plugin.
 ## What agents can do
 
 - Discover and launch native apps and select exact returned windows.
-- Capture a screenshot and indexed Accessibility tree together.
+- Launch directly into a matched pid/window set, then capture a screenshot and
+  indexed Accessibility tree together on both backends.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll.
 - Type Unicode, press Mac shortcuts, and set Accessibility values.

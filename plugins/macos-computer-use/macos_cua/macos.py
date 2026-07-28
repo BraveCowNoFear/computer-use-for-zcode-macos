@@ -301,6 +301,7 @@ class MacOSBackend:
                 "displayName": name,
                 "path": str(url.path()) if url is not None else None,
                 "isRunning": True,
+                "pid": pid,
             }
 
         roots = [Path("/Applications"), Path("/System/Applications"), Path.home() / "Applications"]
@@ -378,8 +379,59 @@ class MacOSBackend:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
         if completed.returncode != 0:
             raise ToolError(completed.stderr.strip() or f"Failed to launch {app}")
-        time.sleep(0.7)
-        return {"ok": True, "app": app}
+        self._installed_cache = None
+
+        target_bundle_id: str | None = None
+        target_path: str | None = None
+        target_name: str | None = None
+        if app.lower().endswith(".app") or "/" in app:
+            target_path = str(Path(app).expanduser().resolve())
+            bundle = self.AppKit.NSBundle.bundleWithPath_(target_path)
+            bundle_id = bundle.bundleIdentifier() if bundle is not None else None
+            target_bundle_id = str(bundle_id) if bundle_id else None
+        elif re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", app):
+            target_bundle_id = app
+        else:
+            target_name = app.casefold()
+
+        deadline = time.monotonic() + 5
+        candidate = None
+        windows: list[dict[str, Any]] = []
+        while time.monotonic() < deadline:
+            running = list(self.AppKit.NSWorkspace.sharedWorkspace().runningApplications() or [])
+            matches = []
+            for item in running:
+                bundle_id = item.bundleIdentifier()
+                url = item.bundleURL()
+                path = str(url.path()) if url is not None else None
+                name = str(item.localizedName() or "")
+                if target_bundle_id and str(bundle_id or "") == target_bundle_id:
+                    matches.append(item)
+                elif target_path and path and str(Path(path).resolve()) == target_path:
+                    matches.append(item)
+                elif target_name and name.casefold() == target_name:
+                    matches.append(item)
+            if len(matches) > 1 and target_name:
+                identifiers = sorted({str(item.bundleIdentifier() or item.localizedName()) for item in matches})
+                raise ToolError(f"App name {app!r} is ambiguous after launch; use one bundle ID: {identifiers}")
+            if matches:
+                candidate = matches[0]
+                pid = int(candidate.processIdentifier())
+                windows = [window for window in self._list_windows() if int(window["pid"]) == pid]
+                if windows or time.monotonic() + 0.5 >= deadline:
+                    break
+            time.sleep(0.1)
+        if candidate is None:
+            raise ToolError(f"macOS accepted the launch request for {app!r}, but no matching running app appeared")
+        bundle_id = candidate.bundleIdentifier()
+        return {
+            "ok": True,
+            "app": str(bundle_id or app),
+            "bundleId": str(bundle_id) if bundle_id else None,
+            "displayName": str(candidate.localizedName() or app),
+            "pid": int(candidate.processIdentifier()),
+            "windows": windows,
+        }
 
     def _ax_attr(self, name: str, fallback: str) -> Any:
         return getattr(self.ApplicationServices, name, fallback)
@@ -630,7 +682,7 @@ class MacOSBackend:
         window = self._get_window(arguments["window"])
         self._invalidate_window_observations(window)
         include_screenshot = bool(arguments.get("include_screenshot", True))
-        include_text = bool(arguments.get("include_text", False))
+        include_text = bool(arguments.get("include_text", True))
         screenshots = [self._capture_window(window)] if include_screenshot else []
         accessibility = self._accessibility_state(window) if include_text else None
         return {"window": window, "screenshots": screenshots, "accessibility": accessibility}

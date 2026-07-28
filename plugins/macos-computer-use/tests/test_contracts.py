@@ -8,6 +8,7 @@ import time
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 if str(PLUGIN_ROOT) not in sys.path:
@@ -73,6 +74,58 @@ class ContractTests(unittest.TestCase):
         for tool in TOOL_DEFINITIONS:
             self.assertEqual(tool["inputSchema"]["type"], "object", tool["name"])
             self.assertIn("description", tool)
+
+    def test_window_state_observes_pixels_and_accessibility_by_default(self):
+        backend = MacOSBackend()
+        window = {
+            "id": 7,
+            "app": "com.example.Editor",
+            "pid": 55,
+            "bounds": {"x": 0, "y": 0, "width": 800, "height": 600},
+        }
+        backend._get_window = lambda value: window
+        backend._capture_window = lambda value: {"id": "shot"}
+        backend._accessibility_state = lambda value: {"tree": "[0] AXWindow"}
+        state = backend.tool_get_window_state({"window": {"id": 7}})
+        self.assertEqual(state["screenshots"], [{"id": "shot"}])
+        self.assertEqual(state["accessibility"], {"tree": "[0] AXWindow"})
+
+    def test_launch_app_returns_the_running_pid_and_exact_windows(self):
+        class FakeRunningApp:
+            def bundleIdentifier(self):
+                return "com.example.Editor"
+
+            def processIdentifier(self):
+                return 55
+
+            def localizedName(self):
+                return "Editor"
+
+            def bundleURL(self):
+                return types.SimpleNamespace(path=lambda: "/Applications/Editor.app")
+
+        running = FakeRunningApp()
+        workspace = types.SimpleNamespace(runningApplications=lambda: [running])
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSWorkspace=types.SimpleNamespace(sharedWorkspace=lambda: workspace),
+        )
+        expected_window = {
+            "id": 99,
+            "app": "com.example.Editor",
+            "pid": 55,
+            "bounds": {"x": 0, "y": 0, "width": 800, "height": 600},
+        }
+        backend._list_windows = lambda: [expected_window]
+        with mock.patch("macos_cua.macos.subprocess.run") as launch:
+            launch.return_value = types.SimpleNamespace(returncode=0, stderr="")
+            result = backend.tool_launch_app({"app": "com.example.Editor"})
+        launch.assert_called_once_with(
+            ["/usr/bin/open", "-b", "com.example.Editor"], capture_output=True, text=True, timeout=30
+        )
+        self.assertEqual(result["pid"], 55)
+        self.assertEqual(result["windows"], [expected_window])
+        self.assertEqual(result["bundleId"], "com.example.Editor")
 
     def test_initialize_and_list(self):
         server = MCPServer(FakeBackend())
