@@ -40,6 +40,18 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(re.search(r'__version__ = "([^"]+)"', package).group(1), expected)
         self.assertEqual(re.search(r'RUNTIME_VERSION="([^"]+)"', launcher).group(1), expected)
 
+    def test_fallback_first_run_is_versioned_and_atomically_published(self):
+        launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
+        self.assertIn('DATA_VENV="$DATA_DIR/venv-$RUNTIME_VERSION"', launcher)
+        self.assertIn('STAGING_VENV="$DATA_DIR/.venv-$RUNTIME_VERSION.install.$$"', launcher)
+        self.assertIn('"$STAGING_PYTHON" -m macos_cua.server --self-test', launcher)
+        self.assertIn('mv "$STAGING_VENV" "$DATA_VENV"', launcher)
+        self.assertNotIn("runtime-version", launcher)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("Verify automatic fallback first run", workflow)
+        self.assertIn('MACOS_CUA_DATA_DIR="$data" bash plugins/macos-computer-use/scripts/run-mcp.sh', workflow)
+        self.assertIn('test -x "$data/venv-$version/bin/python3"', workflow)
+
     def test_fallback_dependencies_are_exact_binary_wheels(self):
         requirement_text = (PLUGIN / "requirements.txt").read_text(encoding="utf-8")
         requirements = [line.split("==", 1)[0] for line in requirement_text.splitlines() if line and not line[0].isspace()]

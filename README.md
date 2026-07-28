@@ -63,6 +63,8 @@ environment, and installs the complete exact-tested five-package PyObjC 12.2.1
 binary-wheel closure without dependency re-resolution.
 All published CPython 3.10–3.15 wheel variants are allowlisted by SHA-256, and
 pip runs in hash-required mode.
+First-run dependencies are built and self-tested in a staging environment,
+then atomically published to a plugin-versioned runtime directory.
 
 If `/Applications` is not writable, the background backend reports that exact
 diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed

@@ -147,6 +147,9 @@ a private Python environment, and installs the exact tested PyObjC 12.2.1
 five-package binary-wheel closure with dependency resolution disabled.
 Every supported wheel variant is pinned by its PyPI SHA-256 and installation
 uses hash-required mode.
+The automatic first-run path builds and self-tests a staging environment before
+atomically publishing it to a plugin-versioned runtime directory, so an
+interrupted install is never reused as healthy.
 
 Required macOS grants:
 

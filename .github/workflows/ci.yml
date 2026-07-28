@@ -30,6 +30,16 @@ jobs:
       - name: MCP runtime smoke test
         run: PYTHONPATH=plugins/macos-computer-use python -m macos_cua.server --self-test
         shell: bash
+      - name: Verify automatic fallback first run
+        if: runner.os == 'macOS'
+        run: |
+          data="$RUNNER_TEMP/zcode-fallback-first-run"
+          MACOS_CUA_DATA_DIR="$data" bash plugins/macos-computer-use/scripts/run-mcp.sh </dev/null
+          version="$(PYTHONPATH=plugins/macos-computer-use python -c 'from macos_cua import __version__; print(__version__)')"
+          test -x "$data/venv-$version/bin/python3"
+          shopt -s nullglob
+          staging=("$data"/.venv-*.install.*)
+          test "${#staging[@]}" -eq 0
       - name: Verify pinned Cua Driver installer
         if: runner.os == 'macOS'
         run: |
