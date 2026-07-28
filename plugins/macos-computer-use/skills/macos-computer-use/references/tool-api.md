@@ -161,7 +161,10 @@ point before button-down. Multi-click repeats this move/down/up sequence for
 each click, preserving native hover behavior and click counts. Direct clicks
 leave 30 ms between move, down, and up so foreground apps can consume each
 physical transition before the next one; timed moves and drags publish their
-last interpolated frame at the requested duration boundary.
+last interpolated frame at the requested duration boundary. Drag endpoints,
+raw mouse down/up transitions, and final pointer read-back use the same 30 ms
+app-event-loop settlement interval.
+
 For a held button, raw `mouse_up` at a changed point posts the corresponding
 dragged event before release; the same endpoint does not invent a drag. It
 retries release once and retains an unconfirmed release for shutdown cleanup.

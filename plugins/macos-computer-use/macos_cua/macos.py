@@ -2187,11 +2187,13 @@ class MacOSBackend:
             button,
             *start,
         )
+        time.sleep(CLICK_EVENT_SETTLE_SECONDS)
         self._post_mouse_down(button, down, up, dragged, *start)
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
         last = start
         try:
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             for step in range(1, steps + 1):
                 fraction = step / steps
                 last = (
@@ -2212,6 +2214,7 @@ class MacOSBackend:
             else:
                 self._held_buttons.pop(button, None)
                 release_pending = False
+                time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             if isinstance(error, Exception):
                 raise ToolError(
                     f"drag was only partially delivered: {error}",
@@ -2245,6 +2248,7 @@ class MacOSBackend:
                 self._held_buttons.pop(button, None)
         else:
             self._held_buttons.pop(button, None)
+        time.sleep(CLICK_EVENT_SETTLE_SECONDS)
 
     def tool_perform_secondary_action(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
@@ -2427,6 +2431,9 @@ class MacOSBackend:
                     self._post_mouse(event_type, held_button, x, y)
                     if held_up is not None:
                         self._held_buttons[held_button] = (held_up, event_type, x, y)
+            # CGEventPost is asynchronous with respect to many app event
+            # loops; settle before cursor read-back or a following action.
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             try:
                 observed = self._cursor()
             except ToolError:
@@ -2457,7 +2464,9 @@ class MacOSBackend:
                 button,
                 *point,
             )
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             self._post_mouse_down(button, down, up, dragged, *point)
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             return {
                 "ok": True,
                 "position": {"x": point[0], "y": point[1]},
@@ -2489,6 +2498,8 @@ class MacOSBackend:
                         # Releasing is still mandatory even if the final drag
                         # event was rejected, unverifiable, or interrupted.
                         move_error = error
+                    else:
+                        time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             else:
                 # An untracked mouse_up is an intentional recovery primitive.
                 # Retain it until posting succeeds so shutdown can retry an
@@ -2515,6 +2526,7 @@ class MacOSBackend:
                         },
                     ) from first_error
             self._held_buttons.pop(button, None)
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             if move_error is not None:
                 if not isinstance(move_error, Exception):
                     raise move_error

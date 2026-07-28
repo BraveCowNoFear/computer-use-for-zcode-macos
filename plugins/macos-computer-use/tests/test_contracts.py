@@ -2097,12 +2097,13 @@ class ContractTests(unittest.TestCase):
             side_effect=lambda delay: timeline.append(("sleep", delay)),
         ):
             result = backend.tool_move_mouse({"x": 6, "y": 3, "duration": 0.05})
-        self.assertEqual([item[0] for item in timeline], ["sleep", "post"] * 3)
+        self.assertEqual([item[0] for item in timeline], ["sleep", "post"] * 3 + ["sleep"])
         self.assertAlmostEqual(
-            sum(item[1] for item in timeline if item[0] == "sleep"),
+            sum(item[1] for item in timeline[:6] if item[0] == "sleep"),
             0.05,
         )
-        self.assertEqual(timeline[-1], ("post", 6.0, 3.0))
+        self.assertEqual(timeline[-2], ("post", 6.0, 3.0))
+        self.assertEqual(timeline[-1], ("sleep", 0.03))
         self.assertTrue(result["verified"])
 
     def test_timed_drag_waits_before_each_dragged_frame(self):
@@ -2117,13 +2118,17 @@ class ContractTests(unittest.TestCase):
             side_effect=lambda delay: timeline.append(("sleep", delay)),
         ):
             backend._drag_pointer((0.0, 0.0), (6.0, 3.0), 0.05)
-        self.assertEqual([item[0] for item in timeline[2:-1]], ["sleep", "post"] * 3)
+        self.assertEqual(
+            [item[0] for item in timeline],
+            ["post", "sleep", "post", "sleep"] + ["sleep", "post"] * 3 + ["post", "sleep"],
+        )
         self.assertAlmostEqual(
-            sum(item[1] for item in timeline if item[0] == "sleep"),
+            sum(item[1] for item in timeline[4:10] if item[0] == "sleep"),
             0.05,
         )
-        self.assertEqual(timeline[-2], ("post", "dragged", 6.0, 3.0))
-        self.assertEqual(timeline[-1], ("post", "up", 6.0, 3.0))
+        self.assertEqual(timeline[-3], ("post", "dragged", 6.0, 3.0))
+        self.assertEqual(timeline[-2], ("post", "up", 6.0, 3.0))
+        self.assertEqual(timeline[-1], ("sleep", 0.03))
         self.assertFalse(backend._held_buttons)
 
     def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
@@ -2174,8 +2179,9 @@ class ContractTests(unittest.TestCase):
         backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(
             (event, x, y)
         )
-        backend.tool_mouse_down({"x": 1, "y": 2})
-        result = backend.tool_mouse_up({"x": 5, "y": 6})
+        with mock.patch("macos_cua.macos.time.sleep") as pause:
+            backend.tool_mouse_down({"x": 1, "y": 2})
+            result = backend.tool_mouse_up({"x": 5, "y": 6})
         self.assertEqual(
             events,
             [
@@ -2185,6 +2191,7 @@ class ContractTests(unittest.TestCase):
                 ("left-up", 5.0, 6.0),
             ],
         )
+        self.assertEqual([call.args[0] for call in pause.call_args_list], [0.03] * 4)
         self.assertEqual(result["position"], {"x": 5.0, "y": 6.0})
         self.assertFalse(backend._held_buttons)
 
