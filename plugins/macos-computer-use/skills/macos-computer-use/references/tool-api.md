@@ -213,7 +213,9 @@ same partial-effect semantics.
 Every fallback input attempt conservatively expires its prior window or desktop
 observation even when native delivery raises. Key-down and mouse-down events are
 registered before posting; matching releases are retried immediately and again
-during MCP shutdown if interruption occurs between the pair.
+during MCP shutdown if interruption occurs between the pair. Shutdown makes up
+to three bounded attempts with 10 ms gaps; duplicate releases are safe and
+never replay the matching down event.
 If both immediate release attempts fail, structured
 `click_release_incomplete`, `key_release_incomplete`, `drag_incomplete`, or
 `drag_release_incomplete` errors report a partial effect and whether a release

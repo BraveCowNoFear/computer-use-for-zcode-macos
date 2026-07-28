@@ -1163,6 +1163,33 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("button", backend._held_buttons)
         self.assertEqual(events, ["down", "up", "up"])
 
+    def test_shutdown_retries_mouse_and_key_releases_boundedly(self):
+        backend = MacOSBackend()
+        mouse_attempts = 0
+        key_attempts = 0
+
+        def post_mouse(*_args):
+            nonlocal mouse_attempts
+            mouse_attempts += 1
+            if mouse_attempts < 3:
+                raise RuntimeError("transient mouse release failure")
+
+        def post_key(*_args):
+            nonlocal key_attempts
+            key_attempts += 1
+            raise RuntimeError("persistent key release failure")
+
+        backend._post_mouse = post_mouse
+        backend.Quartz = types.SimpleNamespace(kCGHIDEventTap="hid", CGEventPost=post_key)
+        backend._held_buttons["button"] = ("up", "dragged", 4.0, 5.0)
+        backend._held_key_releases.append("key-up")
+        with mock.patch("macos_cua.macos.time.sleep") as pause:
+            backend.close()
+        self.assertEqual((mouse_attempts, key_attempts), (3, 3))
+        self.assertEqual([call.args[0] for call in pause.call_args_list], [0.01] * 4)
+        self.assertFalse(backend._held_buttons)
+        self.assertFalse(backend._held_key_releases)
+
     def test_mcp_rejects_schema_violations_before_backend_dispatch(self):
         backend = mock.Mock()
         server = MCPServer(backend)

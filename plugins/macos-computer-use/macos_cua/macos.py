@@ -63,6 +63,8 @@ TEXT_CHUNK_SETTLE_SECONDS = 0.02
 KEY_CHORD_SETTLE_SECONDS = 0.1
 SCROLL_SETTLE_SECONDS = 0.1
 MAX_KEYBOARD_UNICODE_CHUNK_UNITS = 64
+SHUTDOWN_RELEASE_ATTEMPTS = 3
+SHUTDOWN_RELEASE_RETRY_SECONDS = 0.01
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -295,17 +297,25 @@ class MacOSBackend:
 
     def close(self) -> None:
         for button, (up, _dragged, x, y) in list(self._held_buttons.items()):
-            try:
-                self._post_mouse(up, button, x, y)
-            except Exception:
-                pass
+            for attempt in range(SHUTDOWN_RELEASE_ATTEMPTS):
+                try:
+                    self._post_mouse(up, button, x, y)
+                except Exception:
+                    if attempt + 1 < SHUTDOWN_RELEASE_ATTEMPTS:
+                        time.sleep(SHUTDOWN_RELEASE_RETRY_SECONDS)
+                else:
+                    break
         self._held_buttons.clear()
         if self.Quartz is not None:
             for up in self._held_key_releases:
-                try:
-                    self.Quartz.CGEventPost(self.Quartz.kCGHIDEventTap, up)
-                except Exception:
-                    pass
+                for attempt in range(SHUTDOWN_RELEASE_ATTEMPTS):
+                    try:
+                        self.Quartz.CGEventPost(self.Quartz.kCGHIDEventTap, up)
+                    except Exception:
+                        if attempt + 1 < SHUTDOWN_RELEASE_ATTEMPTS:
+                            time.sleep(SHUTDOWN_RELEASE_RETRY_SECONDS)
+                    else:
+                        break
         self._held_key_releases.clear()
         self._invalidate_all_observations()
 
