@@ -117,6 +117,11 @@ mixed Retina/non-Retina layouts do not share an incorrect global scale.
 Fallback screenshots are published only after complete capture/encoding inside
 a current-user-owned 0700 temporary directory. Timeouts and failed window or
 desktop captures delete any unpublished partial PNG immediately.
+Large fallback PNGs are best-effort resampled with macOS `sips` to a 1,280 px
+longest edge and a 900 KB transport target. The returned and cached
+`width`/`height` are read from the final published PNG, so screenshot-bound
+coordinates continue to map exactly across Retina and mixed-scale displays. If
+the system resizer fails, the complete original remains the observation.
 Window screenshot plus AX text, and all screens in one desktop call, are each
 transactional observations: if any requested channel or display fails, every
 new cache handle and PNG from that failed call is removed.

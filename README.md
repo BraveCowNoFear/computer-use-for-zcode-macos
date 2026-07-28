@@ -94,6 +94,10 @@ omitting screenshots; pixel and desktop routes still require it.
 - Request fallback Accessibility and Screen Recording independently, map Retina
   pointer input through fresh screenshot IDs, and release held buttons on MCP
   shutdown or an interrupted drag.
+- Bound fallback screenshot transport best-effort to a 1,280 px longest edge
+  and a 900 KB PNG target, while publishing the exact resized dimensions used
+  for Retina/window coordinate mapping; a system-resizer failure keeps the
+  complete original capture.
 - Observe and act on every visible display directly, including menu bar, Dock,
   and system UI, with independent coordinates for mixed Retina scales when the
   primary desktop route cannot deliver.

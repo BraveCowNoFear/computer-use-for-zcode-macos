@@ -50,6 +50,11 @@ DEFAULT_AX_TREE_MAX_NODES = 1200
 DEFAULT_AX_TREE_MAX_DEPTH = 64
 MAX_AX_TREE_MAX_NODES = 10_000
 MAX_AX_TREE_MAX_DEPTH = 256
+MAX_SCREENSHOT_PNG_BYTES = 900_000
+MAX_SCREENSHOT_DIMENSION = 1280
+MIN_SCREENSHOT_SCALE = 0.25
+SCREENSHOT_RESIZE_STEP = 0.85
+SCREENSHOT_RESIZE_TIMEOUT_SECONDS = 5
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -1050,16 +1055,11 @@ class MacOSBackend:
             )
             if completed.returncode != 0 or not path.is_file():
                 raise ToolError(completed.stderr.strip() or "macOS could not capture the selected window")
-            raw = path.read_bytes()
-            width = int(round(window["bounds"]["width"]))
-            height = int(round(window["bounds"]["height"]))
-            try:
-                image_rep = self.AppKit.NSBitmapImageRep.imageRepWithContentsOfFile_(str(path))
-                if image_rep is not None:
-                    width = int(image_rep.pixelsWide())
-                    height = int(image_rep.pixelsHigh())
-            except Exception:
-                pass
+            raw, width, height = self._bounded_screenshot_png(
+                path,
+                int(round(window["bounds"]["width"])),
+                int(round(window["bounds"]["height"])),
+            )
             cached = {
                 "id": screenshot_id,
                 "windowKey": self._window_key(window),
@@ -1100,6 +1100,107 @@ class MacOSBackend:
                     path.unlink(missing_ok=True)
                 except OSError:
                     pass
+
+    def _decoded_png_dimensions(self, path: Path) -> tuple[int, int] | None:
+        try:
+            image_rep = self.AppKit.NSBitmapImageRep.imageRepWithContentsOfFile_(str(path))
+            if image_rep is not None:
+                width = int(image_rep.pixelsWide())
+                height = int(image_rep.pixelsHigh())
+                if width > 0 and height > 0:
+                    return width, height
+        except Exception:
+            pass
+        return None
+
+    def _png_dimensions(
+        self, path: Path, fallback_width: int, fallback_height: int
+    ) -> tuple[int, int]:
+        return self._decoded_png_dimensions(path) or (
+            max(1, int(fallback_width)),
+            max(1, int(fallback_height)),
+        )
+
+    def _bounded_screenshot_png(
+        self, path: Path, fallback_width: int, fallback_height: int
+    ) -> tuple[bytes, int, int]:
+        """Best-effort bound an MCP screenshot while retaining exact pixel mapping."""
+        original = path.read_bytes()
+        width, height = self._png_dimensions(path, fallback_width, fallback_height)
+        largest = max(width, height)
+        if largest <= MAX_SCREENSHOT_DIMENSION and len(original) <= MAX_SCREENSHOT_PNG_BYTES:
+            return original, width, height
+
+        # Keep at least one quarter of an ordinary source image, except that a
+        # very large Retina/6K capture must still honor the absolute 1280 px
+        # transport edge. This avoids the reference implementation's >5K edge
+        # case where its relative floor can accidentally return the original.
+        minimum_largest = max(
+            1,
+            min(MAX_SCREENSHOT_DIMENSION, int(round(largest * MIN_SCREENSHOT_SCALE))),
+        )
+        if largest > MAX_SCREENSHOT_DIMENSION:
+            target_largest = MAX_SCREENSHOT_DIMENSION
+        else:
+            target_largest = max(minimum_largest, int(largest * SCREENSHOT_RESIZE_STEP))
+
+        best = (original, width, height)
+        resized = False
+        candidate = path.with_name(f".{path.stem}-{uuid.uuid4().hex}.png")
+        executable = shutil.which("sips") or "/usr/bin/sips"
+        try:
+            while target_largest < max(best[1], best[2]):
+                candidate.unlink(missing_ok=True)
+                completed = subprocess.run(
+                    [
+                        executable,
+                        "--resampleHeightWidthMax",
+                        str(target_largest),
+                        str(path),
+                        "--out",
+                        str(candidate),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=SCREENSHOT_RESIZE_TIMEOUT_SECONDS,
+                )
+                if completed.returncode != 0 or not candidate.is_file():
+                    break
+                candidate_raw = candidate.read_bytes()
+                candidate_dimensions = self._decoded_png_dimensions(candidate)
+                if candidate_dimensions is None:
+                    break
+                candidate_width, candidate_height = candidate_dimensions
+                candidate_largest = max(candidate_width, candidate_height)
+                if candidate_largest >= max(best[1], best[2]):
+                    break
+                best = (candidate_raw, candidate_width, candidate_height)
+                resized = True
+                if len(candidate_raw) <= MAX_SCREENSHOT_PNG_BYTES:
+                    break
+                if candidate_largest <= minimum_largest:
+                    break
+                next_target = max(
+                    minimum_largest,
+                    int(candidate_largest * SCREENSHOT_RESIZE_STEP),
+                )
+                if next_target >= candidate_largest:
+                    break
+                target_largest = next_target
+
+            if resized:
+                # Publish the selected bytes atomically. If this replacement
+                # fails, the original capture remains available to the caller.
+                candidate.write_bytes(best[0])
+                os.replace(candidate, path)
+            return best
+        except (OSError, subprocess.TimeoutExpired):
+            return original, width, height
+        finally:
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def tool_get_window_state(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
@@ -1196,6 +1297,7 @@ class MacOSBackend:
         path = self._screenshot_dir / f"desktop-{screen['displayId']}-{screenshot_id}.png"
         try:
             path.write_bytes(raw)
+            raw, width, height = self._bounded_screenshot_png(path, width, height)
         except OSError as error:
             try:
                 path.unlink(missing_ok=True)

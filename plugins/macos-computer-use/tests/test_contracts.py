@@ -5,12 +5,14 @@ import io
 import json
 import math
 import os
+import struct
 import subprocess
 import sys
 import tempfile
 import time
 import types
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -65,6 +67,135 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
         self.assertTrue(hasattr(backend.AppKit, "NSWorkspace"))
         self.assertTrue(hasattr(backend.AppKit, "NSBitmapImageFileTypePNG"))
+
+    @unittest.skipUnless(sys.platform == "darwin", "native sips integration runs on macOS CI")
+    def test_native_sips_bounds_png_and_rebinds_pixel_dimensions(self):
+        def chunk(kind, payload):
+            return (
+                struct.pack(">I", len(payload))
+                + kind
+                + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+            )
+
+        width, height = 32, 16
+        rows = b"".join(
+            b"\x00"
+            + bytes(
+                component
+                for x in range(width)
+                for component in ((x * 17) % 256, (y * 31) % 256, (x + y) % 256, 255)
+            )
+            for y in range(height)
+        )
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows))
+            + chunk(b"IEND", b"")
+        )
+        backend = MacOSBackend()
+        self.assertIsNone(backend.native_error)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "native.png"
+            path.write_bytes(png)
+            with mock.patch("macos_cua.macos.MAX_SCREENSHOT_DIMENSION", 16):
+                raw, resized_width, resized_height = backend._bounded_screenshot_png(path, width, height)
+            self.assertEqual((resized_width, resized_height), (16, 8))
+            self.assertEqual(path.read_bytes(), raw)
+
+    def test_bounded_png_rebinds_to_the_published_pixel_size(self):
+        class Rep:
+            def __init__(self, width, height):
+                self._width = width
+                self._height = height
+
+            def pixelsWide(self):
+                return self._width
+
+            def pixelsHigh(self):
+                return self._height
+
+        class Bitmap:
+            @staticmethod
+            def imageRepWithContentsOfFile_(value):
+                return Rep(1280, 720) if Path(value).name.startswith(".large-") else Rep(2560, 1440)
+
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(NSBitmapImageRep=Bitmap)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "large.png"
+            path.write_bytes(b"original-png")
+
+            def resize(command, **_kwargs):
+                self.assertEqual(command[1:3], ["--resampleHeightWidthMax", "1280"])
+                Path(command[command.index("--out") + 1]).write_bytes(b"bounded-png")
+                return types.SimpleNamespace(returncode=0, stderr="")
+
+            with mock.patch("macos_cua.macos.shutil.which", return_value="/usr/bin/sips"), mock.patch(
+                "macos_cua.macos.subprocess.run", side_effect=resize
+            ):
+                raw, width, height = backend._bounded_screenshot_png(path, 2560, 1440)
+            self.assertEqual((raw, width, height), (b"bounded-png", 1280, 720))
+            self.assertEqual(path.read_bytes(), b"bounded-png")
+            self.assertEqual(list(path.parent.glob(".*.png")), [])
+
+    def test_bounded_png_keeps_the_original_when_sips_fails(self):
+        class Rep:
+            def pixelsWide(self):
+                return 2560
+
+            def pixelsHigh(self):
+                return 1440
+
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSBitmapImageRep=types.SimpleNamespace(
+                imageRepWithContentsOfFile_=lambda _value: Rep()
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "large.png"
+            path.write_bytes(b"original-png")
+            with mock.patch("macos_cua.macos.shutil.which", return_value="/usr/bin/sips"), mock.patch(
+                "macos_cua.macos.subprocess.run",
+                return_value=types.SimpleNamespace(returncode=1, stderr="failure"),
+            ):
+                raw, width, height = backend._bounded_screenshot_png(path, 2560, 1440)
+            self.assertEqual((raw, width, height), (b"original-png", 2560, 1440))
+            self.assertEqual(path.read_bytes(), b"original-png")
+
+    def test_bounded_png_never_publishes_an_unreadable_resize(self):
+        class Rep:
+            def pixelsWide(self):
+                return 2560
+
+            def pixelsHigh(self):
+                return 1440
+
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSBitmapImageRep=types.SimpleNamespace(
+                imageRepWithContentsOfFile_=lambda value: None
+                if Path(value).name.startswith(".large-")
+                else Rep()
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "large.png"
+            path.write_bytes(b"original-png")
+
+            def unreadable_resize(command, **_kwargs):
+                Path(command[command.index("--out") + 1]).write_bytes(b"invalid-png")
+                return types.SimpleNamespace(returncode=0, stderr="")
+
+            with mock.patch("macos_cua.macos.shutil.which", return_value="/usr/bin/sips"), mock.patch(
+                "macos_cua.macos.subprocess.run", side_effect=unreadable_resize
+            ):
+                raw, width, height = backend._bounded_screenshot_png(path, 2560, 1440)
+            self.assertEqual((raw, width, height), (b"original-png", 2560, 1440))
+            self.assertEqual(path.read_bytes(), b"original-png")
+            self.assertEqual(list(path.parent.glob(".*.png")), [])
 
     def test_codex_core_is_complete(self):
         self.assertTrue(CORE_CODEX_TOOL_NAMES.issubset(TOOL_NAMES))
