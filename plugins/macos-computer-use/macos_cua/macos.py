@@ -1463,22 +1463,24 @@ class MacOSBackend:
         delay = duration / steps if steps else 0
         Q = self.Quartz
         if self._held_buttons:
-            held_button, (held_up, event_type, _held_x, _held_y) = next(
-                reversed(self._held_buttons.items())
-            )
+            routes = list(self._held_buttons.items())
         else:
-            held_button = Q.kCGMouseButtonLeft
-            held_up = None
-            event_type = Q.kCGEventMouseMoved
+            routes = [
+                (
+                    Q.kCGMouseButtonLeft,
+                    (None, Q.kCGEventMouseMoved, start[0], start[1]),
+                )
+            ]
         for step in range(1, steps + 1):
             fraction = step / steps
             x = start[0] + (target[0] - start[0]) * fraction
             y = start[1] + (target[1] - start[1]) * fraction
-            self._post_mouse(event_type, held_button, x, y)
+            for held_button, (held_up, event_type, _held_x, _held_y) in routes:
+                self._post_mouse(event_type, held_button, x, y)
+                if held_up is not None:
+                    self._held_buttons[held_button] = (held_up, event_type, x, y)
             if delay:
                 time.sleep(delay)
-        if held_up is not None:
-            self._held_buttons[held_button] = (held_up, event_type, target[0], target[1])
         self._invalidate_all_observations()
         return {"ok": True, "position": {"x": target[0], "y": target[1]}}
 

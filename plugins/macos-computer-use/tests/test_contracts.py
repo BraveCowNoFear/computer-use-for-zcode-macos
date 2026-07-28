@@ -17,6 +17,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 
 from macos_cua.contracts import CORE_CODEX_TOOL_NAMES, TOOL_DEFINITIONS, TOOL_NAMES, ToolError
 from macos_cua.macos import MacOSBackend, parse_key_chord
+from macos_cua import server as server_module
 from macos_cua.server import MCPServer, serve
 
 
@@ -808,6 +809,61 @@ class ContractTests(unittest.TestCase):
         backend.tool_move_mouse({"x": 5, "y": 6, "duration": 0})
         backend.close()
         self.assertEqual([event[0] for event in events], ["left-down", "left-dragged", "left-up"])
+
+    def test_interrupted_held_move_releases_at_last_delivered_point(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        backend._cursor = lambda: (1.0, 2.0)
+        events = []
+        delivered_drags = 0
+
+        def post(event, button, x, y, click_count=1):
+            nonlocal delivered_drags
+            if event == "left-dragged":
+                delivered_drags += 1
+                if delivered_drags == 3:
+                    raise RuntimeError("injected move failure")
+            events.append((event, button, x, y))
+
+        backend._post_mouse = post
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        with self.assertRaisesRegex(RuntimeError, "injected move failure"):
+            backend.tool_move_mouse({"x": 7, "y": 8, "duration": 0.1})
+        last_delivered = [event for event in events if event[0] == "left-dragged"][-1]
+        backend.close()
+        self.assertEqual(events[-1][0], "left-up")
+        self.assertEqual(events[-1][2:], last_delivered[2:])
+
+    def test_main_routes_sigterm_and_interrupt_through_server_cleanup(self):
+        previous = object()
+        with (
+            mock.patch.object(server_module.signal, "signal", side_effect=[previous, previous]) as install,
+            mock.patch.object(server_module, "serve", side_effect=KeyboardInterrupt),
+        ):
+            self.assertEqual(server_module.main([]), 0)
+        self.assertEqual(install.call_args_list[0].args[0], server_module.signal.SIGTERM)
+        self.assertIs(install.call_args_list[0].args[1], server_module._interrupt_for_shutdown)
+        self.assertEqual(install.call_args_list[1].args, (server_module.signal.SIGTERM, previous))
+
+    def test_serve_closes_backend_when_interrupted(self):
+        backend = types.SimpleNamespace(close=mock.Mock())
+
+        class InterruptingInput:
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            serve(InterruptingInput(), io.StringIO(), backend)
+        backend.close.assert_called_once_with()
 
     def test_repeated_mouse_down_and_click_do_not_double_press_a_held_button(self):
         backend = MacOSBackend()

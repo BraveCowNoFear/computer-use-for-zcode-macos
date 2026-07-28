@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import math
+import signal
 import sys
 import traceback
 from typing import Any, TextIO
@@ -16,6 +17,11 @@ from .contracts import TOOL_DEFINITIONS, TOOL_NAMES, ToolError
 
 SUPPORTED_PROTOCOLS = {"2024-11-05", "2025-03-26", "2025-06-18"}
 TOOL_SCHEMAS = {tool["name"]: tool["inputSchema"] for tool in TOOL_DEFINITIONS}
+
+
+def _interrupt_for_shutdown(_signum: int, _frame: Any) -> None:
+    """Route process termination through serve()'s backend cleanup."""
+    raise KeyboardInterrupt
 
 
 def _matches_type(value: Any, expected: str) -> bool:
@@ -213,7 +219,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
-    serve()
+    previous_sigterm: Any | None = None
+    try:
+        previous_sigterm = signal.signal(signal.SIGTERM, _interrupt_for_shutdown)
+    except (AttributeError, ValueError):
+        # Embedded/non-main-thread invocations cannot install process handlers;
+        # EOF still runs the same backend cleanup in serve().
+        pass
+    try:
+        serve()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        if previous_sigterm is not None:
+            signal.signal(signal.SIGTERM, previous_sigterm)
     return 0
 
 
