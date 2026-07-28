@@ -158,9 +158,10 @@ Mac with TCC grants, which hosted CI runners do not provide.
 On such a Mac, run the disposable end-to-end gate below. It creates its own
 temporary AppKit window, verifies signed-driver identity plus background
 screenshot/type/click on the primary backend, then exercises full-desktop
-shortcut/text input plus real Quartz coordinate click, slider drag, and scroll
-through the direct fallback. Both paths re-observe and verify the visible result; the
-gate restores the original pointer position before closing its fixture, and
+shortcut/text input plus real Quartz coordinate click, slider drag, raw
+held-button sequence, and scroll through the direct fallback. Both paths
+re-observe and verify the visible result. The gate restores the original
+pointer position before closing its fixture, and
 touches no user document:
 
 ```bash

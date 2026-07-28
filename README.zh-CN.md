@@ -129,8 +129,9 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 
 在这样的 Mac 上，可运行下面的一键闭环门禁。它只创建项目自带的临时 AppKit
 窗口：先验证签名驱动身份以及主后端的后台截图/输入/点击，再验证直接兜底的
-全桌面快捷键/文字输入、真实 Quartz 坐标点击、滑块拖拽和滚轮事件；两条路径
-都会重新观察并核对可见结果，结束前恢复原光标位置并自动关闭测试窗口，不接触用户文档：
+全桌面快捷键/文字输入、真实 Quartz 坐标点击、滑块拖拽、原始按住/移动/松开和
+滚轮事件；两条路径都会重新观察并核对可见结果，结束前恢复原光标位置并自动关闭
+测试窗口，不接触用户文档：
 
 ```bash
 bash plugins/macos-computer-use/scripts/live-smoke.sh

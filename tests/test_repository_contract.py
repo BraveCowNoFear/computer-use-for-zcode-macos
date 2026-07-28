@@ -368,6 +368,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"fallback_physical_button_clicked"',
             '"fallback_physical_drag_verified"',
             '"fallback_physical_scroll_verified"',
+            '"fallback_raw_mouse_sequence_verified"',
             '"fallback_cursor_restored"',
             "fixture_button_screenshot_point",
             "require_action_verdict",
@@ -389,6 +390,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(module.fixture_button_screenshot_point(state), (230.0, 400.0))
         self.assertEqual(module.fixture_screenshot_point(state, 252.0, 122.0), (504.0, 400.0))
         self.assertEqual(module.fixture_screenshot_point(state, 510.0, 57.0), (1020.0, 530.0))
+        screen_state = {
+            "window": {"bounds": {"x": 100, "y": 50, "width": 640, "height": 322}}
+        }
+        self.assertEqual(module.fixture_screen_point(screen_state, 252.0, 122.0), (352.0, 250.0))
 
     def test_github_actions_are_commit_pinned(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

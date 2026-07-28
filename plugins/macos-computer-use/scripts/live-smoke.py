@@ -78,7 +78,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.22"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.23"},
             },
         )
         self.notify("notifications/initialized")
@@ -151,6 +151,16 @@ def fixture_button_screenshot_point(state: dict[str, Any]) -> tuple[float, float
         state,
         FIXTURE_BUTTON_CENTER_X,
         FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM,
+    )
+
+
+def fixture_screen_point(
+    state: dict[str, Any], content_x: float, content_y_from_bottom: float
+) -> tuple[float, float]:
+    bounds = state["window"]["bounds"]
+    return (
+        float(bounds["x"]) + content_x,
+        float(bounds["y"]) + float(bounds["height"]) - content_y_from_bottom,
     )
 
 
@@ -397,6 +407,49 @@ def run_fallback() -> dict[str, Any]:
                 f"Fallback physical drag did not move the slider near its end: {state['accessibility']['tree']}"
             )
         report["steps"].append("fallback_physical_drag_verified")
+
+        raw_start = fixture_screen_point(
+            state,
+            FIXTURE_SLIDER_START_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        bound_end = fixture_screenshot_point(
+            state,
+            FIXTURE_SLIDER_END_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        held, _ = client.call(
+            "mouse_down",
+            {
+                "window": state["window"],
+                "x": bound_end[0],
+                "y": bound_end[1],
+                "screenshotId": state["screenshots"][0]["id"],
+                "mouse_button": "left",
+            },
+        )
+        require_action_verdict(held, "fallback raw mouse_down")
+        moved, _ = client.call(
+            "move_mouse",
+            {"x": raw_start[0], "y": raw_start[1], "duration": 0.35},
+        )
+        require_action_verdict(moved, "fallback held move_mouse")
+        released, _ = client.call(
+            "mouse_up",
+            {"x": raw_start[0], "y": raw_start[1], "mouse_button": "left"},
+        )
+        require_action_verdict(released, "fallback raw mouse_up")
+        state, content = client.call(
+            "get_window_state",
+            {"window": window, "include_screenshot": True, "include_text": True},
+        )
+        require_image(content, "fallback window state after raw held drag")
+        slider_match = re.search(r"Slider: (\d+)", state["accessibility"]["tree"])
+        if slider_match is None or int(slider_match.group(1)) > 20:
+            raise RuntimeError(
+                f"Fallback raw mouse sequence did not return the slider near its start: {state['accessibility']['tree']}"
+            )
+        report["steps"].append("fallback_raw_mouse_sequence_verified")
 
         tree = state["accessibility"]["tree"]
         element_index(tree, "AXButton", "Copy value")
