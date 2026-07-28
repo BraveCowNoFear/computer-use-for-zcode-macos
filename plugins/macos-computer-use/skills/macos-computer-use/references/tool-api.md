@@ -82,6 +82,11 @@ first-run path.
 The `macos-computer-use-fallback` MCP ships 28 local tools. Its Codex-compatible
 core is:
 
+Its stdio transport follows JSON-RPC 2.0 notification and error semantics:
+notifications execute without a response, invalid request shapes are distinct
+from JSON parse failures, and invalid initialize parameters do not terminate the
+server.
+
 | Tool | Required input | Purpose |
 | --- | --- | --- |
 | `list_windows` | none | Return targetable windows front-to-back. |

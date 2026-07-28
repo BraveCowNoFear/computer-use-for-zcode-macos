@@ -331,6 +331,29 @@ class ContractTests(unittest.TestCase):
         listed = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         self.assertEqual({tool["name"] for tool in listed["result"]["tools"]}, set(TOOL_NAMES))
 
+    def test_initialize_rejects_null_params_and_wrong_jsonrpc_cleanly(self):
+        server = MCPServer(FakeBackend())
+        null_params = server.handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": None}
+        )
+        self.assertEqual(null_params["error"]["code"], -32602)
+        wrong_version = server.handle(
+            {"jsonrpc": "1.0", "id": 2, "method": "initialize", "params": {}}
+        )
+        self.assertEqual(wrong_version["error"]["code"], -32600)
+
+    def test_jsonrpc_notification_executes_without_a_response(self):
+        backend = types.SimpleNamespace(call=mock.Mock(return_value={"ok": True}))
+        response = MCPServer(backend).handle(
+            {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": "computer_use_health", "arguments": {}},
+            }
+        )
+        self.assertIsNone(response)
+        backend.call.assert_called_once_with("computer_use_health", {})
+
     def test_screenshot_becomes_mcp_image_without_base64_in_text(self):
         server = MCPServer(FakeBackend())
         response = server.handle(
@@ -697,6 +720,13 @@ class ContractTests(unittest.TestCase):
         serve(source, target, FakeBackend())
         responses = [json.loads(line) for line in target.getvalue().splitlines()]
         self.assertEqual([item["id"] for item in responses], [1, 2])
+
+    def test_line_protocol_distinguishes_parse_and_invalid_request_errors(self):
+        source = io.StringIO("{not-json}\n[]\n")
+        target = io.StringIO()
+        serve(source, target, FakeBackend())
+        responses = [json.loads(line) for line in target.getvalue().splitlines()]
+        self.assertEqual([item["error"]["code"] for item in responses], [-32700, -32600])
 
     def test_key_chords_support_mac_modifiers_numpad_and_shifted_keysyms(self):
         key, modifiers = parse_key_chord("Command+Shift+period")

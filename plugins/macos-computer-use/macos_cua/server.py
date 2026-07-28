@@ -104,32 +104,46 @@ class MCPServer:
         self.backend = backend if backend is not None else _backend_factory()
 
     def handle(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        is_notification = "id" not in message
         request_id = message.get("id")
+
+        def respond(response: dict[str, Any]) -> dict[str, Any] | None:
+            return None if is_notification else response
+
+        if message.get("jsonrpc") != "2.0":
+            return respond(self._error(request_id, -32600, "Invalid Request: jsonrpc must be '2.0'"))
         method = message.get("method")
         if not isinstance(method, str):
-            return self._error(request_id, -32600, "Invalid Request: method must be a string")
+            return respond(self._error(request_id, -32600, "Invalid Request: method must be a string"))
 
         if method.startswith("notifications/"):
             return None
         if method == "initialize":
-            requested = message.get("params", {}).get("protocolVersion", "2025-03-26")
+            params = message.get("params", {})
+            if not isinstance(params, dict):
+                return respond(self._error(request_id, -32602, "Invalid params: initialize params must be an object"))
+            requested = params.get("protocolVersion", "2025-03-26")
+            if not isinstance(requested, str):
+                return respond(self._error(request_id, -32602, "Invalid params: protocolVersion must be a string"))
             protocol = requested if requested in SUPPORTED_PROTOCOLS else "2025-03-26"
-            return self._result(
-                request_id,
-                {
-                    "protocolVersion": protocol,
-                    "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "macos-computer-use", "version": __version__},
-                    "instructions": "Select one returned window, observe, perform one action, then refresh state.",
-                },
+            return respond(
+                self._result(
+                    request_id,
+                    {
+                        "protocolVersion": protocol,
+                        "capabilities": {"tools": {"listChanged": False}},
+                        "serverInfo": {"name": "macos-computer-use", "version": __version__},
+                        "instructions": "Select one returned window, observe, perform one action, then refresh state.",
+                    },
+                )
             )
         if method == "ping":
-            return self._result(request_id, {})
+            return respond(self._result(request_id, {}))
         if method == "tools/list":
-            return self._result(request_id, {"tools": TOOL_DEFINITIONS})
+            return respond(self._result(request_id, {"tools": TOOL_DEFINITIONS}))
         if method == "tools/call":
-            return self._call_tool(request_id, message.get("params", {}))
-        return self._error(request_id, -32601, f"Method not found: {method}")
+            return respond(self._call_tool(request_id, message.get("params", {})))
+        return respond(self._error(request_id, -32601, f"Method not found: {method}"))
 
     def _call_tool(self, request_id: Any, params: Any) -> dict[str, Any]:
         if not isinstance(params, dict):
@@ -181,15 +195,21 @@ def serve(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout, backend: Any |
                 continue
             try:
                 message = json.loads(line)
-                if not isinstance(message, dict):
-                    raise ValueError("message must be an object")
-                response = server.handle(message)
-                if response is not None:
-                    stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
-                    stdout.flush()
-            except Exception as error:
+            except json.JSONDecodeError as error:
                 response = MCPServer._error(None, -32700, f"Parse error: {error}")
-                stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+            else:
+                if not isinstance(message, dict):
+                    response = MCPServer._error(None, -32600, "Invalid Request: message must be an object")
+                else:
+                    try:
+                        response = server.handle(message)
+                    except Exception as error:
+                        print(traceback.format_exc(), file=sys.stderr, flush=True)
+                        response = None if "id" not in message else MCPServer._error(
+                            message.get("id"), -32603, f"Internal error: {error}"
+                        )
+            if response is not None:
+                stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
                 stdout.flush()
     finally:
         close = getattr(server.backend, "close", None)
