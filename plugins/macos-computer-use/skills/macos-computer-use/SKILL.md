@@ -22,12 +22,14 @@ reachable socket is not enough.
 
 ## Start a primary session
 
-1. Call `check_permissions({prompt:false})`. Public MCP calls are status-only;
-   do not retry with `prompt:true`, which the driver refuses in every mode. If
-   a grant is missing, the signed app's startup gate opens the macOS onboarding
-   UI. Tell the user which TCC grant must be clicked, then resume after the
-   grant and ZCode restart. If no onboarding UI appeared, direct the user to
-   run `scripts/install.sh` from this checkout once.
+1. Call `check_permissions({prompt:false})` for a read-only status check. If a
+   grant is missing, explain the macOS dialogs, then call
+   `check_permissions({prompt:true,probe_direct_capture:false})` once to request
+   Accessibility and Screen Recording under the signed driver's TCC identity.
+   After those grants are enabled and ZCode is restarted, call
+   `check_permissions({prompt:true})` once to verify direct capture; on macOS
+   Tahoe this may raise its separate ScreenCaptureKit consent. If no system UI
+   appears, direct the user to run `scripts/install.sh` from this checkout once.
 2. Call `start_session` with a unique `session`.
 3. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.

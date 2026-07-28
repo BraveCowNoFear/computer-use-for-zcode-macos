@@ -92,6 +92,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertLess(skill.index("Background AX"), skill.index("Direct fallback"))
         self.assertIn("end_session", skill)
         self.assertLess(skill.index("check_permissions({prompt:false})"), skill.index("start_session"))
+        self.assertIn("check_permissions({prompt:true,probe_direct_capture:false})", skill)
+        self.assertNotIn("prompt:true`, which the driver refuses", skill)
         self.assertIn('scope:"desktop"', skill)
         self.assertIn("fallback is\nstateless", skill)
 
@@ -105,6 +107,25 @@ class RepositoryContractTests(unittest.TestCase):
             "THIRD_PARTY_NOTICES.md",
         ):
             self.assertTrue((ROOT / path).exists(), path)
+
+    def test_live_smoke_sources_compile(self):
+        for path in (
+            PLUGIN / "scripts" / "live-smoke.py",
+            PLUGIN / "tests" / "live_fixture.py",
+        ):
+            compile(path.read_text(encoding="utf-8"), str(path), "exec")
+        smoke = (PLUGIN / "scripts" / "live-smoke.py").read_text(encoding="utf-8")
+        for marker in (
+            "run-cua-driver.sh",
+            'check_permissions", {"prompt": False}',
+            '"driver-daemon"',
+            '"start_session"',
+            '"end_session"',
+            '"desktop_type_text"',
+            '"primary_visible_result_verified"',
+            '"fallback_visible_result_verified"',
+        ):
+            self.assertIn(marker, smoke)
 
 
 if __name__ == "__main__":
