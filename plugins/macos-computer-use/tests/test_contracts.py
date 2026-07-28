@@ -778,6 +778,24 @@ class ContractTests(unittest.TestCase):
         backend.close()
         self.assertEqual([event[0] for event in events], ["left-down", "left-dragged", "left-up"])
 
+    def test_repeated_mouse_down_and_click_do_not_double_press_a_held_button(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+        )
+        events = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(event)
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        with self.assertRaisesRegex(ToolError, "already held"):
+            backend.tool_mouse_down({"x": 3, "y": 4})
+        with self.assertRaisesRegex(ToolError, "already held"):
+            backend._click_pointer("left-button", "left-down", "left-up", "left-dragged", 3, 4, 1)
+        self.assertEqual(events, ["left-down"])
+        backend.close()
+
     def test_invalid_click_count_never_posts_an_event(self):
         backend = MacOSBackend()
         window = {

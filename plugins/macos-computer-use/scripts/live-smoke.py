@@ -16,6 +16,7 @@ from typing import Any, TextIO
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "live_fixture.py"
+DATA_DIR = Path(os.environ.get("MACOS_CUA_DATA_DIR", str(ROOT / ".local-data")))
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -70,7 +71,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.0"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.1"},
             },
         )
         self.notify("notifications/initialized")
@@ -132,7 +133,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         ["/bin/bash", str(ROOT / "scripts" / "run-cua-driver.sh")],
         extra_env={
             "MACOS_CUA_PLUGIN_ROOT": str(ROOT),
-            "MACOS_CUA_DATA_DIR": str(ROOT / ".local-data"),
+            "MACOS_CUA_DATA_DIR": str(DATA_DIR),
         },
     )
     session = f"zcode-live-{uuid.uuid4().hex}"

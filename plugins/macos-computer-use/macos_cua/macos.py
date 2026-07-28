@@ -1149,6 +1149,8 @@ class MacOSBackend:
         y: float,
         count: int,
     ) -> None:
+        if button in self._held_buttons:
+            raise ToolError("The requested mouse button is already held; release it with mouse_up before clicking")
         for click_number in range(1, count + 1):
             self._post_mouse(down, button, x, y, click_number)
             self._held_buttons[button] = (up, dragged, x, y)
@@ -1292,6 +1294,8 @@ class MacOSBackend:
         self, start: tuple[float, float], end: tuple[float, float], duration: float
     ) -> None:
         button, down, up, dragged = self._button("left")
+        if button in self._held_buttons:
+            raise ToolError("The left mouse button is already held; release it with mouse_up before dragging")
         self._post_mouse(down, button, *start)
         self._held_buttons[button] = (up, dragged, start[0], start[1])
         steps = max(1, min(300, int(duration * 60)))
@@ -1452,6 +1456,8 @@ class MacOSBackend:
     def tool_mouse_down(self, arguments: dict[str, Any]) -> dict[str, Any]:
         point = self._optional_point(arguments)
         button, down, up, dragged = self._button(str(arguments.get("mouse_button", "left")))
+        if button in self._held_buttons:
+            raise ToolError("The requested mouse button is already held; call mouse_up before mouse_down again")
         self._post_mouse(down, button, *point)
         self._held_buttons[button] = (up, dragged, point[0], point[1])
         self._invalidate_all_observations()

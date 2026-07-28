@@ -4,6 +4,8 @@
 # atomic on macOS without requiring flock. The PID marker lets a later ZCode
 # process recover a lock left behind by a killed installer.
 
+MACOS_CUA_RUNTIME_VERSION="0.8.1"
+
 python_is_supported() {
   local python="$1"
   [[ -x "$(command -v "$python" 2>/dev/null || true)" ]] || return 1
@@ -22,6 +24,15 @@ require_supported_python() {
   fi
   echo "The direct fallback requires CPython 3.10 through 3.15; $python is $detected." >&2
   return 1
+}
+
+macos_cua_native_runtime_ready() {
+  local python="$1"
+  local plugin_root="$2"
+  python_is_supported "$python" || return 1
+  PYTHONPATH="$plugin_root${PYTHONPATH:+:$PYTHONPATH}" "$python" -c \
+    'import AppKit, ApplicationServices, Quartz; from macos_cua.macos import MacOSBackend; b=MacOSBackend(); raise SystemExit(0 if b.native_error is None else 1)' \
+    >/dev/null 2>&1
 }
 
 runtime_lock_mtime() {

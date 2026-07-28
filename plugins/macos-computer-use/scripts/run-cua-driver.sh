@@ -216,7 +216,11 @@ if ! daemon_is_verified; then
     -u CUA_DRIVER_SESSION_POLICY_APPROVED \
     -u CUA_DRIVER_PERMISSION_MODE \
     -u CUA_DRIVER_DANGEROUSLY_BYPASS_APPROVALS \
-    /usr/bin/open -n -g "$APP_BUNDLE" --args \
+    /usr/bin/open -n -g \
+    --env CUA_DRIVER_RS_TELEMETRY_ENABLED=0 \
+    --env CUA_TELEMETRY_ENABLED=0 \
+    --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+    "$APP_BUNDLE" --args \
     serve \
     --socket "$SOCKET" \
     --permission-mode unrestricted \

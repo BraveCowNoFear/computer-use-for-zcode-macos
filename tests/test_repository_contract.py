@@ -37,8 +37,10 @@ class RepositoryContractTests(unittest.TestCase):
         expected = json.loads((ROOT / "marketplace.json").read_text(encoding="utf-8"))["plugins"][0]["version"]
         package = (PLUGIN / "macos_cua" / "__init__.py").read_text(encoding="utf-8")
         launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
+        common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertEqual(re.search(r'__version__ = "([^"]+)"', package).group(1), expected)
-        self.assertEqual(re.search(r'RUNTIME_VERSION="([^"]+)"', launcher).group(1), expected)
+        self.assertEqual(re.search(r'MACOS_CUA_RUNTIME_VERSION="([^"]+)"', common).group(1), expected)
+        self.assertIn('RUNTIME_VERSION="$MACOS_CUA_RUNTIME_VERSION"', launcher)
 
     def test_fallback_first_run_is_versioned_and_atomically_published(self):
         launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
@@ -51,7 +53,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("Verify automatic fallback first run", workflow)
         self.assertIn('MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-mcp.sh', workflow)
         self.assertIn('test -x "$data/venv-$version/bin/python3"', workflow)
-        self.assertIn("native_runtime_ready", launcher)
+        self.assertIn("macos_cua_native_runtime_ready", launcher)
 
     def test_fallback_dependencies_are_exact_binary_wheels(self):
         requirement_text = (PLUGIN / "requirements.txt").read_text(encoding="utf-8")
@@ -123,6 +125,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
         self.assertIn("CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
+        self.assertIn("--env CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
+        self.assertIn("--env CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
         self.assertIn('"source"[[:space:]]*:[[:space:]]*"persisted"', launcher)
         self.assertNotIn("telemetry disable >/dev/null 2>&1 || true", launcher)
         self.assertNotIn("--no-permissions-gate", launcher)
@@ -142,7 +146,8 @@ class RepositoryContractTests(unittest.TestCase):
             "CUA_DRIVER_SESSION_POLICY_APPROVED",
         ):
             self.assertIn(f"-u {variable}", launcher)
-        self.assertIn('/usr/bin/open -n -g "$APP_BUNDLE"', launcher)
+        self.assertIn("/usr/bin/open -n -g \\", launcher)
+        self.assertIn('"$APP_BUNDLE" --args', launcher)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("cua-policy-proof.sock", workflow)
         self.assertIn("permission mode: unrestricted", workflow)
@@ -156,6 +161,13 @@ class RepositoryContractTests(unittest.TestCase):
         for source in (install, doctor):
             self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', source)
         self.assertNotIn('python3 -m venv "$ROOT/.venv"', install)
+
+    def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
+        smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
+        self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_RUNTIME_VERSION/bin/python3"', smoke)
+        self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', smoke)
+        self.assertIn('macos_cua_native_runtime_ready "$DATA_PYTHON" "$ROOT"', smoke)
+        self.assertNotIn("source-checkout runtime is not installed", smoke)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_lock_recovers_a_dead_owner(self):

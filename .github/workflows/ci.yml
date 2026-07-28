@@ -60,6 +60,7 @@ jobs:
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
           "$binary" --version | grep -F "0.12.6"
+          /usr/bin/open -h 2>&1 | grep -F -- "--env"
           data="$RUNNER_TEMP/zcode-primary-first-run"
           mkdir -p "$data/installers"
           cp /tmp/cua-driver-release.tar.gz "$data/installers/cua-driver-rs-0.12.6-darwin-universal.tar.gz"
