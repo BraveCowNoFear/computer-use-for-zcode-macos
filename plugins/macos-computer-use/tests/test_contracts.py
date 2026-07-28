@@ -5,6 +5,7 @@ import io
 import json
 import math
 import sys
+import tempfile
 import time
 import types
 import unittest
@@ -327,6 +328,39 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(content[1]["type"], "image")
         self.assertEqual(base64.b64decode(content[1]["data"]), b"png-bytes")
         self.assertNotIn("_image_base64", content[0]["text"])
+
+    def test_failed_window_capture_removes_unpublished_png(self):
+        backend = MacOSBackend()
+        backend._permission_status = lambda: {"accessibility": True, "screenRecording": True}
+        window = {
+            "id": 42,
+            "pid": 420,
+            "app": "com.example.capture",
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 80},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            backend._screenshot_dir = Path(directory) / "private-shots"
+
+            def failed_capture(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"partial-png")
+                return types.SimpleNamespace(returncode=1, stderr="injected capture failure")
+
+            with mock.patch("macos_cua.macos.shutil.which", return_value="/usr/sbin/screencapture"), mock.patch(
+                "macos_cua.macos.subprocess.run", side_effect=failed_capture
+            ):
+                with self.assertRaisesRegex(ToolError, "injected capture failure"):
+                    backend._capture_window(window)
+            self.assertEqual(list(backend._screenshot_dir.glob("*.png")), [])
+            self.assertEqual(backend._screenshot_cache, {})
+
+    def test_screenshot_directory_rejects_a_non_directory_target(self):
+        backend = MacOSBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            unsafe = Path(directory) / "screenshots"
+            unsafe.write_text("not a directory", encoding="utf-8")
+            backend._screenshot_dir = unsafe
+            with self.assertRaisesRegex(ToolError, "unsafe screenshot directory"):
+                backend._ensure_screenshot_dir()
 
     def test_tool_errors_do_not_kill_server(self):
         server = MCPServer(FakeBackend())

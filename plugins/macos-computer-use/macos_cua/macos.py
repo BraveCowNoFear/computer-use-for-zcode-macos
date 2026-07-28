@@ -221,6 +221,21 @@ class MacOSBackend:
             except OSError:
                 continue
 
+    def _ensure_screenshot_dir(self) -> None:
+        if self._screenshot_dir.is_symlink() or (
+            self._screenshot_dir.exists() and not self._screenshot_dir.is_dir()
+        ):
+            raise ToolError(f"Refusing unsafe screenshot directory: {self._screenshot_dir}")
+        try:
+            self._screenshot_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if hasattr(os, "getuid") and self._screenshot_dir.stat().st_uid != os.getuid():
+                raise ToolError(f"Screenshot directory is not owned by the current user: {self._screenshot_dir}")
+            os.chmod(self._screenshot_dir, 0o700)
+        except ToolError:
+            raise
+        except OSError as error:
+            raise ToolError(f"Could not prepare the private screenshot directory: {error}") from error
+
     def close(self) -> None:
         for button, (up, _dragged, x, y) in list(self._held_buttons.items()):
             try:
@@ -865,58 +880,70 @@ class MacOSBackend:
         status = self._permission_status()
         if not status["screenRecording"]:
             raise ToolError("Screen Recording permission is not granted. Run request_permissions, grant it, and restart ZCode.")
-        self._screenshot_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(self._screenshot_dir, 0o700)
-        except OSError:
-            pass
+        self._ensure_screenshot_dir()
         screenshot_id = uuid.uuid4().hex
         path = self._screenshot_dir / f"{window['id']}-{screenshot_id}.png"
         executable = shutil.which("screencapture") or "/usr/sbin/screencapture"
-        completed = subprocess.run(
-            [executable, "-x", "-o", "-l", str(window["id"]), str(path)],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if completed.returncode != 0 or not path.exists():
-            raise ToolError(completed.stderr.strip() or "macOS could not capture the selected window")
-        raw = path.read_bytes()
-        width = int(round(window["bounds"]["width"]))
-        height = int(round(window["bounds"]["height"]))
+        published = False
         try:
-            image_rep = self.AppKit.NSBitmapImageRep.imageRepWithContentsOfFile_(str(path))
-            if image_rep is not None:
-                width = int(image_rep.pixelsWide())
-                height = int(image_rep.pixelsHigh())
-        except Exception:
-            pass
-        cached = {
-            "id": screenshot_id,
-            "windowKey": self._window_key(window),
-            "bounds": dict(window["bounds"]),
-            "imageWidth": width,
-            "imageHeight": height,
-            "created": time.monotonic(),
-            "path": str(path),
-        }
-        self._screenshot_cache[screenshot_id] = cached
-        if len(self._screenshot_cache) > 64:
-            oldest = sorted(self._screenshot_cache.items(), key=lambda item: item[1]["created"])[:16]
-            for old_id, old in oldest:
-                self._screenshot_cache.pop(old_id, None)
-                self._delete_cached_screenshot(old)
-        return {
-            "id": screenshot_id,
-            "width": width,
-            "height": height,
-            "originX": window["bounds"]["x"],
-            "originY": window["bounds"]["y"],
-            "zIndex": window.get("zIndex", 0),
-            "path": str(path),
-            "mimeType": "image/png",
-            "_image_base64": base64.b64encode(raw).decode("ascii"),
-        }
+            completed = subprocess.run(
+                [executable, "-x", "-o", "-l", str(window["id"]), str(path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if completed.returncode != 0 or not path.is_file():
+                raise ToolError(completed.stderr.strip() or "macOS could not capture the selected window")
+            raw = path.read_bytes()
+            width = int(round(window["bounds"]["width"]))
+            height = int(round(window["bounds"]["height"]))
+            try:
+                image_rep = self.AppKit.NSBitmapImageRep.imageRepWithContentsOfFile_(str(path))
+                if image_rep is not None:
+                    width = int(image_rep.pixelsWide())
+                    height = int(image_rep.pixelsHigh())
+            except Exception:
+                pass
+            cached = {
+                "id": screenshot_id,
+                "windowKey": self._window_key(window),
+                "bounds": dict(window["bounds"]),
+                "imageWidth": width,
+                "imageHeight": height,
+                "created": time.monotonic(),
+                "path": str(path),
+            }
+            self._screenshot_cache[screenshot_id] = cached
+            if len(self._screenshot_cache) > 64:
+                oldest = sorted(self._screenshot_cache.items(), key=lambda item: item[1]["created"])[:16]
+                for old_id, old in oldest:
+                    self._screenshot_cache.pop(old_id, None)
+                    self._delete_cached_screenshot(old)
+            published = True
+            return {
+                "id": screenshot_id,
+                "width": width,
+                "height": height,
+                "originX": window["bounds"]["x"],
+                "originY": window["bounds"]["y"],
+                "zIndex": window.get("zIndex", 0),
+                "path": str(path),
+                "mimeType": "image/png",
+                "_image_base64": base64.b64encode(raw).decode("ascii"),
+            }
+        except subprocess.TimeoutExpired as error:
+            raise ToolError("macOS window capture timed out after 30 seconds; re-observe before retrying") from error
+        except ToolError:
+            raise
+        except OSError as error:
+            raise ToolError(f"macOS could not read or publish the window screenshot: {error}") from error
+        finally:
+            if not published:
+                self._screenshot_cache.pop(screenshot_id, None)
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def tool_get_window_state(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
@@ -1002,14 +1029,17 @@ class MacOSBackend:
         raw = bytes(data)
         width = int(representation.pixelsWide())
         height = int(representation.pixelsHigh())
-        self._screenshot_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(self._screenshot_dir, 0o700)
-        except OSError:
-            pass
+        self._ensure_screenshot_dir()
         screenshot_id = uuid.uuid4().hex
         path = self._screenshot_dir / f"desktop-{screen['displayId']}-{screenshot_id}.png"
-        path.write_bytes(raw)
+        try:
+            path.write_bytes(raw)
+        except OSError as error:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise ToolError(f"macOS could not publish the desktop screenshot: {error}") from error
         cached = {
             "id": screenshot_id,
             "scope": "desktop",

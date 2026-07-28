@@ -105,6 +105,9 @@ desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
 `desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
 `get_desktop_state` returns one image and screenshot ID per active display so
 mixed Retina/non-Retina layouts do not share an incorrect global scale.
+Fallback screenshots are published only after complete capture/encoding inside
+a current-user-owned 0700 temporary directory. Timeouts and failed window or
+desktop captures delete any unpublished partial PNG immediately.
 For raw mouse tools, a `screenshotId` without `window` binds the supplied
 coordinates to that exact fresh desktop image; it is never silently ignored.
 When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
