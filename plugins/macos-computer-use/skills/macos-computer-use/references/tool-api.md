@@ -143,6 +143,13 @@ cannot be delivered. The response carries `delivered_chars` and
 `retry_from_character`; all prior observation handles are expired, so refresh
 state and send only that remaining suffix.
 
+Fallback `clipboard_set` verifies an exact pasteboard read-back before returning
+`effect:"confirmed"`. A clear-then-write failure is reported as
+`code:"clipboard_update_incomplete"`, `effect:"partial"`, and
+`clipboard_cleared:true`; call `clipboard_get` before any retry. A successful
+write whose read-back differs uses `clipboard_verification_mismatch` with the
+same partial-effect semantics.
+
 Every fallback input attempt conservatively expires its prior window or desktop
 observation even when native delivery raises. Key-down and mouse-down events are
 registered before posting; matching releases are retried immediately and again

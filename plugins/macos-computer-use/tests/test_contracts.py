@@ -444,6 +444,56 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
         self.assertEqual(expired, [window])
 
+    def test_clipboard_set_verifies_the_exact_written_text(self):
+        class Pasteboard:
+            value = "old"
+
+            def clearContents(self):
+                self.value = None
+
+            def setString_forType_(self, value, _value_type):
+                self.value = value
+                return True
+
+            def stringForType_(self, _value_type):
+                return self.value
+
+        pasteboard = Pasteboard()
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSPasteboard=types.SimpleNamespace(generalPasteboard=lambda: pasteboard),
+            NSPasteboardTypeString="public.utf8-plain-text",
+        )
+        result = backend.tool_clipboard_set({"text": "你好\nMac"})
+        self.assertEqual(pasteboard.value, "你好\nMac")
+        self.assertEqual(
+            result,
+            {"ok": True, "characters": 6, "effect": "confirmed", "verified": True},
+        )
+
+    def test_clipboard_set_reports_clear_then_write_failure_as_partial(self):
+        class Pasteboard:
+            value = "old"
+
+            def clearContents(self):
+                self.value = None
+
+            def setString_forType_(self, _value, _value_type):
+                return False
+
+        pasteboard = Pasteboard()
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSPasteboard=types.SimpleNamespace(generalPasteboard=lambda: pasteboard),
+            NSPasteboardTypeString="public.utf8-plain-text",
+        )
+        with self.assertRaises(ToolError) as caught:
+            backend.tool_clipboard_set({"text": "replacement"})
+        self.assertIsNone(pasteboard.value)
+        self.assertEqual(caught.exception.structured_content["code"], "clipboard_update_incomplete")
+        self.assertEqual(caught.exception.structured_content["effect"], "partial")
+        self.assertTrue(caught.exception.structured_content["clipboard_cleared"])
+
     def test_failed_window_action_expires_its_observation(self):
         backend = MacOSBackend()
         window = {"id": 8, "pid": 80}

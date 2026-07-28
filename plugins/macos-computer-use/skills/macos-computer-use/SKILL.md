@@ -163,6 +163,13 @@ Fallback text can also return an MCP error with structured
 have already expired: re-observe and retry only the suffix beginning at
 `retry_from_character`, never the original full text.
 
+Fallback `clipboard_set` reads the pasteboard back and returns
+`effect:"confirmed"` only for an exact match. If the clear succeeds but the
+write or read-back fails, treat `effect:"partial"` plus
+`code:"clipboard_update_incomplete"` or `clipboard_verification_mismatch` as a
+changed clipboard: inspect it with `clipboard_get` before deciding whether to
+retry.
+
 Because fallback input is foreground delivery, call `activate_window` before
 its first input (or after a Space/focus change), then capture a new
 `get_window_state` and ground the action in that post-activation state. Do not

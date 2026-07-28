@@ -1784,8 +1784,66 @@ class MacOSBackend:
     def tool_clipboard_set(self, arguments: dict[str, Any]) -> dict[str, Any]:
         A = self.AppKit
         pasteboard = A.NSPasteboard.generalPasteboard()
-        pasteboard.clearContents()
-        ok = bool(pasteboard.setString_forType_(str(arguments["text"]), A.NSPasteboardTypeString))
-        if not ok:
-            raise ToolError("macOS rejected the clipboard update")
-        return {"ok": True, "characters": len(str(arguments["text"]))}
+        text = str(arguments["text"])
+        try:
+            pasteboard.clearContents()
+        except Exception as error:
+            raise ToolError(
+                f"macOS could not clear the clipboard: {error}",
+                {
+                    "ok": False,
+                    "code": "clipboard_clear_failed",
+                    "effect": "unverifiable",
+                    "verified": False,
+                    "requested_chars": len(text),
+                },
+            ) from error
+        try:
+            accepted = bool(pasteboard.setString_forType_(text, A.NSPasteboardTypeString))
+        except Exception as error:
+            raise ToolError(
+                f"macOS cleared the clipboard but could not write the requested text: {error}",
+                {
+                    "ok": False,
+                    "code": "clipboard_update_incomplete",
+                    "effect": "partial",
+                    "verified": False,
+                    "clipboard_cleared": True,
+                    "requested_chars": len(text),
+                },
+            ) from error
+        if not accepted:
+            raise ToolError(
+                "macOS cleared the clipboard but rejected the requested text",
+                {
+                    "ok": False,
+                    "code": "clipboard_update_incomplete",
+                    "effect": "partial",
+                    "verified": False,
+                    "clipboard_cleared": True,
+                    "requested_chars": len(text),
+                },
+            )
+        try:
+            observed = pasteboard.stringForType_(A.NSPasteboardTypeString)
+        except Exception:
+            return {
+                "ok": True,
+                "characters": len(text),
+                "effect": "unverifiable",
+                "verified": False,
+            }
+        if observed is None or str(observed) != text:
+            raise ToolError(
+                "macOS accepted the clipboard write but the read-back did not match",
+                {
+                    "ok": False,
+                    "code": "clipboard_verification_mismatch",
+                    "effect": "partial",
+                    "verified": False,
+                    "clipboard_cleared": True,
+                    "requested_chars": len(text),
+                    "observed_chars": len(str(observed)) if observed is not None else 0,
+                },
+            )
+        return {"ok": True, "characters": len(text), "effect": "confirmed", "verified": True}
