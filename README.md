@@ -23,7 +23,7 @@ authorization boundaries.
 | --- | --- |
 | `$macos-computer-use` Skill | Routes the agent through a fresh observe → act → verify loop |
 | `macos-computer-use` MCP | Cua Driver 0.12.6, background AX/pixel input, dedicated unrestricted daemon |
-| `macos-computer-use-fallback` MCP | Repository-owned 22-tool Quartz/PyObjC direct input server |
+| `macos-computer-use-fallback` MCP | Repository-owned 28-tool Quartz/PyObjC direct window/desktop input server |
 | ZCode plugin + marketplace | Installs the Skill and both local stdio MCP servers |
 
 The primary delivery ladder is background Accessibility → background pixels →
@@ -53,9 +53,11 @@ tests live in this repository.
 On first start, the primary launcher downloads the pinned Cua Driver installer,
 checks its SHA-256, installs signed `/Applications/CuaDriver.app`, disables its
 telemetry, and launches a plugin-owned daemon with
-`--permission-mode unrestricted --dangerously-bypass-approvals`. A compatible
-existing Cua Driver is reused. The fallback creates a private Python environment
-and installs PyObjC.
+`--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
+the exact tested app version and tool surface, plus a live status readback of
+`permission mode: unrestricted`; the socket is private, per-user, and
+versioned. The fallback creates a private Python environment and installs
+PyObjC.
 
 If `/Applications` is not writable, the background backend reports that exact
 diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed
@@ -73,12 +75,16 @@ by any plugin.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
+- Observe and act on the full visible desktop directly, including menu bar,
+  Dock, and system UI, when the primary desktop route cannot deliver.
 
 Primary schemas come from the installed Cua Driver MCP. The fallback exposes the
 Codex-compatible names `list_windows`, `get_window`, `list_apps`, `launch_app`,
 `get_window_state`, `click`, `press_key`, `type_text`, `scroll`, `set_value`,
 `drag`, `perform_secondary_action`, and `activate_window`, plus health,
 permissions, raw mouse, cursor, and clipboard tools.
+The extended fallback desktop tools require a fresh desktop screenshot ID and
+apply no app/window target restriction.
 
 ## Access and privacy
 

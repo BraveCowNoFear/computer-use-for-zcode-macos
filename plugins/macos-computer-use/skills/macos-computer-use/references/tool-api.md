@@ -3,9 +3,10 @@
 ## Primary: Cua Driver background MCP
 
 The `macos-computer-use` MCP is the primary surface. It is pinned to the tested
-Cua Driver 0.12.6 contract at install time, while a compatible existing driver
-may be reused. Inspect `tools/list` for the live schemas instead of guessing
-optional fields.
+Cua Driver 0.12.6 contract at install time. An existing signed app is reused
+only when it is that exact version and exposes every required session,
+window, desktop, and input tool. Inspect `tools/list` for the live schemas
+instead of guessing optional fields.
 
 Common flow:
 
@@ -45,13 +46,17 @@ serve --permission-mode unrestricted --dangerously-bypass-approvals
 
 This removes Cua Driver's runtime human-approval prompts. It does not and cannot
 forge macOS TCC consent or remove capability limits compiled into a dependency.
+The launcher uses a per-user private, versioned socket and accepts the daemon
+only after `status` reports `permission mode: unrestricted`; a stale, standard,
+bounded, incompatible, or unknown daemon is stopped only on that plugin socket
+and replaced.
 `check_permissions({prompt:false})` is the MCP inspection call;
 `prompt:true` is deliberately refused by the dependency. The signed app's
 startup onboarding is responsible for requesting TCC grants.
 
 ## Fallback: direct Quartz/PyObjC MCP
 
-The `macos-computer-use-fallback` MCP ships 22 local tools. Its Codex-compatible
+The `macos-computer-use-fallback` MCP ships 28 local tools. Its Codex-compatible
 core is:
 
 | Tool | Required input | Purpose |
@@ -72,7 +77,9 @@ core is:
 
 Extended fallback tools: `computer_use_health`, `permission_status`,
 `request_permissions`, `move_mouse`, `mouse_down`, `mouse_up`,
-`get_cursor_position`, `clipboard_get`, and `clipboard_set`.
+`get_cursor_position`, `clipboard_get`, `clipboard_set`, plus the unrestricted
+desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
+`desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
 
 Fallback startup sequence:
 
@@ -101,6 +108,18 @@ Fallback screenshot IDs remain valid for five minutes and only for their
 window. Fallback AX indexes belong to the latest text observation for that
 window.
 
+For menu bar, Dock, desktop, or other system UI after the primary desktop route
+fails, use the fallback's own strict loop:
+
+```text
+get_desktop_state → one desktop_* action with its screenshotId
+→ get_desktop_state
+```
+
+The direct desktop actions are screen-wide and deliberately have no app or
+window allowlist. The screenshot ID is required and becomes invalid after the
+action, including keyboard/text actions.
+
 ## Installation and permissions
 
 The primary first-run launcher downloads the versioned upstream installer,
@@ -124,3 +143,6 @@ Source-checkout diagnostics:
 bash plugins/macos-computer-use/scripts/install.sh
 bash plugins/macos-computer-use/scripts/doctor.sh
 ```
+
+`doctor.sh` starts or reuses only the versioned plugin daemon, then prints its
+actual permission mode before checking the direct MCP runtime.

@@ -6,7 +6,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "Primary background backend:"
   MACOS_CUA_PLUGIN_ROOT="$ROOT" \
   MACOS_CUA_DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}" \
-    "$ROOT/scripts/run-cua-driver.sh" --prepare-only
+    "$ROOT/scripts/run-cua-driver.sh" --verify-runtime
   echo
 fi
 

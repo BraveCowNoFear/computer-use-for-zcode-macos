@@ -45,11 +45,28 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(hasattr(backend.ApplicationServices, "AXUIElementCreateApplication"))
         self.assertTrue(hasattr(backend.ApplicationServices, "AXIsProcessTrusted"))
         self.assertTrue(hasattr(backend.Quartz, "CGEventPost"))
+        self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
         self.assertTrue(hasattr(backend.AppKit, "NSWorkspace"))
+        self.assertTrue(hasattr(backend.AppKit, "NSBitmapImageFileTypePNG"))
 
     def test_codex_core_is_complete(self):
         self.assertTrue(CORE_CODEX_TOOL_NAMES.issubset(TOOL_NAMES))
         self.assertEqual(len(TOOL_NAMES), len(TOOL_DEFINITIONS))
+
+    def test_direct_desktop_fallback_surface_is_complete(self):
+        self.assertTrue(
+            {
+                "get_desktop_state",
+                "desktop_click",
+                "desktop_press_key",
+                "desktop_type_text",
+                "desktop_scroll",
+                "desktop_drag",
+            }.issubset(TOOL_NAMES)
+        )
+        definitions = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
+        for name in ("desktop_click", "desktop_press_key", "desktop_type_text", "desktop_scroll", "desktop_drag"):
+            self.assertIn("screenshotId", definitions[name]["inputSchema"]["required"])
 
     def test_tool_schemas_are_objects(self):
         for tool in TOOL_DEFINITIONS:
@@ -121,6 +138,20 @@ class ContractTests(unittest.TestCase):
             "path": str(PLUGIN_ROOT / "__never_created_test_shot__.png"),
         }
         self.assertEqual(backend._relative_point(window, 800, 600, "retina"), (500, 350))
+
+    def test_retina_desktop_pixels_map_to_quartz_screen_points(self):
+        backend = MacOSBackend()
+        backend._desktop_bounds = lambda: {"x": -800, "y": 0, "width": 1600, "height": 600}
+        backend._screenshot_cache["desktop"] = {
+            "scope": "desktop",
+            "windowKey": None,
+            "bounds": {"x": -800, "y": 0, "width": 1600, "height": 600},
+            "imageWidth": 3200,
+            "imageHeight": 1200,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_desktop_test_shot__.png"),
+        }
+        self.assertEqual(backend._desktop_relative_point(1600, 600, "desktop"), (0, 300))
 
     def test_state_changing_action_can_invalidate_observation_handles(self):
         backend = MacOSBackend()

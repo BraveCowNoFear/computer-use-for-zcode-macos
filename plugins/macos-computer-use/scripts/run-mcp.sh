@@ -5,10 +5,12 @@ set -euo pipefail
 
 ROOT="${MACOS_CUA_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}"
+source "$ROOT/scripts/runtime-common.sh"
+
 DEV_PYTHON="$ROOT/.venv/bin/python3"
 DATA_PYTHON="$DATA_DIR/venv/bin/python3"
 VERSION_FILE="$DATA_DIR/runtime-version"
-RUNTIME_VERSION="0.1.0"
+RUNTIME_VERSION="0.2.0"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
@@ -21,17 +23,8 @@ else
   mkdir -p "$DATA_DIR"
   if [[ ! -x "$DATA_PYTHON" ]] || [[ ! -f "$VERSION_FILE" ]] || [[ "$(<"$VERSION_FILE")" != "$RUNTIME_VERSION" ]]; then
     LOCK_DIR="$DATA_DIR/install.lock"
-    WAITED=0
-    until mkdir "$LOCK_DIR" 2>/dev/null; do
-      sleep 1
-      WAITED=$((WAITED + 1))
-      if [[ "$WAITED" -ge 240 ]]; then
-        echo "Timed out waiting for the macOS Computer Use dependency installer." >&2
-        exit 1
-      fi
-    done
-    cleanup_lock() { rmdir "$LOCK_DIR" 2>/dev/null || true; }
-    trap cleanup_lock EXIT
+    acquire_runtime_lock "$LOCK_DIR" "macOS Computer Use dependency installer" 240 5
+    trap 'release_runtime_lock "$LOCK_DIR"' EXIT
     if [[ ! -x "$DATA_PYTHON" ]] || [[ ! -f "$VERSION_FILE" ]] || [[ "$(<"$VERSION_FILE" 2>/dev/null || true)" != "$RUNTIME_VERSION" ]]; then
       echo "Preparing the local macOS Computer Use runtime..." >&2
       command -v python3 >/dev/null 2>&1 || {
@@ -42,7 +35,7 @@ else
       "$DATA_PYTHON" -m pip install --disable-pip-version-check --quiet -r "$ROOT/requirements.txt" >&2
       printf '%s' "$RUNTIME_VERSION" > "$VERSION_FILE"
     fi
-    cleanup_lock
+    release_runtime_lock "$LOCK_DIR"
     trap - EXIT
   fi
   PYTHON="$DATA_PYTHON"

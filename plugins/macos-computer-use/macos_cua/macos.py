@@ -250,7 +250,10 @@ class MacOSBackend:
     def _list_windows(self) -> list[dict[str, Any]]:
         self._require_native()
         Q = self.Quartz
-        options = Q.kCGWindowListOptionOnScreenOnly | Q.kCGWindowListExcludeDesktopElements
+        # Keep off-Space and minimized candidates available to the foreground
+        # fallback. Rehydration still proves the current id/app pair on every
+        # action, and screenshots/actions fail clearly if macOS cannot expose it.
+        options = Q.kCGWindowListOptionAll | Q.kCGWindowListExcludeDesktopElements
         infos = Q.CGWindowListCopyWindowInfo(options, Q.kCGNullWindowID) or []
         windows: list[dict[str, Any]] = []
         for z_index, info in enumerate(infos):
@@ -258,6 +261,7 @@ class MacOSBackend:
                 continue
             window = self._window_from_info(info, z_index)
             if window is not None and window["ownerName"] not in {"Window Server", "Dock"}:
+                window["onScreen"] = bool(info.get(Q.kCGWindowIsOnscreen, False))
                 windows.append(window)
         return windows
 
@@ -631,6 +635,112 @@ class MacOSBackend:
         accessibility = self._accessibility_state(window) if include_text else None
         return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
 
+    def _desktop_bounds(self) -> dict[str, float]:
+        screens = list(self.AppKit.NSScreen.screens() or [])
+        if not screens:
+            raise ToolError("macOS reports no active display")
+        main_frame = screens[0].frame()
+        main_height = float(main_frame.size.height)
+        rectangles: list[tuple[float, float, float, float]] = []
+        for screen in screens:
+            frame = screen.frame()
+            width = float(frame.size.width)
+            height = float(frame.size.height)
+            x = float(frame.origin.x)
+            # NSScreen is bottom-left-origin; Quartz input/window coordinates
+            # are top-left-origin relative to the main display.
+            y = main_height - (float(frame.origin.y) + height)
+            rectangles.append((x, y, width, height))
+        left = min(item[0] for item in rectangles)
+        top = min(item[1] for item in rectangles)
+        right = max(item[0] + item[2] for item in rectangles)
+        bottom = max(item[1] + item[3] for item in rectangles)
+        return {"x": left, "y": top, "width": right - left, "height": bottom - top}
+
+    def _capture_desktop(self) -> dict[str, Any]:
+        status = self._permission_status()
+        if not status["screenRecording"]:
+            raise ToolError("Screen Recording permission is not granted. Run request_permissions, grant it, and restart ZCode.")
+        Q = self.Quartz
+        A = self.AppKit
+        bounds = self._desktop_bounds()
+        rect = Q.CGRectMake(bounds["x"], bounds["y"], bounds["width"], bounds["height"])
+        image = Q.CGWindowListCreateImage(
+            rect,
+            Q.kCGWindowListOptionOnScreenOnly,
+            Q.kCGNullWindowID,
+            Q.kCGWindowImageDefault,
+        )
+        if image is None:
+            raise ToolError("macOS could not capture the visible desktop")
+        representation = A.NSBitmapImageRep.alloc().initWithCGImage_(image)
+        if representation is None:
+            raise ToolError("macOS could not encode the desktop screenshot")
+        data = representation.representationUsingType_properties_(A.NSBitmapImageFileTypePNG, {})
+        if data is None:
+            raise ToolError("macOS could not encode the desktop screenshot as PNG")
+        raw = bytes(data)
+        width = int(representation.pixelsWide())
+        height = int(representation.pixelsHigh())
+        self._screenshot_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self._screenshot_dir, 0o700)
+        except OSError:
+            pass
+        screenshot_id = uuid.uuid4().hex
+        path = self._screenshot_dir / f"desktop-{screenshot_id}.png"
+        path.write_bytes(raw)
+        cached = {
+            "id": screenshot_id,
+            "scope": "desktop",
+            "windowKey": None,
+            "bounds": bounds,
+            "imageWidth": width,
+            "imageHeight": height,
+            "created": time.monotonic(),
+            "path": str(path),
+        }
+        self._screenshot_cache[screenshot_id] = cached
+        return {
+            "id": screenshot_id,
+            "width": width,
+            "height": height,
+            "originX": bounds["x"],
+            "originY": bounds["y"],
+            "path": str(path),
+            "mimeType": "image/png",
+            "_image_base64": base64.b64encode(raw).decode("ascii"),
+        }
+
+    def tool_get_desktop_state(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        self._invalidate_all_observations()
+        screenshot = self._capture_desktop()
+        return {"scope": "desktop", "bounds": self._desktop_bounds(), "screenshots": [screenshot]}
+
+    def _validate_desktop_screenshot(self, screenshot_id: Any) -> dict[str, Any]:
+        cached = self._screenshot_cache.get(str(screenshot_id))
+        if cached is None or cached.get("scope") != "desktop":
+            raise ToolError("screenshotId is not the latest direct desktop observation; call get_desktop_state")
+        if time.monotonic() - float(cached["created"]) > 300:
+            raise ToolError("desktop screenshotId is stale; call get_desktop_state again")
+        current = self._desktop_bounds()
+        if any(abs(float(cached["bounds"][field]) - float(current[field])) > 1 for field in current):
+            raise ToolError("The desktop display layout changed after this screenshot; re-observe before acting")
+        return cached
+
+    def _desktop_relative_point(self, x: Any, y: Any, screenshot_id: Any) -> tuple[float, float]:
+        cached = self._validate_desktop_screenshot(screenshot_id)
+        rel_x, rel_y = float(x), float(y)
+        width = float(cached["imageWidth"])
+        height = float(cached["imageHeight"])
+        if not (0 <= rel_x <= width and 0 <= rel_y <= height):
+            raise ToolError(f"Desktop point ({rel_x}, {rel_y}) is outside {width}x{height}; re-observe")
+        bounds = cached["bounds"]
+        return (
+            float(bounds["x"]) + rel_x * float(bounds["width"]) / width,
+            float(bounds["y"]) + rel_y * float(bounds["height"]) / height,
+        )
+
     def _activate(self, window: dict[str, Any]) -> None:
         A = self.AppKit
         app = A.NSRunningApplication.runningApplicationWithProcessIdentifier_(int(window["pid"]))
@@ -799,7 +909,12 @@ class MacOSBackend:
     def tool_press_key(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
         self._activate(window)
-        key_code, modifiers = parse_key_chord(str(arguments["key"]))
+        self._send_key(str(arguments["key"]))
+        self._invalidate_window_observations(window)
+        return {"ok": True, "key": arguments["key"]}
+
+    def _send_key(self, key: str) -> None:
+        key_code, modifiers = parse_key_chord(key)
         flags = self._modifier_flags(modifiers)
         Q = self.Quartz
         down = Q.CGEventCreateKeyboardEvent(None, key_code, True)
@@ -810,13 +925,16 @@ class MacOSBackend:
         Q.CGEventSetFlags(up, flags)
         Q.CGEventPost(Q.kCGHIDEventTap, down)
         Q.CGEventPost(Q.kCGHIDEventTap, up)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "key": arguments["key"]}
 
     def tool_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
         self._activate(window)
         text = str(arguments["text"])
+        self._send_text(text)
+        self._invalidate_window_observations(window)
+        return {"ok": True, "characters": len(text)}
+
+    def _send_text(self, text: str) -> None:
         Q = self.Quartz
         for offset in range(0, len(text), 32):
             chunk = text[offset : offset + 32]
@@ -829,8 +947,6 @@ class MacOSBackend:
             Q.CGEventKeyboardSetUnicodeString(up, utf16_length, chunk)
             Q.CGEventPost(Q.kCGHIDEventTap, down)
             Q.CGEventPost(Q.kCGHIDEventTap, up)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "characters": len(text)}
 
     def tool_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
@@ -910,6 +1026,72 @@ class MacOSBackend:
             raise ToolError(f"Accessibility action failed: {matched}")
         self._invalidate_window_observations(window)
         return {"ok": True, "action": matched, "element_index": int(arguments["element_index"])}
+
+    def tool_desktop_click(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
+        button_name = str(arguments.get("mouse_button", "left"))
+        count = int(arguments.get("click_count", 1))
+        button, down, up, _dragged = self._button(button_name)
+        for click_number in range(1, count + 1):
+            self._post_mouse(down, button, x, y, click_number)
+            self._post_mouse(up, button, x, y, click_number)
+            if click_number < count:
+                time.sleep(0.08)
+        self._invalidate_all_observations()
+        return {"ok": True, "screenPoint": {"x": x, "y": y}, "click_count": count}
+
+    def tool_desktop_press_key(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        self._validate_desktop_screenshot(arguments["screenshotId"])
+        self._send_key(str(arguments["key"]))
+        self._invalidate_all_observations()
+        return {"ok": True, "key": arguments["key"]}
+
+    def tool_desktop_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        self._validate_desktop_screenshot(arguments["screenshotId"])
+        text = str(arguments["text"])
+        self._send_text(text)
+        self._invalidate_all_observations()
+        return {"ok": True, "characters": len(text)}
+
+    def tool_desktop_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
+        Q = self.Quartz
+        event = Q.CGEventCreateScrollWheelEvent(
+            None,
+            Q.kCGScrollEventUnitPixel,
+            2,
+            int(round(-float(arguments["scrollY"]))),
+            int(round(-float(arguments["scrollX"]))),
+        )
+        if event is None:
+            raise ToolError("macOS could not create a desktop scroll event")
+        Q.CGEventSetLocation(event, (x, y))
+        Q.CGEventPost(Q.kCGHIDEventTap, event)
+        self._invalidate_all_observations()
+        return {"ok": True, "screenPoint": {"x": x, "y": y}}
+
+    def tool_desktop_drag(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        start = self._desktop_relative_point(
+            arguments["from_x"], arguments["from_y"], arguments["screenshotId"]
+        )
+        end = self._desktop_relative_point(
+            arguments["to_x"], arguments["to_y"], arguments["screenshotId"]
+        )
+        duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
+        button, down, up, dragged = self._button("left")
+        self._post_mouse(down, button, *start)
+        steps = max(1, min(300, int(duration * 60)))
+        delay = duration / steps if steps else 0
+        for step in range(1, steps + 1):
+            fraction = step / steps
+            x = start[0] + (end[0] - start[0]) * fraction
+            y = start[1] + (end[1] - start[1]) * fraction
+            self._post_mouse(dragged, button, x, y)
+            if delay:
+                time.sleep(delay)
+        self._post_mouse(up, button, *end)
+        self._invalidate_all_observations()
+        return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
 
     def _cursor(self) -> tuple[float, float]:
         Q = self.Quartz

@@ -82,6 +82,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "get_desktop_state",
+        "description": "Capture the complete visible macOS desktop for direct menu bar, Dock, desktop, and system UI control.",
+        "inputSchema": _object({}),
+    },
+    {
         "name": "click",
         "description": "Click a window-relative coordinate or an indexed element from the latest Accessibility state.",
         "inputSchema": _object(
@@ -158,6 +163,65 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "activate_window",
         "description": "Bring a returned window and its owning app to the foreground.",
         "inputSchema": _object({"window": WINDOW_SCHEMA}, ["window"]),
+    },
+    {
+        "name": "desktop_click",
+        "description": "Click a coordinate from the latest direct desktop screenshot without an app/window restriction.",
+        "inputSchema": _object(
+            {
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+                "screenshotId": {"type": "string"},
+                "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"},
+                "click_count": {"type": "integer", "minimum": 1, "maximum": 4, "default": 1},
+            },
+            ["x", "y", "screenshotId"],
+        ),
+    },
+    {
+        "name": "desktop_press_key",
+        "description": "Press a macOS key chord into the current desktop focus after a fresh desktop observation.",
+        "inputSchema": _object(
+            {"key": {"type": "string"}, "screenshotId": {"type": "string"}},
+            ["key", "screenshotId"],
+        ),
+    },
+    {
+        "name": "desktop_type_text",
+        "description": "Type literal Unicode into the current desktop focus after a fresh desktop observation.",
+        "inputSchema": _object(
+            {"text": {"type": "string"}, "screenshotId": {"type": "string"}},
+            ["text", "screenshotId"],
+        ),
+    },
+    {
+        "name": "desktop_scroll",
+        "description": "Scroll at a coordinate from the latest complete desktop screenshot.",
+        "inputSchema": _object(
+            {
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+                "scrollX": {"type": "number"},
+                "scrollY": {"type": "number"},
+                "screenshotId": {"type": "string"},
+            },
+            ["x", "y", "scrollX", "scrollY", "screenshotId"],
+        ),
+    },
+    {
+        "name": "desktop_drag",
+        "description": "Drag between two coordinates from the latest complete desktop screenshot.",
+        "inputSchema": _object(
+            {
+                "from_x": {"type": "number"},
+                "from_y": {"type": "number"},
+                "to_x": {"type": "number"},
+                "to_y": {"type": "number"},
+                "duration": {"type": "number", "minimum": 0, "maximum": 30, "default": 0.35},
+                "screenshotId": {"type": "string"},
+            },
+            ["from_x", "from_y", "to_x", "to_y", "screenshotId"],
+        ),
     },
     {
         "name": "move_mouse",

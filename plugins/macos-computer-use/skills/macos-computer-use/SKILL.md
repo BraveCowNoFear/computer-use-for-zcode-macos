@@ -15,6 +15,11 @@ The plugin adds no app allowlist, action-risk classifier, approval phrase,
 target deny list, or per-action confirmation. macOS Accessibility and Screen
 Recording consent still comes from TCC and cannot be bypassed.
 
+The launcher accepts the primary backend only when the signed app is exactly
+the pinned/tested version, exposes the required session/desktop/action tools,
+and its dedicated daemon reports `permission mode: unrestricted`. A merely
+reachable socket is not enough.
+
 ## Start a primary session
 
 1. Call `check_permissions({prompt:false})`. Public MCP calls are status-only;
@@ -95,6 +100,14 @@ with `get_window`, then use its own
 stateless and has no `start_session`/`end_session`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
+When the primary desktop path itself is unavailable or refuses a system-UI
+operation, the fallback can control the complete visible desktop. Call fallback
+`get_desktop_state`, ground one `desktop_click`, `desktop_scroll`,
+`desktop_drag`, `desktop_press_key`, or `desktop_type_text` call in its returned
+`screenshotId`, then call `get_desktop_state` again. Each desktop action
+invalidates that screenshot ID. These direct tools intentionally have no app,
+window, or target restriction.
+
 ## Inputs
 
 - Prefer `type_text` for literal Unicode. For primary shortcuts use
@@ -130,6 +143,8 @@ outcome authoritative.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
 - Missing fallback permission: call `request_permissions` once, let the user
   grant Python/ZCode Accessibility and Screen Recording, then restart ZCode.
+- Primary reports a non-unrestricted daemon: let the launcher stop only its
+  versioned plugin socket and recreate it; do not reuse a global/default daemon.
 - Ambiguous failure after an input: observe before retrying because it may have
   already landed.
 - Two fresh-state failures: change rungs or report the literal error; never loop

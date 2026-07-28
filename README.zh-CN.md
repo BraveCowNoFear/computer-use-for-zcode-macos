@@ -21,7 +21,7 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 | --- | --- |
 | `$macos-computer-use` Skill | 强制使用最新状态完成“观察 → 动作 → 验证” |
 | `macos-computer-use` MCP | Cua Driver 0.12.6；后台 AX/像素输入；独立 unrestricted 守护进程 |
-| `macos-computer-use-fallback` MCP | 项目自带的 22 工具 Quartz/PyObjC 直接输入服务 |
+| `macos-computer-use-fallback` MCP | 项目自带的 28 工具 Quartz/PyObjC 窗口/桌面直接输入服务 |
 | ZCode Plugin + marketplace | 安装 Skill 和两个本地 stdio MCP Server |
 
 动作升级顺序是：后台辅助功能 → 后台像素 → 临时前台 → 原生直接兜底。该
@@ -46,8 +46,9 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 第一次启动时，主启动器会下载固定版本的 Cua Driver 安装器，校验 SHA-256，
 安装签名的 `/Applications/CuaDriver.app`，关闭其遥测，然后以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
-专用守护进程。已安装且接口兼容的 Cua Driver 会直接复用。兜底后端会创建
-私有 Python 环境并安装 PyObjC。
+专用守护进程。只有版本和工具面与测试版本完全一致，并且实时状态回读为
+`permission mode: unrestricted` 时才会复用；专用 socket 按用户和版本隔离且仅
+当前用户可访问。兜底后端会创建私有 Python 环境并安装 PyObjC。
 
 如果当前用户不能写入 `/Applications`，主后端会给出明确诊断，原生兜底仍
 可使用。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。
@@ -62,12 +63,15 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 - 对支持的 Chromium/Electron 页面使用带类型的浏览器工具，同时用原生工具
   控制浏览器外壳、文件选择器和权限弹窗。
 - 最后兜底到真实全局鼠标/键盘事件以及剪贴板读写。
+- 主后端桌面路径无法送达时，直接观察并控制完整可见桌面，包括菜单栏、Dock
+  和系统 UI。
 
 主后端的准确参数以实时 MCP schema 为准。兜底后端提供与 Codex 对齐的
 `list_windows`、`get_window`、`list_apps`、`launch_app`、
 `get_window_state`、`click`、`press_key`、`type_text`、`scroll`、
 `set_value`、`drag`、`perform_secondary_action`、`activate_window`，另有健康
 检查、权限、原始鼠标、光标和剪贴板工具。
+扩展桌面工具必须绑定刚返回的桌面截图 ID，但不会施加 App/窗口目标限制。
 
 ## 完全访问与隐私
 
