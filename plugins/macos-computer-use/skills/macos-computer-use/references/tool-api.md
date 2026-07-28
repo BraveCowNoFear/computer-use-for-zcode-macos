@@ -103,6 +103,13 @@ server.
 | `perform_secondary_action` | `window`, index, `action` | Run listed AX action. |
 | `activate_window` | `window` | Bring app/window forward. |
 
+Fallback `press_key` covers F1-F20, arrows, punctuation, shifted keysyms, and
+the numeric keypad. It also accepts common aliases (`Spacebar`, `Del`,
+`Insert`, `Prior`, `Next`, `Caps_Lock`) and `KP_*` navigation/equal/delete
+variants. Modifier chords post physical modifier down/up events around the
+primary key, retain exact pending releases for shutdown cleanup, and never
+same-call replay a primary release that already exhausted its retry.
+
 Fallback `launch_app` accepts a bundle ID, display name, or `.app` path. User
 paths such as `~/Applications/Foo.app` are expanded and resolved before both
 the macOS launch request and process matching.

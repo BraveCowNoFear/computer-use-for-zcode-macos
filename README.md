@@ -87,7 +87,9 @@ omitting screenshots; pixel and desktop routes still require it.
   value types, help, placeholders, identifiers, and advertised actions.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll.
-- Type Unicode, press Mac shortcuts, and set Accessibility values.
+- Type Unicode, press Mac shortcuts with real modifier down/up transitions,
+  accept common X11/macOS and keypad-navigation key aliases, and set
+  Accessibility values.
 - Keep normal app work in the background; escalate to foreground only after a
   verified delivery failure.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining

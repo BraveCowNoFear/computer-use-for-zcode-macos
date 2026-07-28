@@ -64,6 +64,11 @@ class ContractTests(unittest.TestCase):
         )
         self.assertTrue(hasattr(backend.ApplicationServices, "AXIsProcessTrusted"))
         self.assertTrue(hasattr(backend.Quartz, "CGEventPost"))
+        modifier_event = backend.Quartz.CGEventCreateKeyboardEvent(None, 55, True)
+        self.assertIsNotNone(modifier_event)
+        backend.Quartz.CGEventSetFlags(
+            modifier_event, backend.Quartz.kCGEventFlagMaskCommand
+        )
         self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
         self.assertTrue(hasattr(backend.AppKit, "NSWorkspace"))
         self.assertTrue(hasattr(backend.AppKit, "NSBitmapImageFileTypePNG"))
@@ -1046,9 +1051,133 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(parse_key_chord("Command+plus"), (24, {"command", "shift"}))
         self.assertEqual(parse_key_chord("Meta_L+colon"), (41, {"command", "shift"}))
         self.assertEqual(parse_key_chord("ISO_Left_Tab"), (48, {"shift"}))
+        aliases = {
+            "Spacebar": 49,
+            "Del": 117,
+            "Insert": 114,
+            "Prior": 116,
+            "Next": 121,
+            "Caps_Lock": 57,
+            "KP_Equal": 81,
+            "KP_Delete": 65,
+            "KP_Home": 115,
+            "KP_Left": 123,
+            "KP_Page_Up": 116,
+            "KP_Next": 121,
+            "KP_End": 119,
+            "KP_Insert": 114,
+        }
+        for alias, expected_code in aliases.items():
+            self.assertEqual(parse_key_chord(alias), (expected_code, set()), alias)
         for symbol in "!@#$%^&*()_{}|:\"<>?~":
             _, modifiers = parse_key_chord(symbol)
             self.assertEqual(modifiers, {"shift"}, symbol)
+
+    def test_key_chord_posts_human_like_modifier_transitions(self):
+        class Event:
+            def __init__(self, code, down):
+                self.code = code
+                self.down = down
+                self.flags = 0
+
+        posts = []
+
+        def set_flags(event, flags):
+            event.flags = flags
+
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            kCGEventFlagMaskCommand=1,
+            kCGEventFlagMaskControl=2,
+            kCGEventFlagMaskShift=4,
+            kCGEventFlagMaskAlternate=8,
+            CGEventCreateKeyboardEvent=lambda _source, code, down: Event(code, down),
+            CGEventSetFlags=set_flags,
+            CGEventPost=lambda _tap, event: posts.append((event.code, event.down, event.flags)),
+        )
+        backend._send_key("Command+Shift+a")
+        self.assertEqual(
+            posts,
+            [
+                (55, True, 1),
+                (56, True, 5),
+                (0, True, 5),
+                (0, False, 5),
+                (56, False, 5),
+                (55, False, 1),
+            ],
+        )
+        self.assertEqual(backend._held_key_releases, [])
+
+    def test_key_chord_creation_failure_releases_posted_modifiers(self):
+        class Event:
+            def __init__(self, code, down):
+                self.code = code
+                self.down = down
+                self.flags = 0
+
+        posts = []
+
+        def create(_source, code, down):
+            return None if code == 0 and down else Event(code, down)
+
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            kCGEventFlagMaskCommand=1,
+            kCGEventFlagMaskControl=2,
+            kCGEventFlagMaskShift=4,
+            kCGEventFlagMaskAlternate=8,
+            CGEventCreateKeyboardEvent=create,
+            CGEventSetFlags=lambda event, flags: setattr(event, "flags", flags),
+            CGEventPost=lambda _tap, event: posts.append((event.code, event.down, event.flags)),
+        )
+        with self.assertRaisesRegex(ToolError, "primary keyboard events"):
+            backend._send_key("Command+Shift+a")
+        self.assertEqual(
+            posts,
+            [(55, True, 1), (56, True, 5), (56, False, 5), (55, False, 1)],
+        )
+        self.assertEqual(backend._held_key_releases, [])
+
+    def test_key_chord_does_not_immediately_replay_a_failed_primary_release(self):
+        class Event:
+            def __init__(self, code, down):
+                self.code = code
+                self.down = down
+                self.flags = 0
+
+        posts = []
+        primary_up_failures = 2
+
+        def post(_tap, event):
+            nonlocal primary_up_failures
+            posts.append((event.code, event.down, event.flags))
+            if event.code == 0 and not event.down and primary_up_failures:
+                primary_up_failures -= 1
+                raise RuntimeError("injected primary key-up failure")
+
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            kCGEventFlagMaskCommand=1,
+            kCGEventFlagMaskControl=2,
+            kCGEventFlagMaskShift=4,
+            kCGEventFlagMaskAlternate=8,
+            CGEventCreateKeyboardEvent=lambda _source, code, down: Event(code, down),
+            CGEventSetFlags=lambda event, flags: setattr(event, "flags", flags),
+            CGEventPost=post,
+        )
+        with self.assertRaisesRegex(ToolError, "injected primary key-up failure") as caught:
+            backend._send_key("Command+a")
+        self.assertEqual(caught.exception.structured_content["code"], "key_release_incomplete")
+        self.assertEqual(sum(code == 0 and not down for code, down, _flags in posts), 2)
+        self.assertIn((55, False, 1), posts)
+        self.assertEqual(len(backend._held_key_releases), 1)
+        backend.close()
+        self.assertEqual(sum(code == 0 and not down for code, down, _flags in posts), 3)
+        self.assertEqual(backend._held_key_releases, [])
 
     def test_retina_screenshot_pixels_map_to_logical_window_points(self):
         backend = MacOSBackend()

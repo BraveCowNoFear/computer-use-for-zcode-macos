@@ -245,6 +245,10 @@ These direct tools intentionally have no app, window, or target restriction.
   `hotkey({session,pid,window_id,keys:["cmd","c"]})`; for one key use
   `press_key({session,pid,window_id,key:"return",modifiers:[]})`. The fallback
   instead accepts one `+`-separated chord such as `Command+c` in `press_key`.
+  It recognizes `Spacebar`, `Del`, `Insert`, `Prior`, `Next`, `Caps_Lock`, and
+  `KP_*` navigation aliases, and posts real modifier down/up transitions. If a
+  release is partial, do not replay the shortcut; cleanup retains and releases
+  the exact pending native event.
 - Focus or select the intended text field from fresh state before typing.
 - For a closed pop-up, combo box, or menu, open it first and re-observe the
   expanded state before choosing an item or typing. Never send selection keys

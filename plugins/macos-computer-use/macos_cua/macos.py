@@ -55,6 +55,7 @@ MAX_SCREENSHOT_DIMENSION = 1280
 MIN_SCREENSHOT_SCALE = 0.25
 SCREENSHOT_RESIZE_STEP = 0.85
 SCREENSHOT_RESIZE_TIMEOUT_SECONDS = 5
+MODIFIER_KEY_ORDER = ("command", "control", "option", "shift")
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -100,7 +101,9 @@ KEY_CODES: dict[str, int] = {
 
 KEY_ALIASES: dict[str, str] = {
     "enter": "return", "esc": "escape", "backspace": "delete", "back_space": "delete",
-    "forward_delete": "forwarddelete", "page_up": "pageup", "page_down": "pagedown",
+    "del": "forwarddelete", "forward_delete": "forwarddelete", "insert": "help",
+    "spacebar": "space", "prior": "pageup", "page_up": "pageup",
+    "next": "pagedown", "page_down": "pagedown", "caps_lock": "capslock",
     "arrowleft": "left", "arrowright": "right", "arrowup": "up", "arrowdown": "down",
     "period": ".", "comma": ",", "slash": "/", "backslash": "\\", "minus": "-",
     "hyphen": "-", "equal": "=", "equals": "=", "semicolon": ";", "apostrophe": "'",
@@ -110,6 +113,11 @@ KEY_ALIASES: dict[str, str] = {
     "numpad_8": "kp_8", "numpad_9": "kp_9", "numpad_add": "kp_add",
     "numpad_subtract": "kp_subtract", "numpad_multiply": "kp_multiply",
     "numpad_divide": "kp_divide", "numpad_decimal": "kp_decimal", "numpad_enter": "kp_enter",
+    "numpad_equal": "kp_equals", "numpad_equals": "kp_equals", "numpad_clear": "kp_clear",
+    "kp_equal": "kp_equals", "kp_delete": "kp_decimal", "kp_home": "home",
+    "kp_left": "left", "kp_up": "up", "kp_right": "right", "kp_down": "down",
+    "kp_prior": "pageup", "kp_page_up": "pageup", "kp_next": "pagedown",
+    "kp_page_down": "pagedown", "kp_end": "end", "kp_insert": "help",
 }
 
 MODIFIER_ALIASES: dict[str, str] = {
@@ -1763,16 +1771,67 @@ class MacOSBackend:
 
     def _send_key(self, key: str) -> None:
         key_code, modifiers = parse_key_chord(key)
-        flags = self._modifier_flags(modifiers)
         Q = self.Quartz
-        down = Q.CGEventCreateKeyboardEvent(None, key_code, True)
-        up = Q.CGEventCreateKeyboardEvent(None, key_code, False)
-        if down is None or up is None:
-            raise ToolError("macOS could not create a keyboard event")
-        Q.CGEventSetFlags(down, flags)
-        Q.CGEventSetFlags(up, flags)
-        self._post_key_down(down, up)
-        self._post_key_up(up)
+        active_flags = 0
+        cleanup_releases: list[tuple[Any, int | None]] = []
+        failed_releases: set[int] = set()
+        action_error: BaseException | None = None
+        cleanup_error: BaseException | None = None
+
+        def event_pair(code: int, description: str) -> tuple[Any, Any]:
+            down = Q.CGEventCreateKeyboardEvent(None, code, True)
+            up = Q.CGEventCreateKeyboardEvent(None, code, False)
+            if down is None or up is None:
+                raise ToolError(f"macOS could not create {description} keyboard events")
+            return down, up
+
+        try:
+            # Post real modifier transitions as well as flags. Some native,
+            # Catalyst, and game-style event loops ignore a flags-only chord.
+            for modifier in MODIFIER_KEY_ORDER:
+                if modifier not in modifiers:
+                    continue
+                flag = self._modifier_flags({modifier})
+                down, up = event_pair(KEY_CODES[modifier], modifier)
+                next_flags = active_flags | flag
+                Q.CGEventSetFlags(down, next_flags)
+                Q.CGEventSetFlags(up, next_flags)
+                active_flags = next_flags
+                cleanup_releases.append((up, flag))
+                self._post_key_down(down, up)
+
+            down, up = event_pair(key_code, "primary")
+            Q.CGEventSetFlags(down, active_flags)
+            Q.CGEventSetFlags(up, active_flags)
+            cleanup_releases.append((up, None))
+            self._post_key_down(down, up)
+            try:
+                self._post_key_up(up)
+            except BaseException:
+                # _post_key_up already retried; retain this exact event for
+                # close() rather than silently issuing another immediate up.
+                failed_releases.add(id(up))
+                raise
+        except BaseException as error:
+            action_error = error
+        finally:
+            for up, flag in reversed(cleanup_releases):
+                is_held = any(held is up for held in self._held_key_releases)
+                if is_held and id(up) not in failed_releases:
+                    try:
+                        Q.CGEventSetFlags(up, active_flags)
+                        self._post_key_up(up)
+                    except BaseException as error:
+                        failed_releases.add(id(up))
+                        if cleanup_error is None:
+                            cleanup_error = error
+                if flag is not None:
+                    active_flags &= ~flag
+
+        if action_error is not None:
+            raise action_error
+        if cleanup_error is not None:
+            raise cleanup_error
 
     def _forget_key_release(self, up: Any) -> None:
         for index, held in enumerate(self._held_key_releases):
