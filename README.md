@@ -61,6 +61,8 @@ configured; the socket is private, per-user, and versioned. The fallback
 requires CPython 3.10 through 3.15, creates a private
 environment, and installs the complete exact-tested five-package PyObjC 12.2.1
 binary-wheel closure without dependency re-resolution.
+All published CPython 3.10–3.15 wheel variants are allowlisted by SHA-256, and
+pip runs in hash-required mode.
 
 If `/Applications` is not writable, the background backend reports that exact
 diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed

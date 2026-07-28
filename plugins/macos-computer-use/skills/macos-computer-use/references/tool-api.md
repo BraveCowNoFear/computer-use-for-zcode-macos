@@ -145,6 +145,8 @@ disables upstream telemetry. It may need the current macOS user to have write
 access to `/Applications`. The fallback requires CPython 3.10 through 3.15, creates
 a private Python environment, and installs the exact tested PyObjC 12.2.1
 five-package binary-wheel closure with dependency resolution disabled.
+Every supported wheel variant is pinned by its PyPI SHA-256 and installation
+uses hash-required mode.
 
 Required macOS grants:
 

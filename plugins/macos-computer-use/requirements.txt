@@ -1,5 +1,50 @@
-pyobjc-core==12.2.1; sys_platform == "darwin"
-pyobjc-framework-Cocoa==12.2.1; sys_platform == "darwin"
-pyobjc-framework-CoreText==12.2.1; sys_platform == "darwin"
-pyobjc-framework-Quartz==12.2.1; sys_platform == "darwin"
-pyobjc-framework-ApplicationServices==12.2.1; sys_platform == "darwin"
+pyobjc-core==12.2.1; sys_platform == "darwin" \
+    --hash=sha256:aa5c889961d79d7704f17eeb27f80ee791335819c1bb14babeff7b9ea665b5f0 \
+    --hash=sha256:24b76a63caf0b5369d4a377c7c0438cd70df81539057af3db839bfaa3579e04a \
+    --hash=sha256:a64232bb27ed101d4adc7d42b0e64a6d3331aac7bee7861c037a6777a163f10b \
+    --hash=sha256:af101222762665a4125157906cb4b23f5d5a63d3851d5e0504f72a1eaaa2cfd2 \
+    --hash=sha256:efe465e3ecc6fc73f7c7622620345d134a8d34564ab1c29d8247e45f4ed55071 \
+    --hash=sha256:2b8fc0531c27277325e113ac00b8a72a82e6145f0a88175b9425d8de814ff69a \
+    --hash=sha256:9bef500f979e22d54f9da3aaebf6a48f873234b324858bd69256055a318955c7 \
+    --hash=sha256:047c226eeb58a2993ace5e8904e71cc9426ee20d064c617f8fbf32717d37093e \
+    --hash=sha256:1188613805336270279570467e4455b74cb6c0f60913ac74c917ee1c37cfaecb
+pyobjc-framework-Cocoa==12.2.1; sys_platform == "darwin" \
+    --hash=sha256:05443c1494532779cccff83e9792fdd6f0a4800cac56620132bf28e0bf966e9d \
+    --hash=sha256:dc6da84f4fc62cc25463bbb85e77a57b8d5ac6caf9a60702daf2edb601332f15 \
+    --hash=sha256:28b9b8bab1c36efb94744786918752d0c1842f5fbb67e7d5ca97b5f736512080 \
+    --hash=sha256:3b74a78fa7803e547b32e5e8ec1b49987b52fe318383e793bc6cd49b80efbd9f \
+    --hash=sha256:dc2eaca2f13c7bcd8e41e51a372e47825dea9dd3126108760eed7ba883d2945c \
+    --hash=sha256:b386c324d64ae565c1f6b7dfb77be68f640a1c7c23caa6966ab661131f519561 \
+    --hash=sha256:a6c584e2af0813cb2f6103b184e632665a26f58c1bd5b08ffd6e95a19c617f7b \
+    --hash=sha256:b6023657b8d6cc049a21bd6b4752425f2f53c42f9f0b02d64c7608cc484bf103 \
+    --hash=sha256:c685ccd8e266a07cf912a2c5a13b1f2eff2a868a1aff163b4801b4687bd425e1
+pyobjc-framework-CoreText==12.2.1; sys_platform == "darwin" \
+    --hash=sha256:ae7eb1943fb8f1acf9fefdd76fe74751d05beaf4dff1c989cf9237b117a66d6e \
+    --hash=sha256:02a448675d28005fdb88fb3c585572b02871e9e5d4d08f88334ec937ea5de6e7 \
+    --hash=sha256:ac2ead13dfa4379a1566129d0e8a8ea778a2bcac9ac360a583360fd4f1ba39c6 \
+    --hash=sha256:5c5a3c6e2d905a17efb15572dad97ce582feeab5c3b92537015445e0e0bb46de \
+    --hash=sha256:5c979058c77df8cd3dac5fd7db4c484f9886fbe09e2687bfaf269a856f631f78 \
+    --hash=sha256:d0b3b0467a23dbc2a39d0839e7100cc98b429fb7d52a471bd65477f46bb4c9e5 \
+    --hash=sha256:3d4a92fa657180cd0e900b98535da4f0f4d8c76a7077730a507e50d52d2853e3 \
+    --hash=sha256:7a17034fd0a08cf58323b7234a385ce0ec355509d414df69e3f8f88df26de1fc \
+    --hash=sha256:28980144af75598654f6997b2bbb427885f4f5df90aa4d840f452ba5778ab155
+pyobjc-framework-Quartz==12.2.1; sys_platform == "darwin" \
+    --hash=sha256:c8fed57ac8a1927e4fe4f48ab4042cbc1087d881743182b6f3f2e6e227a9209f \
+    --hash=sha256:60f29408b4f9ed5391a29c6b63e2aa56ddfb8b66b3fb47962930427981e14462 \
+    --hash=sha256:de9c8cca7e95290c8d540466af11c7cdfe3a5458e6f56c34006d5b45243f9ed9 \
+    --hash=sha256:54c9bc7f507192691841ee4eba5bf36990b259df83ac728efed2d7ea1cd021e4 \
+    --hash=sha256:bfc0d2badd819823d21df8069dcf9544ce360ed747a8895c51bdb25d8d125f45 \
+    --hash=sha256:ceb56939c337b36d9d81185ade31f77dc52c85cf79bb16e53e9b32f54b6bb3f5 \
+    --hash=sha256:8105c98b798f2bf81c05c54bddeeadbf62f0b5dfec13bd6e719dd2cdf7e1cddf \
+    --hash=sha256:bbc214f1a216b5d3651bc832d0ac4589f029f3f37cd6cbb370aac12a7c77942c \
+    --hash=sha256:ca61624a0b0e6286d8a0f97f47eb9011e4e81e9a339db436d48af527e7065bb1
+pyobjc-framework-ApplicationServices==12.2.1; sys_platform == "darwin" \
+    --hash=sha256:9fb187b7176e61983e1c4760bba951fd9b3fc539dca4f05998d33628e7539121 \
+    --hash=sha256:dabec481217b0d0c1ea835e9fef6b0681381b14b3f16a30d4a9d801ee3852dd2 \
+    --hash=sha256:f519ced13888d03410cd7da1f08fc56ee2944099e607216cef7ca26ecfdef61b \
+    --hash=sha256:8749290f796e6cca341d443769b79329dde5d157bcc4413c1f7fdb68ea4a8e48 \
+    --hash=sha256:9ee11677fbd6a0987234814c7dde88ffd11242e8c1f76952e6654ea07f2370ac \
+    --hash=sha256:a1c0ee536cb8bd7f5a811165ec323a9207b1e8dad9534fe2081f767fb90b0411 \
+    --hash=sha256:0d55dd5be19e4a1363662bc8b48894d45714d07f0ee3958665fc9ea7df0f61b7 \
+    --hash=sha256:e91c84238b2f68f608473854bcabb8770f15ad837e7561d217f24a1e482e42be \
+    --hash=sha256:09bfa27765d4c74155323fd8185b7aba6d639ce06c0a9f00ee2d9e7dce3d7800

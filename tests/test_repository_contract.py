@@ -41,24 +41,30 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(re.search(r'RUNTIME_VERSION="([^"]+)"', launcher).group(1), expected)
 
     def test_fallback_dependencies_are_exact_binary_wheels(self):
-        requirements = (PLUGIN / "requirements.txt").read_text(encoding="utf-8").splitlines()
+        requirement_text = (PLUGIN / "requirements.txt").read_text(encoding="utf-8")
+        requirements = [line.split("==", 1)[0] for line in requirement_text.splitlines() if line and not line[0].isspace()]
         self.assertEqual(
             requirements,
             [
-                'pyobjc-core==12.2.1; sys_platform == "darwin"',
-                'pyobjc-framework-Cocoa==12.2.1; sys_platform == "darwin"',
-                'pyobjc-framework-CoreText==12.2.1; sys_platform == "darwin"',
-                'pyobjc-framework-Quartz==12.2.1; sys_platform == "darwin"',
-                'pyobjc-framework-ApplicationServices==12.2.1; sys_platform == "darwin"',
+                "pyobjc-core",
+                "pyobjc-framework-Cocoa",
+                "pyobjc-framework-CoreText",
+                "pyobjc-framework-Quartz",
+                "pyobjc-framework-ApplicationServices",
             ],
         )
+        self.assertEqual(requirement_text.count('==12.2.1; sys_platform == "darwin"'), 5)
+        self.assertEqual(requirement_text.count("--hash=sha256:"), 45)
+        self.assertNotIn(">=", requirement_text)
         for script in ("install.sh", "run-mcp.sh"):
             source = (PLUGIN / "scripts" / script).read_text(encoding="utf-8")
             self.assertIn("--only-binary=:all:", source)
             self.assertIn("--no-deps", source)
+            self.assertIn("--require-hashes", source)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("--only-binary=:all:", workflow)
         self.assertIn("--no-deps", workflow)
+        self.assertIn("--require-hashes", workflow)
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertIn('(3, 10) <= sys.version_info < (3, 16)', common)
         self.assertIn("CPython 3.10 through 3.15", common)
