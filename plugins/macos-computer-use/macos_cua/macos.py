@@ -1437,15 +1437,31 @@ class MacOSBackend:
                 raise ToolError("click_count must be between 1 and 4")
             if "element_index" in arguments and arguments.get("element_index") is not None:
                 element = self._cached_element(window, arguments["element_index"])
-                if button_name in {"left", "l"} and count == 1 and self._ax_perform(
-                    element, self._ax_attr("kAXPressAction", "AXPress")
-                ):
+                press_action = self._ax_attr("kAXPressAction", "AXPress")
+                actions = self._ax_actions(element)
+                advertises_press = any(
+                    re.sub(r"[\s_-]+", "", action.lower().removeprefix("ax")) == "press"
+                    for action in actions
+                )
+                if button_name in {"left", "l"} and count == 1 and advertises_press:
+                    if self._ax_perform(element, press_action):
+                        return {
+                            "ok": True,
+                            "method": "accessibility",
+                            "element_index": int(arguments["element_index"]),
+                            "effect": "unverifiable",
+                            "verified": False,
+                        }
                     return {
                         "ok": True,
                         "method": "accessibility",
                         "element_index": int(arguments["element_index"]),
-                        "effect": "unverifiable",
+                        "effect": "suspected_noop",
                         "verified": False,
+                        "escalation": {
+                            "recommended": "px",
+                            "reason": "Advertised AXPress did not report success; refresh before pixel delivery",
+                        },
                     }
                 x, y = self._element_center(element)
             else:
@@ -1808,7 +1824,17 @@ class MacOSBackend:
             if matched is None:
                 raise ToolError(f"Action {arguments['action']!r} is unavailable; supported actions: {actions}")
             if not self._ax_perform(element, matched):
-                raise ToolError(f"Accessibility action failed: {matched}")
+                return {
+                    "ok": True,
+                    "action": matched,
+                    "element_index": int(arguments["element_index"]),
+                    "effect": "suspected_noop",
+                    "verified": False,
+                    "escalation": {
+                        "recommended": "px",
+                        "reason": "Advertised Accessibility action did not report success",
+                    },
+                }
             return {
                 "ok": True,
                 "action": matched,

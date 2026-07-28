@@ -674,6 +674,40 @@ class ContractTests(unittest.TestCase):
             backend.tool_click({"window": window, "x": 10, "y": 20})
         self.assertEqual(expired, [window])
 
+    def test_failed_advertised_ax_press_does_not_double_deliver_a_pixel_click(self):
+        backend = MacOSBackend()
+        window = {"id": 8, "app": "com.example.App", "pid": 80}
+        element = object()
+        backend._activate_current = lambda value: window
+        backend._cached_element = lambda value, index: element
+        backend._ax_attr = lambda name, fallback: fallback
+        backend._ax_actions = lambda value: ["AXPress"]
+        backend._ax_perform = mock.Mock(return_value=False)
+        backend._click_pointer = mock.Mock()
+        backend._invalidate_window_observations = lambda value: None
+        result = backend.tool_click({"window": window, "element_index": 3})
+        self.assertEqual(result["effect"], "suspected_noop")
+        self.assertEqual(result["escalation"]["recommended"], "px")
+        backend._click_pointer.assert_not_called()
+
+    def test_unadvertised_ax_press_uses_one_coordinate_delivery(self):
+        backend = MacOSBackend()
+        window = {"id": 8, "app": "com.example.App", "pid": 80}
+        element = object()
+        backend._activate_current = lambda value: window
+        backend._cached_element = lambda value, index: element
+        backend._ax_attr = lambda name, fallback: fallback
+        backend._ax_actions = lambda value: []
+        backend._element_center = lambda value: (10.0, 20.0)
+        backend._button = lambda value: ("button", "down", "up", "dragged")
+        backend._click_pointer = mock.Mock()
+        backend._invalidate_window_observations = lambda value: None
+        result = backend.tool_click({"window": window, "element_index": 3})
+        self.assertEqual(result["method"], "coordinate")
+        backend._click_pointer.assert_called_once_with(
+            "button", "down", "up", "dragged", 10.0, 20.0, 1
+        )
+
     def test_failed_key_release_is_retained_for_shutdown_cleanup(self):
         backend = MacOSBackend()
         down = {"kind": "down"}

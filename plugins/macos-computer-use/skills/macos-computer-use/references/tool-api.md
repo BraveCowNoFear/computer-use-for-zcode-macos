@@ -179,6 +179,10 @@ AX actions without a generic post-condition return `effect:"unverifiable"` and
 complete. Fallback `set_value` returns `confirmed` only after an exact AX value
 read-back; missing or mismatched read-back recommends a freshly grounded pixel
 route and never claims completion.
+An advertised `AXPress` or secondary AX action that does not report success
+returns `suspected_noop` with a pixel recommendation; the same tool call never
+also emits a coordinate click. Refresh state before crossing that delivery rung
+so an AX action that actually landed cannot become a double click.
 App launch and foreground activation conservatively invalidate prior fallback
 observations even when their completion probe fails. A launch timeout or an
 accepted launch that cannot be matched returns a structured unknown effect;

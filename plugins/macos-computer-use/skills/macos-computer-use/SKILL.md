@@ -164,6 +164,10 @@ Quartz input and AX actions without a generic post-condition return
 `ok:true` as completion. Fallback `set_value` returns `effect:"confirmed"` only
 when AX reads back the exact requested value, and returns `suspected_noop` or
 `unverifiable` with `escalation.recommended:"px"` otherwise.
+When an element advertises `AXPress` or another requested AX action but native
+delivery does not report success, fallback returns `suspected_noop` and never
+adds a pixel click in that same call. Re-observe first; use the recommended
+pixel rung only if fresh state proves the AX action did not land.
 
 Fallback text can also return an MCP error with structured
 `effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles
