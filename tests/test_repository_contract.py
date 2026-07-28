@@ -139,8 +139,12 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_primary_launcher_is_pinned_and_unrestricted(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(encoding="utf-8")
-        self.assertIn('CUA_VERSION="0.12.6"', launcher)
+        self.assertIn('CUA_VERSION="0.13.1"', launcher)
         self.assertRegex(launcher, r'ASSET_SHA256="[0-9a-f]{64}"')
+        self.assertIn(
+            'ASSET_SHA256="236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032"',
+            launcher,
+        )
         self.assertIn('ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"', launcher)
         self.assertIn('verify_sha256 "$ASSET" "$ASSET_SHA256"', launcher)
         self.assertIn('APP_ROOT="$APP_PARENT/v${CUA_VERSION}"', launcher)
@@ -155,6 +159,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
+        self.assertIn("start_session escalate_session end_session", launcher)
+        self.assertIn('"$BIN" permissions grant', launcher)
+        self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
         self.assertIn("CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
         self.assertIn("--env CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
@@ -202,6 +209,7 @@ class RepositoryContractTests(unittest.TestCase):
         doctor = (PLUGIN / "scripts" / "doctor.sh").read_text(encoding="utf-8")
         for source in (install, doctor):
             self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', source)
+        self.assertIn('"$ROOT/scripts/run-cua-driver.sh" --grant-permissions', install)
         self.assertNotIn('python3 -m venv "$ROOT/.venv"', install)
 
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
@@ -285,8 +293,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertLess(skill.index("Background AX"), skill.index("Direct fallback"))
         self.assertIn("end_session", skill)
         self.assertLess(skill.index("check_permissions({prompt:false})"), skill.index("start_session"))
-        self.assertIn("check_permissions({prompt:true,probe_direct_capture:false})", skill)
-        self.assertNotIn("prompt:true`, which the driver refuses", skill)
+        self.assertNotIn("check_permissions({prompt:true", skill)
+        self.assertIn("Public MCP calls are status-only", skill)
+        self.assertIn("permissions grant", skill)
+        self.assertIn("escalate_session({session})", skill)
+        self.assertIn("element_token", skill)
+        self.assertIn("replace:true", skill)
         self.assertIn('scope:"desktop"', skill)
         self.assertIn("fallback is\nsessionless", skill)
         self.assertIn("screenshot as the final truth", skill)

@@ -8,11 +8,11 @@ ROOT="${MACOS_CUA_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}"
 source "$ROOT/scripts/runtime-common.sh"
 
-CUA_VERSION="0.12.6"
+CUA_VERSION="0.13.1"
 CUA_TAG="cua-driver-rs-v${CUA_VERSION}"
 ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"
 ASSET_URL="https://github.com/trycua/cua/releases/download/${CUA_TAG}/${ASSET_NAME}"
-ASSET_SHA256="c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f"
+ASSET_SHA256="236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032"
 EXPECTED_TEAM_ID="YCK386LBJ7"
 EXPECTED_AUTHORITY="Developer ID Application: Cua AI, Inc. (YCK386LBJ7)"
 APP_PARENT="$DATA_DIR/cua-driver-app"
@@ -68,7 +68,7 @@ has_required_surface() {
   local tools
   tools="$($candidate list-tools 2>/dev/null)" || return 1
   for required in \
-    check_permissions start_session end_session list_apps list_windows \
+    check_permissions start_session escalate_session end_session list_apps list_windows \
     launch_app get_window_state get_desktop_state click press_key hotkey \
     type_text scroll set_value drag; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1
@@ -174,6 +174,24 @@ if [[ "${1:-}" == "--prepare-only" ]]; then
   echo "$BIN"
   "$BIN" --version
   exit 0
+fi
+
+if [[ "${1:-}" == "--grant-permissions" ]]; then
+  # Cua Driver 0.13+ intentionally keeps prompt-capable TCC setup outside
+  # the agent-callable MCP surface. This explicit, human-run helper launches
+  # the signed app through LaunchServices so macOS attributes every grant to
+  # CuaDriver.app. Preserve a pre-existing default Cua daemon; otherwise stop
+  # only the temporary daemon that the upstream grant workflow started.
+  default_daemon_was_running=0
+  if "$BIN" status >/dev/null 2>&1; then
+    default_daemon_was_running=1
+  fi
+  grant_result=0
+  "$BIN" permissions grant || grant_result=$?
+  if [[ "$default_daemon_was_running" == "0" ]]; then
+    "$BIN" stop >/dev/null 2>&1 || true
+  fi
+  exit "$grant_result"
 fi
 
 # A dedicated short socket keeps this daemon independent from any Cua Driver a

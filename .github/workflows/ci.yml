@@ -53,35 +53,35 @@ jobs:
       - name: Verify and launch the pinned Cua Driver release
         if: runner.os == 'macOS'
         run: |
-          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/checksums.txt -o /tmp/cua-driver-checksums.txt
-          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/cua-driver-rs-0.12.6-darwin-universal.tar.gz -o /tmp/cua-driver-release.tar.gz
-          echo "21486096e0c5901cafcaaf652144308abb3f088a2d9785941585a002c571233f  /tmp/cua-driver-checksums.txt" | shasum -a 256 -c -
-          echo "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  /tmp/cua-driver-release.tar.gz" | shasum -a 256 -c -
-          grep -F "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  cua-driver-rs-0.12.6-darwin-universal.tar.gz" /tmp/cua-driver-checksums.txt
+          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.13.1/checksums.txt -o /tmp/cua-driver-checksums.txt
+          curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.13.1/cua-driver-rs-0.13.1-darwin-universal.tar.gz -o /tmp/cua-driver-release.tar.gz
+          echo "9dc81da0fda626ca79ed603ebe0d9913c291d89ab348bedbaefd2adb24547ed8  /tmp/cua-driver-checksums.txt" | shasum -a 256 -c -
+          echo "236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032  /tmp/cua-driver-release.tar.gz" | shasum -a 256 -c -
+          grep -F "236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032  cua-driver-rs-0.13.1-darwin-universal.tar.gz" /tmp/cua-driver-checksums.txt
           mkdir -p /tmp/cua-driver-release
           tar -xzf /tmp/cua-driver-release.tar.gz -C /tmp/cua-driver-release
-          app=/tmp/cua-driver-release/cua-driver-rs-0.12.6-darwin-universal/CuaDriver.app
+          app=/tmp/cua-driver-release/cua-driver-rs-0.13.1-darwin-universal/CuaDriver.app
           binary="$app/Contents/MacOS/cua-driver"
           lipo "$binary" -verify_arch arm64 x86_64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.13.1"
           signing_info="$(codesign -dv --verbose=4 "$app" 2>&1)"
           grep -Fx "TeamIdentifier=YCK386LBJ7" <<<"$signing_info"
           grep -Fx "Authority=Developer ID Application: Cua AI, Inc. (YCK386LBJ7)" <<<"$signing_info"
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
-          "$binary" --version | grep -F "0.12.6"
+          "$binary" --version | grep -F "0.13.1"
           /usr/bin/open -h 2>&1 | grep -F -- "--env"
           data="$RUNNER_TEMP/zcode-primary-first-run"
           unrelated_home="$RUNNER_TEMP/unrelated-cua-home"
           mkdir -p "$unrelated_home"
           mkdir -p "$data/installers"
-          cp /tmp/cua-driver-release.tar.gz "$data/installers/cua-driver-rs-0.12.6-darwin-universal.tar.gz"
+          cp /tmp/cua-driver-release.tar.gz "$data/installers/cua-driver-rs-0.13.1-darwin-universal.tar.gz"
           HOME="$unrelated_home" MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-cua-driver.sh --prepare-only
           test ! -e "$unrelated_home/.cua-driver"
           test ! -e "$unrelated_home/.cua-driver-rs"
           test "$(stat -f '%Lp' "$data/cua-telemetry")" = "700"
-          product_app="$data/cua-driver-app/v0.12.6/CuaDriver.app"
+          product_app="$data/cua-driver-app/v0.13.1/CuaDriver.app"
           product_binary="$product_app/Contents/MacOS/cua-driver"
           test -x "$product_binary"
           test "$product_app" != "/Applications/CuaDriver.app"
@@ -111,6 +111,8 @@ jobs:
           grep -F "user policy: configured=false, active=false, valid=true" <<<"$status"
           grep -F "managed policy: configured=false, active=false, valid=true" <<<"$status"
           grep -F "session policy: configured=false, approved_at_startup=false, valid=true" <<<"$status"
+          prompt_refusal="$(printf '%s' '{"prompt":true}' | "$product_binary" call check_permissions --socket "$socket" 2>&1 || true)"
+          grep -F "os_permission_prompt_requires_trusted_host" <<<"$prompt_refusal"
           cleanup_policy_proof
           trap - EXIT
 

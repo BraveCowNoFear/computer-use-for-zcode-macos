@@ -18,5 +18,10 @@ MACOS_CUA_DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}" \
   "$ROOT/scripts/run-mcp.sh" --self-test
 
 echo
-echo "Runtime installed. Enable the plugin, then call check_permissions from the primary MCP."
-echo "Grant Accessibility and Screen Recording to the plugin-owned CuaDriver.app when macOS asks, then restart ZCode."
+echo "Preparing the signed CuaDriver.app permission flow..."
+MACOS_CUA_PLUGIN_ROOT="$ROOT" \
+MACOS_CUA_DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}" \
+  "$ROOT/scripts/run-cua-driver.sh" --grant-permissions
+
+echo
+echo "Runtime installed and permission setup completed. Enable the plugin, restart ZCode, then call check_permissions with prompt=false."

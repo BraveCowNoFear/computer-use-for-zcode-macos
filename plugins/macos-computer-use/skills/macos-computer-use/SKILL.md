@@ -27,22 +27,31 @@ permissions. Ordinary primary-backend tasks do not need that reference.
 
 ## Start a primary session
 
-1. Call `check_permissions({prompt:false})` for a read-only status check. If a
-   Accessibility grant is missing, explain the macOS dialog, then call
-   `check_permissions({prompt:true,probe_direct_capture:false})` once under the
-   signed driver's TCC identity. If Accessibility is granted but Screen
-   Recording is not, continue with AX-only state using
+1. Call `check_permissions({prompt:false})` for a read-only status check.
+   Public MCP calls are status-only in the pinned driver: explicit
+   `prompt:true` is refused in every permission mode, including unrestricted,
+   because only macOS or a human-run trusted host can approve TCC. If
+   Accessibility is missing, stop and ask the user to complete the signed
+   CuaDriver.app setup panel. If no panel appears, have them run
+   `bash plugins/macos-computer-use/scripts/install.sh` once from this checkout;
+   its trusted `permissions grant` route launches the signed app through
+   LaunchServices and verifies the grant under the correct TCC identity. If
+   Accessibility is granted but Screen Recording is not, continue with AX-only state using
    `get_window_state({include_screenshot:false,...})` when the task can be
    completed and verified from the tree. Request Screen Recording only when the
    task needs pixels, a screenshot, desktop state, or visual verification.
-   After Screen Recording is enabled and ZCode is restarted, call
-   `check_permissions({prompt:true})` once to verify direct capture; on macOS
-   Tahoe this may raise its separate ScreenCaptureKit consent. If no system UI
-   appears, direct the user to run `scripts/install.sh` from this checkout once.
+   For that case, use the same installer/grant route; on macOS Tahoe it also
+   explains and verifies the separate direct ScreenCaptureKit consent. After
+   the user grants access and restarts ZCode, re-run only
+   `check_permissions({prompt:false})`, then prove pixel readiness with a fresh
+   screenshot instead of trying to raise TCC UI from the Agent.
 2. Call `start_session` with a unique `session`.
 3. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.
    - `auto` for a normal multi-step app task that might later need the desktop.
+     It starts window-only. Call `escalate_session({session})` only after the
+     window action ladder has been exhausted and freshly verified, then obtain
+     a new desktop state before any desktop action.
    - `desktop` when the requested task inherently crosses apps, the menu bar,
      Dock, desktop, system UI, or several windows.
 4. Pass that public `session` field on state and action calls. Call
@@ -72,7 +81,10 @@ Every action uses a fresh point-in-time loop:
    use `include_screenshot:true,include_text:false`; for an AX-indexed action use
    `include_screenshot:false,include_text:true`. Request both only when the next
    decision genuinely needs pixel/AX disambiguation or dual verification.
-2. Ground exactly one action in that response.
+2. Ground exactly one action in that response. When an element includes an
+   opaque `element_token`, prefer it over `element_index`; otherwise use the
+   index. Both are bound to the exact pid/window snapshot and become stale on
+   the next observation, so never carry either across refreshes.
 3. Perform the action against the same pid/window.
 4. Read the primary action's structured verdict before choosing another rung:
    - `effect:"confirmed"` with `verified:true` means the driver read back an AX
@@ -224,6 +236,10 @@ These direct tools intentionally have no app, window, or target restriction.
 - For Chromium page content, use primary typed browser tools after binding the
   exact native window with `get_browser_state`; keep native tools for browser
   chrome, Safari, Firefox, file pickers, downloads, and permission dialogs.
+  `browser_type` inserts at the current selection by default. When its live
+  schema advertises `replace`, pass `replace:true` to replace the field's whole
+  current value; an empty text with `replace:true` clears it while preserving
+  normal page input events.
 
 ## Full-access behavior
 
@@ -260,6 +276,10 @@ outcome authoritative.
   `accessibility:true,screen_recording:false`, let the user grant Python/ZCode
   Accessibility, then restart ZCode. Request only Screen Recording with
   `accessibility:false,screen_recording:true` when pixels/screenshots are required.
+- Missing primary Accessibility or Screen Recording: do not call
+  `check_permissions` with `prompt:true`; use the signed startup setup panel or
+  the human-run `scripts/install.sh` trusted grant flow, then restart ZCode and
+  re-check with `prompt:false`.
 - Primary reports a non-unrestricted or policy-constrained daemon: let the
   launcher stop only its versioned plugin socket and recreate it without
   inherited Cua policy variables; do not reuse a global/default daemon.

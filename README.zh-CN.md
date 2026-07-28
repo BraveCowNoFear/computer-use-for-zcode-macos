@@ -20,7 +20,7 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 | 层 | 作用 |
 | --- | --- |
 | `$macos-computer-use` Skill | 强制使用最新状态完成“观察 → 动作 → 验证” |
-| `macos-computer-use` MCP | Cua Driver 0.12.6；后台 AX/像素输入；独立 unrestricted 守护进程 |
+| `macos-computer-use` MCP | Cua Driver 0.13.1；后台 AX/像素输入；独立 unrestricted 守护进程 |
 | `macos-computer-use-fallback` MCP | 项目自带的 28 工具 Quartz/PyObjC 窗口/桌面直接输入服务 |
 | ZCode Plugin + marketplace | 安装 Skill 和两个本地 stdio MCP Server |
 
@@ -43,7 +43,11 @@ macOS 实现和开源 Cua Driver；ZCode 打包、无审批启动器、兜底运
    ```
 
 6. macOS 询问时给 `CuaDriver.app` 授予“辅助功能”和“屏幕录制”，然后重启
-   ZCode。若启用原生兜底，系统也可能要求给对应的 Python/ZCode 进程授权。
+   ZCode。若签名 App 的权限面板没有出现，执行一次
+   `bash plugins/macos-computer-use/scripts/install.sh`；Cua Driver 0.13.1
+   刻意不允许 Agent 可调用的 MCP 直接弹出 TCC 授权框，这条人工启动的命令会走
+   LaunchServices 的受信任授权路径。若启用原生兜底，系统也可能要求给对应的
+   Python/ZCode 进程授权。
 
 第一次启动时，主启动器只下载固定版本的 Cua Driver 通用发布归档，校验
 SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI Team ID 和
@@ -62,6 +66,9 @@ CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip �
 Plugin 不会覆盖全局 `/Applications/CuaDriver.app`，也不会停止用户无关的
 Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖辅助功能树的任务可显式关闭截图，在未授予
 “屏幕录制”时继续；像素和全桌面路径仍需要该授权。
+公开的 `check_permissions` 调用只读；即使在 unrestricted 模式，`prompt:true`
+也会被拒绝，因为 macOS 授权 UI 必须由用户掌控。该 TCC 规则不会给普通 Computer
+Use 增加 App 白名单、动作风险分类或逐动作批准。
 
 本项目结构遵循 ZCode 当前的
 [Plugin 与 Marketplace 规范](https://zcode.z.ai/cn/docs/plugin)，包括
@@ -121,6 +128,9 @@ bash plugins/macos-computer-use/scripts/doctor.sh
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
+
+安装脚本会准备两套运行时，并打开签名 CuaDriver.app 的 TCC 授权流程。它会保留
+原本已经运行的无关默认 Cua daemon，只清理自己为本次授权临时启动的 daemon。
 
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
 兜底，并检查固定发布归档、Cua AI 签名身份和真实 Plugin 自有首次安装。真实的后台

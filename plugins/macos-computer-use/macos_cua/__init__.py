@@ -1,3 +1,3 @@
 """Local macOS Computer Use MCP runtime."""
 
-__version__ = "0.9.24"
+__version__ = "0.10.0"

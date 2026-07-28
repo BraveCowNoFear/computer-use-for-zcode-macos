@@ -3,7 +3,7 @@
 ## Primary: Cua Driver background MCP
 
 The `macos-computer-use` MCP is the primary surface. It is pinned to the tested
-Cua Driver 0.12.6 contract at install time. An existing signed app is reused
+Cua Driver 0.13.1 contract at install time. An existing signed app is reused
 only when it is that exact version and exposes every required session,
 window, desktop, and input tool. Inspect `tools/list` for the live schemas
 instead of guessing optional fields.
@@ -14,6 +14,7 @@ Common flow:
 | --- | --- |
 | Permission status | `check_permissions({prompt:false})` |
 | Begin task | `start_session({session, capture_scope})` |
+| Unlock desktop for an `auto` session | `escalate_session({session})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
 | List app windows | `list_windows({pid})` |
 | Snapshot | `get_window_state({session, pid, window_id})` |
@@ -28,11 +29,13 @@ Common flow:
 | Finish task | `end_session({session})` |
 
 Primary window coordinates use the screenshot's window-local pixel space. AX
-indexes are cached against one `(app, pid, window_id)` observation and go stale on
-the next snapshot. Most input tools accept `delivery_mode:"background"`
+indexes and opaque `element_token` handles are cached against one
+`(app, pid, window_id)` observation and go stale on the next snapshot. Prefer
+the token when the live response and action schema advertise it; otherwise use
+the index. Most input tools accept `delivery_mode:"background"`
 (default) or `"foreground"` (last resort).
 
-Pinned 0.12.6 action responses expose a structured delivery verdict. Interpret
+Pinned 0.13.1 action responses expose a structured delivery verdict. Interpret
 `effect:"confirmed"` plus `verified:true` as an AX post-condition read-back;
 `effect:"unverifiable"` plus `verified:false` as dispatched but still requiring
 fresh-state verification; and `effect:"suspected_noop"` as the signal to leave
@@ -53,7 +56,10 @@ Desktop state and desktop-scope input are also part of this primary MCP, not a
 third server. For menu bar/Dock/system UI, pair a fresh `get_desktop_state`
 with a windowless `scope:"desktop"` action. Browser tools such as
 `get_browser_state`, `browser_click`, and `browser_type`—when advertised by the
-live primary `tools/list`—also belong to this same MCP.
+live primary `tools/list`—also belong to this same MCP. When `browser_type`'s
+live schema advertises `replace`, use `replace:true` to replace the field's
+complete current value; pairing it with empty text clears the field while
+preserving page input events.
 
 The plugin launches a dedicated daemon with:
 
@@ -70,12 +76,14 @@ and replaced. The same status gate requires user, managed, and bounded-session
 policy configuration to be absent. The dedicated launch clears inherited Cua
 policy environment variables so another tool cannot silently narrow this
 plugin's advertised full-access mode.
-`check_permissions({prompt:false})` is the read-only MCP inspection call. A
-staged `check_permissions({prompt:true,probe_direct_capture:false})` requests
-Accessibility and Screen Recording; a later `check_permissions({prompt:true})`
-also verifies direct ScreenCaptureKit readiness and may raise Tahoe's separate
-capture consent. The signed app's startup onboarding remains an equivalent
-first-run path.
+`check_permissions({prompt:false})` is the read-only MCP inspection call.
+Pinned 0.13.1 refuses public `prompt:true` calls before platform dispatch in
+every permission mode. This is a macOS TCC boundary, not a plugin action-risk
+approval layer. The signed app's startup panel or the explicit human-run
+`scripts/install.sh` route invokes upstream `permissions grant` through
+LaunchServices, so the dialogs and Tahoe direct-capture probe are attributed to
+the plugin-owned signed CuaDriver.app. Re-run the read-only check after the user
+grants access and restarts ZCode.
 
 ## Fallback: direct Quartz/PyObjC MCP
 
@@ -325,6 +333,10 @@ Source-checkout diagnostics:
 bash plugins/macos-computer-use/scripts/install.sh
 bash plugins/macos-computer-use/scripts/doctor.sh
 ```
+
+`install.sh` also runs the trusted signed-app permission grant flow. It
+preserves any default Cua daemon that was already running and stops only a
+temporary default daemon created by that grant command.
 
 `doctor.sh` starts or reuses only the versioned plugin daemon, then prints its
 actual permission mode before checking the direct MCP runtime.

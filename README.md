@@ -22,7 +22,7 @@ authorization boundaries.
 | Layer | Role |
 | --- | --- |
 | `$macos-computer-use` Skill | Routes the agent through a fresh observe → act → verify loop |
-| `macos-computer-use` MCP | Cua Driver 0.12.6, background AX/pixel input, dedicated unrestricted daemon |
+| `macos-computer-use` MCP | Cua Driver 0.13.1, background AX/pixel input, dedicated unrestricted daemon |
 | `macos-computer-use-fallback` MCP | Repository-owned 28-tool Quartz/PyObjC direct window/desktop input server |
 | ZCode plugin + marketplace | Installs the Skill and both local stdio MCP servers |
 
@@ -48,8 +48,12 @@ unrestricted launcher, fallback runtime, and tests live in this repository.
    ```
 
 6. Grant Accessibility and Screen Recording to `CuaDriver.app` when macOS asks,
-   then restart ZCode. If the direct fallback is used, macOS may also ask for
-   the Python/ZCode responsible app.
+   then restart ZCode. If its signed setup panel does not appear, run
+   `bash plugins/macos-computer-use/scripts/install.sh` once; Cua Driver 0.13.1
+   intentionally keeps prompt-capable TCC setup out of the agent-callable MCP
+   and that human-run command uses its trusted LaunchServices grant route. If
+   the direct fallback is used, macOS may also ask for the Python/ZCode
+   responsible app.
 
 On first start, the primary launcher downloads the pinned universal Cua Driver
 release archive, verifies its SHA-256, atomically publishes the signed app in
@@ -75,6 +79,10 @@ The plugin never replaces a global `/Applications/CuaDriver.app` or stops the
 user's unrelated Cua daemons. macOS TCC cannot be bypassed by any plugin.
 Accessibility-only tasks can continue without Screen Recording by explicitly
 omitting screenshots; pixel and desktop routes still require it.
+Public `check_permissions` calls are read-only; `prompt:true` is rejected even
+in unrestricted mode because the macOS approval UI must remain user-owned.
+This TCC rule does not add an app allowlist, action classifier, or per-action
+approval to ordinary Computer Use.
 
 This layout follows ZCode's current
 [plugin and marketplace specification](https://zcode.z.ai/en/docs/plugin),
@@ -148,6 +156,10 @@ bash plugins/macos-computer-use/scripts/doctor.sh
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
+
+The installer prepares both runtimes and opens the signed CuaDriver.app TCC
+grant flow. It preserves any unrelated default Cua daemon that was already
+running and cleans up only a temporary grant daemon it started itself.
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
