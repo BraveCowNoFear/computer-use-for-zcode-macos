@@ -166,6 +166,7 @@ class ContractTests(unittest.TestCase):
         backend.ApplicationServices = FakeAX
         backend.Quartz = FakeQuartz
         backend.AppKit = object()
+        backend._invalidate_all_observations = mock.Mock()
         backend.tool_request_permissions(
             {"accessibility": True, "screen_recording": False, "open_settings": False}
         )
@@ -174,6 +175,7 @@ class ContractTests(unittest.TestCase):
             {"accessibility": False, "screen_recording": True, "open_settings": False}
         )
         self.assertEqual(prompts, {"accessibility": 1, "screenRecording": 1})
+        self.assertEqual(backend._invalidate_all_observations.call_count, 2)
 
     def test_input_and_ax_actions_fail_fast_without_accessibility(self):
         backend = MacOSBackend()
@@ -1103,6 +1105,21 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(state["truncated"])
         self.assertEqual(len(state["selected_elements"]), 64)
         self.assertEqual(len(backend._element_cache[("com.example.App", 80, 8)]["elements"]), 65)
+
+    def test_accessibility_cache_evicts_old_windows_below_its_hard_limit(self):
+        backend = MacOSBackend()
+        keys = [(f"com.example.App{index}", index, index) for index in range(40)]
+        for index, key in enumerate(keys):
+            backend._element_cache[key] = {
+                "generation": str(index),
+                "elements": [object()],
+                "created": float(index),
+            }
+        keep = keys[-1]
+        backend._prune_element_cache(keep)
+        self.assertLessEqual(len(backend._element_cache), 24)
+        self.assertIn(keep, backend._element_cache)
+        self.assertNotIn(keys[0], backend._element_cache)
 
     def test_accessibility_window_rejects_an_equal_distance_tie(self):
         backend = MacOSBackend()

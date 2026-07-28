@@ -191,6 +191,11 @@ re-observe even if macOS happens to reuse the same numeric window ID. Fallback
 AX indexes belong to the latest text observation for that same process/window
 identity and expire after the same five-minute ceiling. Any action or
 subsequent observation invalidates them sooner.
+Native permission requests invalidate all fallback observations because a TCC
+prompt or System Settings can alter focus/layout. AX native-object caches are
+also bounded to 32 observed windows; older window indexes may be evicted sooner
+after broad enumeration, so always observe the final target immediately before
+using an index.
 
 For menu bar, Dock, desktop, or other system UI after the primary desktop route
 fails, use the fallback's own strict loop:

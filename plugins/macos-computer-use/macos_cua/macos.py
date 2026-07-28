@@ -352,6 +352,9 @@ class MacOSBackend:
         Q = self.Quartz
         request_accessibility = bool(arguments.get("accessibility", True))
         request_screen_recording = bool(arguments.get("screen_recording", False))
+        # Native consent prompts and System Settings can change focus, Spaces,
+        # and visible layout before this call returns or even when it raises.
+        self._invalidate_all_observations()
         if request_accessibility:
             options = {getattr(AX, "kAXTrustedCheckOptionPrompt", "AXTrustedCheckOptionPrompt"): True}
             try:
@@ -907,6 +910,7 @@ class MacOSBackend:
                         index = len(elements)
                         elements.append(item)
                     selected_elements.append(self._format_element(item, index, 0))
+        self._prune_element_cache(key)
         return {
             "tree": "\n".join(lines),
             "focused_element": focused_line,
@@ -1245,6 +1249,23 @@ class MacOSBackend:
             if cached["windowKey"] == key:
                 self._screenshot_cache.pop(screenshot_id, None)
                 self._delete_cached_screenshot(cached)
+
+    def _prune_element_cache(self, keep: tuple[str, int, int]) -> None:
+        """Bound retained AX native objects while preserving the fresh window."""
+        if len(self._element_cache) <= 32:
+            return
+        candidates = sorted(
+            (
+                (key, cached)
+                for key, cached in self._element_cache.items()
+                if key != keep
+            ),
+            key=lambda item: float(item[1].get("created", 0)),
+        )
+        # Evict to a lower watermark so scanning many windows does not prune on
+        # every subsequent observation.
+        for key, _cached in candidates[: max(0, len(self._element_cache) - 24)]:
+            self._element_cache.pop(key, None)
 
     def _invalidate_all_observations(self) -> None:
         self._element_cache.clear()

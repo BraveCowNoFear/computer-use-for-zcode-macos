@@ -194,6 +194,11 @@ Screen Recording is not, `computer_use_health.axControlReady` remains true and
 `get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
 coordinate and desktop routes remain unavailable until Screen Recording is
 granted.
+Requesting a native permission invalidates every fallback screenshot and AX
+index because the consent prompt or System Settings may change focus and layout.
+The fallback retains at most 32 window AX observations; scanning more windows
+evicts the oldest handles, so re-observe the chosen window immediately before
+an indexed action.
 
 When the primary desktop path itself is unavailable or refuses a system-UI
 operation, the fallback can control every visible display. Call fallback
