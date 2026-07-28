@@ -262,6 +262,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("include_screenshot:true,include_text:false", skill)
         self.assertIn("always pass its fresh\n`screenshotId`", skill)
         self.assertIn("omitting it changes the coordinate space", skill)
+        self.assertIn('`effect:"confirmed"` with `verified:true`', skill)
+        self.assertIn('`effect:"unverifiable"` with `verified:false`', skill)
+        self.assertIn('`effect:"suspected_noop"`', skill)
+        self.assertIn('`escalation.recommended:"px"`', skill)
+        self.assertIn('`escalation.recommended:"foreground"`', skill)
+        self.assertLess(skill.index('effect:"suspected_noop"'), skill.index("Background pixel"))
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

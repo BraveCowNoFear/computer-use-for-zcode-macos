@@ -70,7 +70,19 @@ Every action uses a fresh point-in-time loop:
    decision genuinely needs pixel/AX disambiguation or dual verification.
 2. Ground exactly one action in that response.
 3. Perform the action against the same pid/window.
-4. Immediately call `get_window_state` again and verify the visible or AX
+4. Read the primary action's structured verdict before choosing another rung:
+   - `effect:"confirmed"` with `verified:true` means the driver read back an AX
+     post-condition. It is delivery evidence, not final visible proof.
+   - `effect:"unverifiable"` with `verified:false` is the expected result for a
+     dispatched pixel/CGEvent or foreground action. It is not a failure; the
+     outcome remains unknown until refreshed state proves it.
+   - `effect:"suspected_noop"`, `escalation.recommended:"px"`, or a state
+     response with `degraded:true` means cross to a freshly grounded pixel
+     action instead of repeating the same AX action.
+   - `escalation.recommended:"foreground"` means re-observe, then repeat that
+     action once with `delivery_mode:"foreground"`.
+   If an older response omits these fields, decide only from the refreshed state.
+5. Immediately call `get_window_state` again and verify the visible or AX
    result before continuing.
 
 Treat the refreshed screenshot as the final truth for visible outcomes. AX can
@@ -112,16 +124,18 @@ else.
 
 ## Delivery ladder
 
-Use the smallest reliable rung and escalate only after a verified no-op or an
-explicit driver hint:
+Use the smallest reliable rung and change it only after refreshed state or the
+pinned driver's explicit `effect`/`escalation` verdict supplies a real signal:
 
 1. **Background AX:** use `element_index` with `click`, `type_text`,
    `set_value`, or an advertised AX action.
 2. **Background pixel:** use `x`/`y` from the same screenshot for canvases,
-   Electron/Chromium gaps, or a degraded/misleading tree.
+   Electron/Chromium gaps, a `suspected_noop`, `recommended:"px"`, or a
+   degraded/misleading tree.
 3. **Foreground delivery:** repeat the same primary action with
-   `delivery_mode:"foreground"` only when background delivery is unavailable
-   or the refreshed state proves it did not land.
+   `delivery_mode:"foreground"` only when the driver recommends foreground,
+   background delivery is unavailable, or the refreshed state proves it did
+   not land.
 4. **Direct fallback:** switch to `macos-computer-use-fallback` after the
    primary path fails twice on fresh state or refuses the required operation.
 

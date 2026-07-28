@@ -32,6 +32,15 @@ indexes are cached against one `(app, pid, window_id)` observation and go stale 
 the next snapshot. Most input tools accept `delivery_mode:"background"`
 (default) or `"foreground"` (last resort).
 
+Pinned 0.12.6 action responses expose a structured delivery verdict. Interpret
+`effect:"confirmed"` plus `verified:true` as an AX post-condition read-back;
+`effect:"unverifiable"` plus `verified:false` as dispatched but still requiring
+fresh-state verification; and `effect:"suspected_noop"` as the signal to leave
+the AX rung. Follow `escalation.recommended:"px"` or `"foreground"` by
+re-observing and changing delivery once. A degraded state response likewise
+routes to screenshot-grounded pixels. These fields optimize routing but never
+replace the post-action `get_window_state` completion evidence.
+
 Desktop state and desktop-scope input are also part of this primary MCP, not a
 third server. For menu bar/Dock/system UI, pair a fresh `get_desktop_state`
 with a windowless `scope:"desktop"` action. Browser tools such as
