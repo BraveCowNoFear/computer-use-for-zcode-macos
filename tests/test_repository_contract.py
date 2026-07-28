@@ -296,6 +296,14 @@ class RepositoryContractTests(unittest.TestCase):
         for action in uses:
             self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
+    def test_macos_ci_covers_apple_silicon_and_intel(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("os: macos-15\n", workflow)
+        self.assertIn("architecture: arm64", workflow)
+        self.assertIn("os: macos-15-intel", workflow)
+        self.assertIn("architecture: x86_64", workflow)
+        self.assertIn('lipo -verify_arch arm64 x86_64 "$binary"', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,14 +9,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-14]
-        python: ["3.12"]
+        include:
+          - os: windows-latest
+            python: "3.12"
+          - os: macos-15
+            python: "3.12"
+            architecture: arm64
+          - os: macos-15-intel
+            python: "3.12"
+            architecture: x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python }}
+      - name: Verify macOS host architecture
+        if: runner.os == 'macOS'
+        run: test "$(uname -m)" = "${{ matrix.architecture }}"
       - name: Install native dependencies
         run: 'python -m pip install --require-hashes --no-deps --only-binary=:all: -r plugins/macos-computer-use/requirements.txt'
       - name: Compile runtime
@@ -52,6 +62,7 @@ jobs:
           tar -xzf /tmp/cua-driver-release.tar.gz -C /tmp/cua-driver-release
           app=/tmp/cua-driver-release/cua-driver-rs-0.12.6-darwin-universal/CuaDriver.app
           binary="$app/Contents/MacOS/cua-driver"
+          lipo -verify_arch arm64 x86_64 "$binary"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
           signing_info="$(codesign -dv --verbose=4 "$app" 2>&1)"
@@ -100,7 +111,7 @@ jobs:
 
   fallback-python-compat:
     name: fallback CPython ${{ matrix.python }}
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
