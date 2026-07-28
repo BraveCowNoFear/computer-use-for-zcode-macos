@@ -19,6 +19,9 @@ FIXTURE = ROOT / "tests" / "live_fixture.py"
 DATA_DIR = Path(os.environ.get("MACOS_CUA_DATA_DIR", str(ROOT / ".local-data")))
 FIXTURE_BUTTON_CENTER_X = 115.0
 FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
+FIXTURE_SLIDER_START_X = 252.0
+FIXTURE_SLIDER_END_X = 588.0
+FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -73,7 +76,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.20"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.21"},
             },
         )
         self.notify("notifications/initialized")
@@ -121,8 +124,10 @@ def require_action_verdict(result: dict[str, Any], step: str) -> None:
         raise RuntimeError(f"{step} returned no usable action verdict: {result}")
 
 
-def fixture_button_screenshot_point(state: dict[str, Any]) -> tuple[float, float]:
-    """Map the disposable fixture's Cocoa content point into returned PNG pixels."""
+def fixture_screenshot_point(
+    state: dict[str, Any], content_x: float, content_y_from_bottom: float
+) -> tuple[float, float]:
+    """Map a disposable-fixture Cocoa content point into returned PNG pixels."""
     window = state["window"]
     screenshot = state["screenshots"][0]
     bounds = window["bounds"]
@@ -132,10 +137,18 @@ def fixture_button_screenshot_point(state: dict[str, Any]) -> tuple[float, float
     image_height = float(screenshot["height"])
     if min(width, height, image_width, image_height) <= 0:
         raise RuntimeError(f"Fallback fixture returned invalid screenshot geometry: {state}")
-    frame_y_from_top = height - FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM
+    frame_y_from_top = height - content_y_from_bottom
     return (
-        FIXTURE_BUTTON_CENTER_X * image_width / width,
+        content_x * image_width / width,
         frame_y_from_top * image_height / height,
+    )
+
+
+def fixture_button_screenshot_point(state: dict[str, Any]) -> tuple[float, float]:
+    return fixture_screenshot_point(
+        state,
+        FIXTURE_BUTTON_CENTER_X,
+        FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM,
     )
 
 
@@ -347,6 +360,43 @@ def run_fallback() -> dict[str, Any]:
         tree = state["accessibility"]["tree"]
         if token not in tree:
             raise RuntimeError("Fresh fallback state did not contain the text sent through desktop_type_text")
+        element_index(tree, "AXSlider", "Smoke slider")
+        drag_start = fixture_screenshot_point(
+            state,
+            FIXTURE_SLIDER_START_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        drag_end = fixture_screenshot_point(
+            state,
+            FIXTURE_SLIDER_END_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        dragged, _ = client.call(
+            "drag",
+            {
+                "window": state["window"],
+                "from_x": drag_start[0],
+                "from_y": drag_start[1],
+                "to_x": drag_end[0],
+                "to_y": drag_end[1],
+                "duration": 0.35,
+                "screenshotId": state["screenshots"][0]["id"],
+            },
+        )
+        require_action_verdict(dragged, "fallback physical slider drag")
+        state, content = client.call(
+            "get_window_state",
+            {"window": window, "include_screenshot": True, "include_text": True},
+        )
+        require_image(content, "fallback window state after physical drag")
+        slider_match = re.search(r"Slider: (\d+)", state["accessibility"]["tree"])
+        if slider_match is None or int(slider_match.group(1)) < 80:
+            raise RuntimeError(
+                f"Fallback physical drag did not move the slider near its end: {state['accessibility']['tree']}"
+            )
+        report["steps"].append("fallback_physical_drag_verified")
+
+        tree = state["accessibility"]["tree"]
         element_index(tree, "AXButton", "Copy value")
         click_x, click_y = fixture_button_screenshot_point(state)
         clicked, _ = client.call(

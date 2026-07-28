@@ -14,17 +14,22 @@ WINDOW_TITLE = "ZCode Computer Use Live Smoke"
 
 
 class FixtureHandler(NSObject):
-    def initWithField_label_(self, field, label):
+    def initWithField_label_sliderLabel_(self, field, label, slider_label):
         self = objc.super(FixtureHandler, self).init()
         if self is None:
             return None
         self.field = field
         self.label = label
+        self.slider_label = slider_label
         return self
 
     @objc.IBAction
     def submit_(self, _sender) -> None:
         self.label.setStringValue_(f"Received: {self.field.stringValue()}")
+
+    @objc.IBAction
+    def sliderChanged_(self, sender) -> None:
+        self.slider_label.setStringValue_(f"Slider: {int(round(sender.doubleValue()))}")
 
 
 def label(frame, value: str):
@@ -61,13 +66,23 @@ def main() -> int:
     button = AppKit.NSButton.alloc().initWithFrame_(AppKit.NSMakeRect(40, 105, 150, 34))
     button.setTitle_("Copy value")
     button.setBezelStyle_(AppKit.NSBezelStyleRounded)
-    result = label(AppKit.NSMakeRect(40, 55, 560, 28), "Waiting")
+    slider = AppKit.NSSlider.alloc().initWithFrame_(AppKit.NSMakeRect(240, 105, 360, 34))
+    slider.setMinValue_(0)
+    slider.setMaxValue_(100)
+    slider.setDoubleValue_(0)
+    slider.setContinuous_(True)
+    slider.setAccessibilityLabel_("Smoke slider")
+    slider_result = label(AppKit.NSMakeRect(240, 75, 360, 24), "Slider: 0")
+    slider_result.setAccessibilityLabel_("Smoke slider result")
+    result = label(AppKit.NSMakeRect(40, 45, 560, 24), "Waiting")
     result.setAccessibilityLabel_("Smoke result")
 
-    handler = FixtureHandler.alloc().initWithField_label_(field, result)
+    handler = FixtureHandler.alloc().initWithField_label_sliderLabel_(field, result, slider_result)
     button.setTarget_(handler)
     button.setAction_("submit:")
-    for control in (prompt, field, button, result):
+    slider.setTarget_(handler)
+    slider.setAction_("sliderChanged:")
+    for control in (prompt, field, button, slider, slider_result, result):
         content.addSubview_(control)
 
     app.finishLaunching()
