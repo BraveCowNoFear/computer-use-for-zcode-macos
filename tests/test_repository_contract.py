@@ -236,6 +236,9 @@ class RepositoryContractTests(unittest.TestCase):
     def test_skill_routes_primary_then_direct_fallback(self):
         skill = (PLUGIN / "skills" / "macos-computer-use" / "SKILL.md").read_text(encoding="utf-8")
         self.assertTrue(skill.startswith("---\n"))
+        self.assertIn("## Completion evidence", skill)
+        self.assertIn("Do not report success from an action response alone", skill)
+        self.assertNotIn("let the user\n  with", skill)
         self.assertIn("macos-computer-use-fallback", skill)
         self.assertLess(skill.index("Background AX"), skill.index("Direct fallback"))
         self.assertIn("end_session", skill)

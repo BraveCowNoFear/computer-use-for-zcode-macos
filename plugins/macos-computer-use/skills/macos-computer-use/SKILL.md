@@ -197,11 +197,10 @@ outcome authoritative.
 - `off_space`, minimized, or hidden window: keep AX background control when it
   verifies; use desktop/foreground only when the requested outcome needs it.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
-- Missing fallback Accessibility: call `request_permissions` once, let the user
-  with `accessibility:true,screen_recording:false`, let the user grant
-  Python/ZCode Accessibility, then restart ZCode. Request only Screen Recording
-  with `accessibility:false,screen_recording:true` when pixels/screenshots are
-  required.
+- Missing fallback Accessibility: call `request_permissions` once with
+  `accessibility:true,screen_recording:false`, let the user grant Python/ZCode
+  Accessibility, then restart ZCode. Request only Screen Recording with
+  `accessibility:false,screen_recording:true` when pixels/screenshots are required.
 - Primary reports a non-unrestricted or policy-constrained daemon: let the
   launcher stop only its versioned plugin socket and recreate it without
   inherited Cua policy variables; do not reuse a global/default daemon.
@@ -209,6 +208,15 @@ outcome authoritative.
   already landed.
 - Two fresh-state failures: change rungs or report the literal error; never loop
   a potentially non-idempotent action.
+
+## Completion evidence
+
+Do not report success from an action response alone. Finish with a fresh state
+that visibly or semantically proves the requested outcome. Tell the user the
+result and the app/window where it was verified; mention foreground/fallback
+delivery only when it affected the experience. If the final state cannot prove
+the outcome, state the exact missing evidence instead of presenting an attempted
+action as completed.
 
 Read [tool-api.md](references/tool-api.md) only for exact backend routing,
 fallback fields, install diagnostics, or permission details.
