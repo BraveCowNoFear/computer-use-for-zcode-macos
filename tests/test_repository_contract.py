@@ -344,6 +344,9 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_visible_result_verified"',
             '"fallback_visible_result_verified"',
             '"fallback_window_activated"',
+            '"fallback_field_focus_verified"',
+            "require_action_verdict",
+            "self.process.kill()",
         ):
             self.assertIn(marker, smoke)
 

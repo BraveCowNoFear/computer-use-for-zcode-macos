@@ -71,7 +71,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.28"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.29"},
             },
         )
         self.notify("notifications/initialized")
@@ -91,7 +91,11 @@ class MCPClient:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             self.process.terminate()
-            self.process.wait(timeout=5)
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
 
 
 def element_index(tree: str, role: str, text: str | None = None) -> int:
@@ -106,6 +110,13 @@ def element_index(tree: str, role: str, text: str | None = None) -> int:
 def require_image(content: list[dict[str, Any]], step: str) -> None:
     if not any(item.get("type") == "image" and item.get("data") for item in content):
         raise RuntimeError(f"{step} did not return a native MCP image block")
+
+
+def require_action_verdict(result: dict[str, Any], step: str) -> None:
+    effect = result.get("effect")
+    verified = result.get("verified")
+    if effect not in {"confirmed", "unverifiable", "suspected_noop"} or not isinstance(verified, bool):
+        raise RuntimeError(f"{step} returned no usable action verdict: {result}")
 
 
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
@@ -192,7 +203,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         require_image(content, "primary initial window state")
         field = primary_element(state.get("elements", []), "AXTextField", "Smoke input")
         token = f"zcode-primary-{uuid.uuid4().hex[:10]}"
-        client.call(
+        typed, _ = client.call(
             "type_text",
             {
                 "session": session,
@@ -202,6 +213,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
                 "text": token,
             },
         )
+        require_action_verdict(typed, "primary type_text")
         report["steps"].append("primary_background_text_typed")
 
         state, content = client.call(
@@ -212,7 +224,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if token not in state.get("tree_markdown", ""):
             raise RuntimeError("Fresh primary state did not contain the text sent through type_text")
         button = primary_element(state.get("elements", []), "AXButton", "Copy value")
-        client.call(
+        clicked, _ = client.call(
             "click",
             {
                 "session": session,
@@ -221,6 +233,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
                 "element_index": button["element_index"],
             },
         )
+        require_action_verdict(clicked, "primary click")
         report["steps"].append("primary_background_button_clicked")
 
         final_state, final_content = client.call(
@@ -265,6 +278,7 @@ def run_fallback() -> dict[str, Any]:
         report["steps"].append("fallback_window_bound")
 
         activated, _ = client.call("activate_window", {"window": window})
+        require_action_verdict(activated, "fallback activate_window")
         window = activated["window"]
         report["steps"].append("fallback_window_activated")
 
@@ -275,19 +289,32 @@ def run_fallback() -> dict[str, Any]:
         require_image(content, "fallback initial window state")
         tree = state["accessibility"]["tree"]
         field_index = element_index(tree, "AXTextField")
-        client.call("click", {"window": window, "element_index": field_index})
+        focused, _ = client.call("click", {"window": window, "element_index": field_index})
+        require_action_verdict(focused, "fallback field click")
         report["steps"].append("fallback_field_focused")
+
+        focus_state, focus_content = client.call(
+            "get_window_state",
+            {"window": window, "include_screenshot": True, "include_text": True},
+        )
+        require_image(focus_content, "fallback window state after focus click")
+        focused_element = focus_state["accessibility"].get("focused_element") or ""
+        if "AXTextField" not in focused_element:
+            raise RuntimeError(f"Fallback focus click did not focus the text field: {focused_element!r}")
+        report["steps"].append("fallback_field_focus_verified")
 
         desktop, desktop_content = client.call("get_desktop_state")
         require_image(desktop_content, "fallback desktop state before shortcut")
         desktop_id = desktop["screenshots"][0]["id"]
-        client.call("desktop_press_key", {"key": "Command+a", "screenshotId": desktop_id})
+        selected, _ = client.call("desktop_press_key", {"key": "Command+a", "screenshotId": desktop_id})
+        require_action_verdict(selected, "fallback desktop_press_key")
 
         desktop, desktop_content = client.call("get_desktop_state")
         require_image(desktop_content, "fallback desktop state before typing")
         desktop_id = desktop["screenshots"][0]["id"]
         token = f"zcode-fallback-{uuid.uuid4().hex[:10]}"
-        client.call("desktop_type_text", {"text": token, "screenshotId": desktop_id})
+        typed, _ = client.call("desktop_type_text", {"text": token, "screenshotId": desktop_id})
+        require_action_verdict(typed, "fallback desktop_type_text")
         report["steps"].append("fallback_desktop_text_typed")
 
         state, content = client.call(
@@ -299,7 +326,8 @@ def run_fallback() -> dict[str, Any]:
         if token not in tree:
             raise RuntimeError("Fresh fallback state did not contain the text sent through desktop_type_text")
         button_index = element_index(tree, "AXButton", "Copy value")
-        client.call("click", {"window": window, "element_index": button_index})
+        clicked, _ = client.call("click", {"window": window, "element_index": button_index})
+        require_action_verdict(clicked, "fallback button click")
         report["steps"].append("fallback_button_clicked")
 
         final_state, final_content = client.call(
