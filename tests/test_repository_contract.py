@@ -274,6 +274,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("primary driver also has a mutually exclusive pixel form", skill)
         self.assertIn("Fallback text can also return an MCP error", skill)
         self.assertIn("never the original full text", skill)
+        self.assertIn('`has_screenshot:false`', skill)
+        self.assertIn("Sparse Chromium AX tree", skill)
+        self.assertIn("minimized window beeps or ignores Return/Space/Tab", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

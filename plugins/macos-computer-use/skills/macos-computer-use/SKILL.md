@@ -223,13 +223,21 @@ outcome authoritative.
 ## Recovery
 
 - Stale element or window: discard it, re-list/re-observe, retry once.
+- Requested screenshot absent or `has_screenshot:false`: do not invent pixels.
+  Re-observe once; if capture is still absent, re-list and bind another returned
+  window or continue AX-only when the outcome is semantically verifiable.
+- Sparse Chromium AX tree: re-observe the same pid/window once because it can
+  populate on the second snapshot; if it remains degraded, use bound browser
+  refs or freshly observed pixels instead of guessing an element index.
 - Read-only timeout: retry once. Input timeout means outcome unknown; observe
   before deciding whether any retry is needed.
 - MCP restart or ZCode reload: discard every fallback handle and rebuild the
   target and state from enumeration; never replay the last input blindly.
 - New modal: enumerate windows and target the returned modal explicitly.
 - `off_space`, minimized, or hidden window: keep AX background control when it
-  verifies; use desktop/foreground only when the requested outcome needs it.
+  verifies. If a minimized window beeps or ignores Return/Space/Tab, use its
+  fresh actionable AX button instead of repeating the key; use desktop/foreground
+  only when the requested outcome needs it.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
 - Missing fallback Accessibility: call `request_permissions` once with
   `accessibility:true,screen_recording:false`, let the user grant Python/ZCode
