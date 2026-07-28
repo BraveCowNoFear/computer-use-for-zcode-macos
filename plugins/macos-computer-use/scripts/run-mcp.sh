@@ -10,7 +10,7 @@ source "$ROOT/scripts/runtime-common.sh"
 DEV_PYTHON="$ROOT/.venv/bin/python3"
 DATA_PYTHON="$DATA_DIR/venv/bin/python3"
 VERSION_FILE="$DATA_DIR/runtime-version"
-RUNTIME_VERSION="0.3.0"
+RUNTIME_VERSION="0.3.1"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"

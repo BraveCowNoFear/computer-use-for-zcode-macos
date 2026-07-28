@@ -49,7 +49,10 @@ forge macOS TCC consent or remove capability limits compiled into a dependency.
 The launcher uses a per-user private, versioned socket and accepts the daemon
 only after `status` reports `permission mode: unrestricted`; a stale, standard,
 bounded, incompatible, or unknown daemon is stopped only on that plugin socket
-and replaced.
+and replaced. The same status gate requires user, managed, and bounded-session
+policy configuration to be absent. The dedicated launch clears inherited Cua
+policy environment variables so another tool cannot silently narrow this
+plugin's advertised full-access mode.
 `check_permissions({prompt:false})` is the read-only MCP inspection call. A
 staged `check_permissions({prompt:true,probe_direct_capture:false})` requests
 Accessibility and Screen Recording; a later `check_permissions({prompt:true})`

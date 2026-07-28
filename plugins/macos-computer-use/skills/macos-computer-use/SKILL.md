@@ -17,8 +17,9 @@ Recording consent still comes from TCC and cannot be bypassed.
 
 The launcher accepts the primary backend only when the signed app is exactly
 the pinned/tested version, exposes the required session/desktop/action tools,
-and its dedicated daemon reports `permission mode: unrestricted`. A merely
-reachable socket is not enough.
+and its dedicated daemon reports `permission mode: unrestricted` with no user,
+managed, or bounded-session policy configured. A merely reachable socket or
+an unrestricted label above a hidden policy ceiling is not enough.
 
 ## Start a primary session
 
@@ -146,8 +147,9 @@ outcome authoritative.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
 - Missing fallback permission: call `request_permissions` once, let the user
   grant Python/ZCode Accessibility and Screen Recording, then restart ZCode.
-- Primary reports a non-unrestricted daemon: let the launcher stop only its
-  versioned plugin socket and recreate it; do not reuse a global/default daemon.
+- Primary reports a non-unrestricted or policy-constrained daemon: let the
+  launcher stop only its versioned plugin socket and recreate it without
+  inherited Cua policy variables; do not reuse a global/default daemon.
 - Ambiguous failure after an input: observe before retrying because it may have
   already landed.
 - Two fresh-state failures: change rungs or report the literal error; never loop

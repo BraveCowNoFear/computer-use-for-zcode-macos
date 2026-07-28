@@ -94,7 +94,19 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('SOCKET_DIR="/tmp/zcode-cua-${UID}"', launcher)
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertIn('permission mode: unrestricted', common)
+        self.assertIn('user policy: configured=false, active=false, valid=true', common)
+        self.assertIn('managed policy: configured=false, active=false, valid=true', common)
+        self.assertIn('session policy: configured=false, approved_at_startup=false, valid=true', common)
         self.assertIn('driver_reports_unrestricted "$BIN" "$SOCKET"', launcher)
+        self.assertIn("will not mislabel a policy-constrained daemon as full access", launcher)
+        for variable in (
+            "CUA_DRIVER_POLICY_FILE",
+            "CUA_DRIVER_MANAGED_POLICY_FILE",
+            "CUA_DRIVER_DISABLE_UNRESTRICTED",
+            "CUA_DRIVER_SESSION_POLICY_FILE",
+            "CUA_DRIVER_SESSION_POLICY_APPROVED",
+        ):
+            self.assertIn(f"-u {variable}", launcher)
         self.assertIn('/usr/bin/open -n -g "$APP_BUNDLE"', launcher)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
@@ -120,8 +132,17 @@ class RepositoryContractTests(unittest.TestCase):
         script = (
             f'source "{common}"\n'
             'standard_driver() { printf "%s\\n" "Cua Driver daemon is running" "  permission mode: standard (default)"; }\n'
-            'unrestricted_driver() { printf "%s\\n" "Cua Driver daemon is running" "  permission mode: unrestricted (environment)"; }\n'
+            'restricted_driver() { printf "%s\\n" "  permission mode: unrestricted (environment)" '
+            '"  user policy: configured=true, active=true, valid=true" '
+            '"  managed policy: configured=false, active=false, valid=true" '
+            '"  session policy: configured=false, approved_at_startup=false, valid=true"; }\n'
+            'unrestricted_driver() { printf "%s\\n" "Cua Driver daemon is running" '
+            '"  permission mode: unrestricted (environment)" '
+            '"  user policy: configured=false, active=false, valid=true" '
+            '"  managed policy: configured=false, active=false, valid=true" '
+            '"  session policy: configured=false, approved_at_startup=false, valid=true"; }\n'
             '! driver_reports_unrestricted standard_driver /tmp/standard.sock\n'
+            '! driver_reports_unrestricted restricted_driver /tmp/restricted.sock\n'
             'driver_reports_unrestricted unrestricted_driver /tmp/unrestricted.sock\n'
         )
         completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)

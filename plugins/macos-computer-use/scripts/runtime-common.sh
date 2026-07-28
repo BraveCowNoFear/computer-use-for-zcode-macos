@@ -90,5 +90,8 @@ driver_reports_unrestricted() {
   local socket="$2"
   local status
   status="$("$binary" status --socket "$socket" 2>/dev/null)" || return 1
-  grep -Fq "permission mode: unrestricted" <<< "$status"
+  grep -Fq "permission mode: unrestricted" <<< "$status" || return 1
+  grep -Fq "user policy: configured=false, active=false, valid=true" <<< "$status" || return 1
+  grep -Fq "managed policy: configured=false, active=false, valid=true" <<< "$status" || return 1
+  grep -Fq "session policy: configured=false, approved_at_startup=false, valid=true" <<< "$status"
 }

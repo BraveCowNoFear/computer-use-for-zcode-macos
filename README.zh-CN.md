@@ -47,8 +47,9 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 发布归档，逐一校验 SHA-256，安装签名的 `/Applications/CuaDriver.app`，再验证
 代码签名和 Gatekeeper 评估，关闭其遥测，然后以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
-专用守护进程。只有版本和工具面与测试版本完全一致，并且实时状态回读为
-`permission mode: unrestricted` 时才会复用；专用 socket 按用户和版本隔离且仅
+专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
+`permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
+专用 socket 按用户和版本隔离且仅
 当前用户可访问。兜底后端要求 CPython 3.10 或更新版本，会创建私有 Python 环境，且只安装经过测试的
 PyObjC 12.2.1 二进制 wheel。
 

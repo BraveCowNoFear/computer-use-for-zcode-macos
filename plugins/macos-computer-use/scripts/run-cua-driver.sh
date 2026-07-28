@@ -170,7 +170,19 @@ if ! daemon_is_verified; then
     "$BIN" stop --socket "$SOCKET" >/dev/null 2>&1 || true
   fi
   rm -f -- "$SOCKET"
-  /usr/bin/open -n -g "$APP_BUNDLE" --args \
+  # This is a plugin-owned full-access daemon. Do not silently inherit a Cua
+  # policy ceiling from another tool or shell. The status gate below proves
+  # that no user, managed, or bounded-session policy remained active.
+  /usr/bin/env \
+    -u CUA_DRIVER_POLICY_FILE \
+    -u CUA_DRIVER_MANAGED_POLICY_FILE \
+    -u CUA_DRIVER_DISABLE_UNRESTRICTED \
+    -u CUA_DRIVER_ALLOW_LEGACY_EXISTING_PROFILE_APPROVAL \
+    -u CUA_DRIVER_SESSION_POLICY_FILE \
+    -u CUA_DRIVER_SESSION_POLICY_APPROVED \
+    -u CUA_DRIVER_PERMISSION_MODE \
+    -u CUA_DRIVER_DANGEROUSLY_BYPASS_APPROVALS \
+    /usr/bin/open -n -g "$APP_BUNDLE" --args \
     serve \
     --socket "$SOCKET" \
     --permission-mode unrestricted \
@@ -183,12 +195,22 @@ if ! daemon_is_verified; then
       ready=1
       break
     fi
+    if "$BIN" status --socket "$SOCKET" >/dev/null 2>&1; then
+      ready=2
+      break
+    fi
     sleep 0.2
     attempt=$((attempt + 1))
   done
   if [[ "$ready" != "1" ]]; then
-    echo "Cua Driver did not become ready in verified unrestricted mode within 30 seconds." >&2
-    echo "Grant Accessibility and Screen Recording to CuaDriver.app, then restart ZCode." >&2
+    if [[ "$ready" == "2" ]]; then
+      echo "Cua Driver started, but it is not the policy-free unrestricted daemon this plugin requires:" >&2
+      "$BIN" status --socket "$SOCKET" >&2 || true
+      echo "The plugin will not mislabel a policy-constrained daemon as full access." >&2
+    else
+      echo "Cua Driver did not become ready within 30 seconds." >&2
+      echo "Grant Accessibility and Screen Recording to CuaDriver.app, then restart ZCode." >&2
+    fi
     exit 1
   fi
 fi

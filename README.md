@@ -56,8 +56,9 @@ installs signed `/Applications/CuaDriver.app`; verifies its code signature and
 Gatekeeper assessment; disables its telemetry; and launches a plugin-owned daemon with
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
-`permission mode: unrestricted`; the socket is private, per-user, and
-versioned. The fallback requires CPython 3.10 or newer, creates a private
+`permission mode: unrestricted` with no user, managed, or session policy
+configured; the socket is private, per-user, and versioned. The fallback
+requires CPython 3.10 or newer, creates a private
 environment, and installs the exact tested PyObjC 12.2.1 binary wheels.
 
 If `/Applications` is not writable, the background backend reports that exact
