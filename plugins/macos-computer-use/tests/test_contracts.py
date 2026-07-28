@@ -1744,7 +1744,10 @@ class ContractTests(unittest.TestCase):
         backend._post_mouse = post
         with self.assertRaisesRegex(RuntimeError, "injected drag failure"):
             backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
-        self.assertEqual([events[0][0], events[1][0]], ["moved", "down"])
+        self.assertEqual(
+            [events[0][0], events[1][0]],
+            [getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), "down"],
+        )
         self.assertEqual(events[-1][0], "up")
         self.assertFalse(backend._held_buttons)
 
@@ -1770,7 +1773,10 @@ class ContractTests(unittest.TestCase):
         self.assertTrue(caught.exception.structured_content["release_pending"])
         self.assertIn("button", backend._held_buttons)
         backend.close()
-        self.assertEqual(events, ["moved", "down", "dragged", "up", "up"])
+        self.assertEqual(
+            events,
+            [getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), "down", "dragged", "up", "up"],
+        )
         self.assertFalse(backend._held_buttons)
 
     def test_optional_pointer_coordinates_must_be_paired(self):
@@ -1824,7 +1830,10 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["effect"], "partial")
         self.assertIn("button", backend._held_buttons)
         backend.close()
-        self.assertEqual(events, ["moved", "down", "up", "up", "up"])
+        self.assertEqual(
+            events,
+            [getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), "down", "up", "up", "up"],
+        )
         self.assertFalse(backend._held_buttons)
 
     def test_transient_click_release_failure_is_retried_without_replaying_click(self):
@@ -1841,7 +1850,10 @@ class ContractTests(unittest.TestCase):
 
         backend._post_mouse = post
         backend._click_pointer("button", "down", "up", "dragged", 1, 2, 1)
-        self.assertEqual(events, ["moved", "down", "up", "up"])
+        self.assertEqual(
+            events,
+            [getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), "down", "up", "up"],
+        )
         self.assertFalse(backend._held_buttons)
 
     def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
@@ -1878,6 +1890,102 @@ class ContractTests(unittest.TestCase):
             [event[0] for event in events],
             ["moved", "left-down", "left-dragged", "left-up"],
         )
+
+    def test_raw_mouse_up_drags_to_a_changed_endpoint_before_release(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        events = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(
+            (event, x, y)
+        )
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        result = backend.tool_mouse_up({"x": 5, "y": 6})
+        self.assertEqual(
+            events,
+            [
+                ("moved", 1.0, 2.0),
+                ("left-down", 1.0, 2.0),
+                ("left-dragged", 5.0, 6.0),
+                ("left-up", 5.0, 6.0),
+            ],
+        )
+        self.assertEqual(result["position"], {"x": 5.0, "y": 6.0})
+        self.assertFalse(backend._held_buttons)
+
+    def test_raw_mouse_up_at_the_held_point_does_not_invent_a_drag(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        events = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(event)
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        backend.tool_mouse_up({"x": 1, "y": 2})
+        self.assertEqual(events, ["moved", "left-down", "left-up"])
+        self.assertFalse(backend._held_buttons)
+
+    def test_raw_mouse_up_releases_even_when_the_final_drag_is_unverifiable(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        events = []
+
+        def post(event, button, x, y, click_count=1):
+            events.append(event)
+            if event == "left-dragged":
+                raise RuntimeError("injected final drag failure")
+
+        backend._post_mouse = post
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        with self.assertRaisesRegex(ToolError, "movement before release") as caught:
+            backend.tool_mouse_up({"x": 5, "y": 6})
+        self.assertEqual(events, ["moved", "left-down", "left-dragged", "left-up"])
+        self.assertEqual(caught.exception.structured_content["code"], "mouse_up_move_incomplete")
+        self.assertFalse(caught.exception.structured_content["release_pending"])
+        self.assertFalse(backend._held_buttons)
+
+    def test_raw_mouse_up_retries_and_retains_an_unconfirmed_release(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        events = []
+
+        def post(event, button, x, y, click_count=1):
+            events.append((event, x, y))
+            if event == "left-up":
+                raise RuntimeError("injected release failure")
+
+        backend._post_mouse = post
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        with self.assertRaisesRegex(ToolError, "release could not be confirmed") as caught:
+            backend.tool_mouse_up({"x": 5, "y": 6})
+        self.assertEqual(caught.exception.structured_content["code"], "mouse_up_release_incomplete")
+        self.assertTrue(caught.exception.structured_content["release_pending"])
+        self.assertIn("left-button", backend._held_buttons)
+        self.assertEqual([event[0] for event in events[-3:]], ["left-dragged", "left-up", "left-up"])
+        backend.close()
+        self.assertEqual(events[-1], ("left-up", 5.0, 6.0))
+        self.assertFalse(backend._held_buttons)
 
     def test_move_mouse_readback_failure_keeps_dispatched_effect_unknown(self):
         backend = MacOSBackend()

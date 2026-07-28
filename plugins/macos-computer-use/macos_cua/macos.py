@@ -2394,10 +2394,65 @@ class MacOSBackend:
 
     def tool_mouse_up(self, arguments: dict[str, Any]) -> dict[str, Any]:
         point = self._optional_point(arguments)
-        button, _down, up, _dragged = self._button(str(arguments.get("mouse_button", "left")))
+        button, _down, up, dragged = self._button(str(arguments.get("mouse_button", "left")))
         try:
-            self._post_mouse(up, button, *point)
+            held = self._held_buttons.get(button)
+            move_error: BaseException | None = None
+            move_attempted = False
+            if held is not None:
+                held_up, held_dragged, held_x, held_y = held
+                up = held_up
+                dragged = held_dragged
+                if abs(held_x - point[0]) > 0.01 or abs(held_y - point[1]) > 0.01:
+                    move_attempted = True
+                    # Register the requested endpoint first because a native
+                    # post can land even when delivery confirmation raises.
+                    self._held_buttons[button] = (up, dragged, point[0], point[1])
+                    try:
+                        self._post_mouse(dragged, button, *point)
+                    except BaseException as error:
+                        # Releasing is still mandatory even if the final drag
+                        # event was rejected, unverifiable, or interrupted.
+                        move_error = error
+            else:
+                # An untracked mouse_up is an intentional recovery primitive.
+                # Retain it until posting succeeds so shutdown can retry an
+                # unknown native delivery without inventing another down.
+                self._held_buttons[button] = (up, dragged, point[0], point[1])
+
+            try:
+                self._post_mouse(up, button, *point)
+            except Exception as first_error:
+                try:
+                    self._post_mouse(up, button, *point)
+                except Exception as retry_error:
+                    if move_error is not None and not isinstance(move_error, Exception):
+                        raise move_error
+                    raise ToolError(
+                        f"mouse release could not be confirmed: {retry_error}",
+                        {
+                            "code": "mouse_up_release_incomplete",
+                            "effect": "partial",
+                            "verified": False,
+                            "release_pending": True,
+                            "movement_attempted": move_attempted,
+                            "position": {"x": point[0], "y": point[1]},
+                        },
+                    ) from first_error
             self._held_buttons.pop(button, None)
+            if move_error is not None:
+                if not isinstance(move_error, Exception):
+                    raise move_error
+                raise ToolError(
+                    f"mouse button was released but movement before release could not be confirmed: {move_error}",
+                    {
+                        "code": "mouse_up_move_incomplete",
+                        "effect": "partial",
+                        "verified": False,
+                        "release_pending": False,
+                        "position": {"x": point[0], "y": point[1]},
+                    },
+                ) from move_error
             return {
                 "ok": True,
                 "position": {"x": point[0], "y": point[1]},

@@ -255,7 +255,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "mouse_up",
-        "description": "Release a held mouse button at the current pointer, a raw screen point, or a fresh screenshot-bound point.",
+        "description": "Release a held mouse button at the current pointer, a raw screen point, or a fresh screenshot-bound point; a changed held endpoint is delivered as a drag before release.",
         "inputSchema": _object(
             {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "screenshotId": {"type": "string"}, "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"}}
         ),

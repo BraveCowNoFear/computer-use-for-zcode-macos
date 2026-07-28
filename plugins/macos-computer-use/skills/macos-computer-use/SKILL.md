@@ -121,6 +121,9 @@ use its visible pixel coordinates rather than the Mac's native backing size.
 Fallback clicks, drag starts, and raw `mouse_down` calls post a real pointer
 move to the grounded point before the button-down event, so hover-sensitive
 controls receive the same move/down sequence as physical mouse use.
+When raw `mouse_up` supplies a point different from the held endpoint, the
+fallback posts a final dragged event before release. A failed release is retried
+once and retained for shutdown cleanup if native delivery remains unconfirmed.
 
 MCP image blocks are already rendered by the host. Inspect them directly; do
 not decode, print, or re-emit their base64 payload just to see the screenshot.

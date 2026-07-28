@@ -154,6 +154,9 @@ field; always include it when x/y came from a returned screenshot.
 Fallback `click`, `drag`, and `mouse_down` post `MouseMoved` at the resolved
 point before button-down. Multi-click repeats this move/down/up sequence for
 each click, preserving native hover behavior and click counts.
+For a held button, raw `mouse_up` at a changed point posts the corresponding
+dragged event before release; the same endpoint does not invent a drag. It
+retries release once and retains an unconfirmed release for shutdown cleanup.
 
 Fallback startup sequence:
 

@@ -88,7 +88,8 @@ omitting screenshots; pixel and desktop routes still require it.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll. Direct fallback clicks, drag starts, and raw mouse-down actions first
   move the pointer to the grounded point, matching the physical hover/down
-  sequence used by a person.
+  sequence used by a person. Releasing a held button at a new point posts a
+  final drag event before mouse-up and retains unconfirmed releases for cleanup.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.
