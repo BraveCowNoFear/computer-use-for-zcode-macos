@@ -274,6 +274,13 @@ class RepositoryContractTests(unittest.TestCase):
         ):
             self.assertTrue((ROOT / path).exists(), path)
 
+    def test_removed_hermes_skill_reference_is_commit_pinned(self):
+        revision = "17dfc6bec4a8b7fd840d479c33e9a7b2449f805d"
+        for path in ("README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md", "Memory.md"):
+            text = (ROOT / path).read_text(encoding="utf-8")
+            self.assertIn(revision, text, path)
+            self.assertNotIn("hermes-agent/tree/main/skills/apple/macos-computer-use", text, path)
+
     def test_live_smoke_sources_compile(self):
         for path in (
             PLUGIN / "scripts" / "live-smoke.py",

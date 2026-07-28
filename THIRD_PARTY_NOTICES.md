@@ -16,8 +16,9 @@ upstream license and notices.
 ## Hermes Agent macOS Computer Use Skill
 
 - Project: `NousResearch/hermes-agent`
-- Source: https://github.com/NousResearch/hermes-agent/tree/main/skills/apple/macos-computer-use
-- License: MIT at the referenced repository revision
+- Reviewed source: https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md
+- Reviewed revision: `17dfc6bec4a8b7fd840d479c33e9a7b2449f805d`
+- License: MIT at the reviewed repository revision
 
 The project's high-level background-control routing was informed by publicly
 documented behavior in the Hermes Skill. No Hermes source text is distributed

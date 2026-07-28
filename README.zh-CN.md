@@ -132,6 +132,6 @@ plugins/macos-computer-use/
 ## 上游与许可证
 
 后台控制依赖 MIT 许可的 [Cua Driver](https://github.com/trycua/cua)，路由模型
-参考了 [Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/tree/main/skills/apple/macos-computer-use)。
+参考了[历史版 Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md)。
 本项目采用 MIT 许可证，详见 [LICENSE](./LICENSE) 和
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。

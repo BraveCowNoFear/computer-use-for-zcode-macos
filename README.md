@@ -156,6 +156,6 @@ plugins/macos-computer-use/
 
 Primary background control depends on [Cua Driver](https://github.com/trycua/cua)
 (MIT). The routing model was informed by the
-[Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/tree/main/skills/apple/macos-computer-use).
+[historical Hermes macOS Computer Use Skill](https://github.com/NousResearch/hermes-agent/blob/17dfc6bec4a8b7fd840d479c33e9a7b2449f805d/skills/apple/macos-computer-use/SKILL.md).
 This project is MIT licensed; see [LICENSE](./LICENSE) and
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
