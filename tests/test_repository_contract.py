@@ -33,6 +33,22 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertTrue((PLUGIN / zcode["mcpServers"]).exists())
         self.assertTrue((PLUGIN / zcode["skills"] / "macos-computer-use" / "SKILL.md").exists())
 
+    def test_codex_marketplace_and_interface_shape(self):
+        marketplace = json.loads((ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
+        entry = marketplace["plugins"][0]
+        self.assertEqual(entry["name"], PLUGIN.name)
+        self.assertEqual(entry["source"], {"source": "local", "path": "./plugins/macos-computer-use"})
+        self.assertEqual(entry["policy"], {"installation": "AVAILABLE", "authentication": "ON_INSTALL"})
+        self.assertEqual(entry["category"], "Productivity")
+
+        manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        prompts = manifest["interface"]["defaultPrompt"]
+        self.assertIsInstance(prompts, list)
+        self.assertTrue(1 <= len(prompts) <= 3)
+        self.assertTrue(all(isinstance(prompt, str) and len(prompt) <= 128 for prompt in prompts))
+        self.assertEqual(manifest["skills"], "./skills/")
+        self.assertEqual(manifest["mcpServers"], "./.mcp.json")
+
     def test_release_versions_are_synchronized(self):
         expected = json.loads((ROOT / "marketplace.json").read_text(encoding="utf-8"))["plugins"][0]["version"]
         package = (PLUGIN / "macos_cua" / "__init__.py").read_text(encoding="utf-8")

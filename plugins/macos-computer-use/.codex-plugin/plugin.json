@@ -1,6 +1,6 @@
 {
   "name": "macos-computer-use",
-  "version": "0.8.15",
+  "version": "0.8.16",
   "description": "Full local mouse, keyboard, screenshot, window, and Accessibility control for macOS",
   "author": {
     "name": "BraveCowNoFear",
@@ -18,7 +18,9 @@
     "developerName": "BraveCowNoFear",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read", "Write"],
-    "defaultPrompt": "Use macOS Computer Use to operate the requested app and verify the visible result."
+    "defaultPrompt": [
+      "Use macOS Computer Use to operate the requested app and verify the visible result."
+    ]
   },
   "mcpServers": "./.mcp.json"
 }
