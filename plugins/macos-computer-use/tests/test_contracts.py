@@ -16,7 +16,13 @@ if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
 from macos_cua.contracts import CORE_CODEX_TOOL_NAMES, TOOL_DEFINITIONS, TOOL_NAMES, ToolError
-from macos_cua.macos import MacOSBackend, parse_key_chord
+from macos_cua.macos import (
+    EXPECTED_PYOBJC_VERSION,
+    PYOBJC_DISTRIBUTIONS,
+    MacOSBackend,
+    parse_key_chord,
+    require_exact_pyobjc_versions,
+)
 from macos_cua import server as server_module
 from macos_cua.server import MCPServer, serve
 
@@ -113,6 +119,19 @@ class ContractTests(unittest.TestCase):
         self.assertFalse(health["pixelObservationReady"])
         self.assertFalse(health["desktopObservationReady"])
         self.assertIn("AX-only", health["message"])
+
+    def test_native_runtime_requires_the_exact_pyobjc_closure(self):
+        versions = require_exact_pyobjc_versions(lambda distribution: "12.2.1")
+        self.assertEqual(set(versions), set(PYOBJC_DISTRIBUTIONS))
+        self.assertTrue(all(version == EXPECTED_PYOBJC_VERSION for version in versions.values()))
+
+        def mismatched(distribution):
+            return "12.2.0" if distribution == "pyobjc-framework-Quartz" else "12.2.1"
+
+        with self.assertRaisesRegex(RuntimeError, "pyobjc-framework-Quartz=12.2.0"):
+            require_exact_pyobjc_versions(mismatched)
+        with self.assertRaisesRegex(RuntimeError, "Missing required distribution pyobjc-core"):
+            require_exact_pyobjc_versions(lambda distribution: (_ for _ in ()).throw(LookupError("absent")))
 
     def test_permission_request_only_prompts_for_requested_grants(self):
         prompts = {"accessibility": 0, "screenRecording": 0}

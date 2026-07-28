@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from importlib import metadata
 import json
 import os
 import re
@@ -15,6 +16,38 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .contracts import ToolError
+
+
+EXPECTED_PYOBJC_VERSION = "12.2.1"
+PYOBJC_DISTRIBUTIONS = (
+    "pyobjc-core",
+    "pyobjc-framework-Cocoa",
+    "pyobjc-framework-CoreText",
+    "pyobjc-framework-Quartz",
+    "pyobjc-framework-ApplicationServices",
+)
+
+
+def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
+    """Resolve and enforce the exact native wheel closure tested by the plugin."""
+    getter = version_getter or metadata.version
+    versions: dict[str, str] = {}
+    for distribution in PYOBJC_DISTRIBUTIONS:
+        try:
+            versions[distribution] = str(getter(distribution))
+        except Exception as error:
+            raise RuntimeError(f"Missing required distribution {distribution}: {error}") from error
+    mismatched = {
+        distribution: version
+        for distribution, version in versions.items()
+        if version != EXPECTED_PYOBJC_VERSION
+    }
+    if mismatched:
+        detail = ", ".join(f"{name}={version}" for name, version in mismatched.items())
+        raise RuntimeError(
+            f"PyObjC runtime mismatch; expected {EXPECTED_PYOBJC_VERSION} for every package, found {detail}"
+        )
+    return versions
 
 
 KEY_CODES: dict[str, int] = {
@@ -137,11 +170,13 @@ class MacOSBackend:
         self.ApplicationServices: Any | None = None
         self.Quartz: Any | None = None
         self.native_error: str | None = None
+        self.native_versions: dict[str, str] = {}
         try:
             import AppKit  # type: ignore[import-not-found]
             import ApplicationServices  # type: ignore[import-not-found]
             import Quartz  # type: ignore[import-not-found]
 
+            self.native_versions = require_exact_pyobjc_versions()
             self.AppKit = AppKit
             self.ApplicationServices = ApplicationServices
             self.Quartz = Quartz
@@ -210,6 +245,7 @@ class MacOSBackend:
             "platform": "darwin",
             "nativeDependencies": native,
             "nativeError": self.native_error,
+            "pyobjcVersions": self.native_versions,
             **permissions,
             "axControlReady": ax_ready,
             "pixelObservationReady": pixel_ready,
@@ -249,6 +285,7 @@ class MacOSBackend:
                 "screenRecording": False,
                 "nativeDependencies": False,
                 "nativeError": self.native_error,
+                "pyobjcVersions": self.native_versions,
             }
         return self._permission_status()
 

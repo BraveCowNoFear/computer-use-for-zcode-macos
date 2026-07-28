@@ -82,6 +82,9 @@ class RepositoryContractTests(unittest.TestCase):
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertIn('(3, 10) <= sys.version_info < (3, 16)', common)
         self.assertIn("CPython 3.10 through 3.15", common)
+        backend = (PLUGIN / "macos_cua" / "macos.py").read_text(encoding="utf-8")
+        self.assertIn('EXPECTED_PYOBJC_VERSION = "12.2.1"', backend)
+        self.assertIn("require_exact_pyobjc_versions()", backend)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_accepts_the_ci_cpython(self):
