@@ -1823,14 +1823,31 @@ class MacOSBackend:
                 down, up = event_pair(KEY_CODES[modifier], modifier)
                 next_flags = active_flags | flag
                 Q.CGEventSetFlags(down, next_flags)
-                Q.CGEventSetFlags(up, next_flags)
+                # Event flags describe modifier state at that event. The
+                # matching key-up therefore carries the state from before
+                # this modifier was pressed, not the still-down state.
+                Q.CGEventSetFlags(up, active_flags)
                 active_flags = next_flags
                 cleanup_releases.append((up, flag))
                 self._post_key_down(down, up)
 
             down, up = event_pair(key_code, "primary")
-            Q.CGEventSetFlags(down, active_flags)
-            Q.CGEventSetFlags(up, active_flags)
+            primary_modifier = next(
+                (
+                    modifier
+                    for modifier in MODIFIER_KEY_ORDER
+                    if KEY_CODES[modifier] == key_code
+                ),
+                None,
+            )
+            primary_down_flags = active_flags
+            primary_up_flags = active_flags
+            if primary_modifier is not None:
+                primary_flag = self._modifier_flags({primary_modifier})
+                primary_down_flags |= primary_flag
+                primary_up_flags &= ~primary_flag
+            Q.CGEventSetFlags(down, primary_down_flags)
+            Q.CGEventSetFlags(up, primary_up_flags)
             cleanup_releases.append((up, None))
             self._post_key_down(down, up)
             try:
@@ -1845,16 +1862,24 @@ class MacOSBackend:
         finally:
             for up, flag in reversed(cleanup_releases):
                 is_held = any(held is up for held in self._held_key_releases)
+                release_flags = active_flags & ~flag if flag is not None else active_flags
                 if is_held and id(up) not in failed_releases:
                     try:
-                        Q.CGEventSetFlags(up, active_flags)
+                        Q.CGEventSetFlags(up, release_flags)
                         self._post_key_up(up)
                     except BaseException as error:
                         failed_releases.add(id(up))
                         if cleanup_error is None:
                             cleanup_error = error
                 if flag is not None:
-                    active_flags &= ~flag
+                    active_flags = release_flags
+
+            # A release retained for shutdown is posted after every modifier
+            # cleanup attempt, so its flags must describe that final desired
+            # state rather than the chord state from the original attempt.
+            for pending_up, _flag in cleanup_releases:
+                if any(held is pending_up for held in self._held_key_releases):
+                    Q.CGEventSetFlags(pending_up, active_flags)
 
         if action_error is not None:
             raise action_error

@@ -1157,10 +1157,33 @@ class ContractTests(unittest.TestCase):
                 (56, True, 5),
                 (0, True, 5),
                 (0, False, 5),
-                (56, False, 5),
-                (55, False, 1),
+                (56, False, 1),
+                (55, False, 0),
             ],
         )
+        self.assertEqual(backend._held_key_releases, [])
+
+    def test_modifier_only_key_reports_down_then_up_flag_state(self):
+        class Event:
+            def __init__(self, code, down):
+                self.code = code
+                self.down = down
+                self.flags = 0
+
+        posts = []
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGHIDEventTap="hid",
+            kCGEventFlagMaskCommand=1,
+            kCGEventFlagMaskControl=2,
+            kCGEventFlagMaskShift=4,
+            kCGEventFlagMaskAlternate=8,
+            CGEventCreateKeyboardEvent=lambda _source, code, down: Event(code, down),
+            CGEventSetFlags=lambda event, flags: setattr(event, "flags", flags),
+            CGEventPost=lambda _tap, event: posts.append((event.code, event.down, event.flags)),
+        )
+        backend._send_key("Command")
+        self.assertEqual(posts, [(55, True, 1), (55, False, 0)])
         self.assertEqual(backend._held_key_releases, [])
 
     def test_key_chord_creation_failure_releases_posted_modifiers(self):
@@ -1190,7 +1213,7 @@ class ContractTests(unittest.TestCase):
             backend._send_key("Command+Shift+a")
         self.assertEqual(
             posts,
-            [(55, True, 1), (56, True, 5), (56, False, 5), (55, False, 1)],
+            [(55, True, 1), (56, True, 5), (56, False, 1), (55, False, 0)],
         )
         self.assertEqual(backend._held_key_releases, [])
 
@@ -1226,8 +1249,9 @@ class ContractTests(unittest.TestCase):
             backend._send_key("Command+a")
         self.assertEqual(caught.exception.structured_content["code"], "key_release_incomplete")
         self.assertEqual(sum(code == 0 and not down for code, down, _flags in posts), 2)
-        self.assertIn((55, False, 1), posts)
+        self.assertIn((55, False, 0), posts)
         self.assertEqual(len(backend._held_key_releases), 1)
+        self.assertEqual(backend._held_key_releases[0].flags, 0)
         backend.close()
         self.assertEqual(sum(code == 0 and not down for code, down, _flags in posts), 3)
         self.assertEqual(backend._held_key_releases, [])
