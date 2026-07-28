@@ -210,10 +210,12 @@ class ContractTests(unittest.TestCase):
             CGEventSetLocation=lambda event, point: setattr(event, "location", point),
             CGEventPost=lambda tap, event: posted.append((tap, event.location)),
         )
-        delivered = backend._post_scroll(10.0, 20.0, 2.5, -1.5, "window")
+        with mock.patch("macos_cua.macos.time.sleep") as pause:
+            delivered = backend._post_scroll(10.0, 20.0, 2.5, -1.5, "window")
         self.assertEqual(delivered, (3, -2))
         self.assertEqual(created, [("pixel", 2, 2, -3)])
         self.assertEqual(posted, [("hid", (10.0, 20.0))])
+        pause.assert_called_once_with(0.1)
 
     def test_scroll_never_posts_an_event_that_quantizes_to_zero(self):
         backend = MacOSBackend()
@@ -236,9 +238,11 @@ class ContractTests(unittest.TestCase):
             CGEventPost=mock.Mock(side_effect=RuntimeError("injected scroll failure")),
         )
         with self.assertRaisesRegex(ToolError, "injected scroll failure") as caught:
-            backend._post_scroll(10.0, 20.0, 1, 2, "desktop")
+            with mock.patch("macos_cua.macos.time.sleep") as pause:
+                backend._post_scroll(10.0, 20.0, 1, 2, "desktop")
         self.assertEqual(caught.exception.structured_content["code"], "scroll_delivery_unknown")
         self.assertEqual(caught.exception.structured_content["effect"], "unverifiable")
+        pause.assert_not_called()
 
     def test_bounded_png_keeps_the_original_when_sips_fails(self):
         class Rep:

@@ -61,6 +61,7 @@ CLICK_EVENT_SETTLE_SECONDS = 0.03
 MULTICLICK_ADDITIONAL_GAP_SECONDS = 0.05
 TEXT_CHUNK_SETTLE_SECONDS = 0.02
 KEY_CHORD_SETTLE_SECONDS = 0.1
+SCROLL_SETTLE_SECONDS = 0.1
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -1699,6 +1700,7 @@ class MacOSBackend:
                     "verified": False,
                 },
             ) from error
+        time.sleep(SCROLL_SETTLE_SECONDS)
         return pixel_x, pixel_y
 
     def _click_pointer(

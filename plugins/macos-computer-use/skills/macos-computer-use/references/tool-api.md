@@ -97,7 +97,7 @@ server.
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
 | `press_key` | `window`, `key` | Press a key or `+`-separated chord; use keysym names such as `plus`, `colon`, or `ISO_Left_Tab` when the symbol conflicts with the separator. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
-| `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll; `deliveredDelta` reports symmetric integer quantization, and an all-zero quantized event is rejected. |
+| `scroll` | `window`, `x`, `y`, `scrollX`, `scrollY` | Pixel scroll; `deliveredDelta` reports symmetric integer quantization, an all-zero quantized event is rejected, and success settles for 100 ms before refresh. |
 | `set_value` | `window`, `element_index`, `value` | Set editable AX value. |
 | `drag` | `window`, start/end coordinates | Left-button drag. |
 | `perform_secondary_action` | `window`, index, `action` | Run listed AX action. |
