@@ -393,6 +393,67 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.structured_content["retry_from_character"], 32)
         self.assertEqual(expired, [window])
 
+    def test_failed_window_action_expires_its_observation(self):
+        backend = MacOSBackend()
+        window = {"id": 8, "pid": 80}
+        backend._activate_current = lambda value: value
+        backend._relative_point = lambda *_args: (10.0, 20.0)
+        backend._button = lambda _value: ("button", "down", "up", "dragged")
+        backend._click_pointer = mock.Mock(side_effect=RuntimeError("injected click failure"))
+        expired = []
+        backend._invalidate_window_observations = lambda value: expired.append(value)
+        with self.assertRaisesRegex(RuntimeError, "injected click failure"):
+            backend.tool_click({"window": window, "x": 10, "y": 20})
+        self.assertEqual(expired, [window])
+
+    def test_failed_key_release_is_retained_for_shutdown_cleanup(self):
+        backend = MacOSBackend()
+        down = {"kind": "down"}
+        up = {"kind": "up"}
+        posts = []
+        up_failures = 2
+
+        def post(_tap, event):
+            nonlocal up_failures
+            posts.append(event)
+            if event is up and up_failures:
+                up_failures -= 1
+                raise RuntimeError("injected key-up failure")
+
+        backend.Quartz = types.SimpleNamespace(kCGHIDEventTap="hid", CGEventPost=post)
+        backend._post_key_down(down, up)
+        with self.assertRaisesRegex(RuntimeError, "injected key-up failure"):
+            backend._post_key_up(up)
+        self.assertEqual(backend._held_key_releases, [up])
+        backend.close()
+        self.assertEqual(backend._held_key_releases, [])
+        self.assertIs(posts[-1], up)
+        self.assertEqual(sum(event is up for event in posts), 3)
+
+    def test_failed_mouse_down_keeps_a_shutdown_release(self):
+        backend = MacOSBackend()
+        events = []
+        down_failures = 1
+        up_failures = 1
+
+        def post(event, button, x, y, click_count=1):
+            nonlocal down_failures, up_failures
+            events.append(event)
+            if event == "down" and down_failures:
+                down_failures -= 1
+                raise RuntimeError("injected mouse-down interruption")
+            if event == "up" and up_failures:
+                up_failures -= 1
+                raise RuntimeError("injected immediate release failure")
+
+        backend._post_mouse = post
+        with self.assertRaisesRegex(RuntimeError, "mouse-down interruption"):
+            backend._post_mouse_down("button", "down", "up", "dragged", 4, 5)
+        self.assertIn("button", backend._held_buttons)
+        backend.close()
+        self.assertNotIn("button", backend._held_buttons)
+        self.assertEqual(events, ["down", "up", "up"])
+
     def test_mcp_rejects_schema_violations_before_backend_dispatch(self):
         backend = mock.Mock()
         server = MCPServer(backend)
@@ -948,6 +1009,8 @@ class ContractTests(unittest.TestCase):
         backend._cursor = lambda: (1.0, 2.0)
         events = []
         delivered_drags = 0
+        invalidations = []
+        backend._invalidate_all_observations = lambda: invalidations.append(True)
 
         def post(event, button, x, y, click_count=1):
             nonlocal delivered_drags
@@ -961,6 +1024,7 @@ class ContractTests(unittest.TestCase):
         backend.tool_mouse_down({"x": 1, "y": 2})
         with self.assertRaisesRegex(RuntimeError, "injected move failure"):
             backend.tool_move_mouse({"x": 7, "y": 8, "duration": 0.1})
+        self.assertEqual(len(invalidations), 2)
         last_delivered = [event for event in events if event[0] == "left-dragged"][-1]
         backend.close()
         self.assertEqual(events[-1][0], "left-up")

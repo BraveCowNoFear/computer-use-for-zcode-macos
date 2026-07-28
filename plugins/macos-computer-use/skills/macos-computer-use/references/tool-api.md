@@ -137,6 +137,11 @@ cannot be delivered. The response carries `delivered_chars` and
 `retry_from_character`; all prior observation handles are expired, so refresh
 state and send only that remaining suffix.
 
+Every fallback input attempt conservatively expires its prior window or desktop
+observation even when native delivery raises. Key-down and mouse-down events are
+registered before posting; matching releases are retried immediately and again
+during MCP shutdown if interruption occurs between the pair.
+
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
 ```json

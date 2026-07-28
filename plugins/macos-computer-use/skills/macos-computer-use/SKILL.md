@@ -239,7 +239,8 @@ outcome authoritative.
   launcher stop only its versioned plugin socket and recreate it without
   inherited Cua policy variables; do not reuse a global/default daemon.
 - Ambiguous failure after an input: observe before retrying because it may have
-  already landed.
+  already landed. Every fallback action attempt expires its prior screenshot
+  and AX handles even when it returns an error; never reuse them.
 - Two fresh-state failures: change rungs or report the literal error; never loop
   a potentially non-idempotent action.
 

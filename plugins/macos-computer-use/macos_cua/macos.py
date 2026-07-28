@@ -207,6 +207,7 @@ class MacOSBackend:
         self._installed_cache: tuple[float, list[dict[str, Any]]] | None = None
         self._screenshot_dir = Path(tempfile.gettempdir()) / "zcode-macos-computer-use"
         self._held_buttons: dict[Any, tuple[Any, Any, float, float]] = {}
+        self._held_key_releases: list[Any] = []
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
@@ -227,6 +228,13 @@ class MacOSBackend:
             except Exception:
                 pass
         self._held_buttons.clear()
+        if self.Quartz is not None:
+            for up in self._held_key_releases:
+                try:
+                    self.Quartz.CGEventPost(self.Quartz.kCGHIDEventTap, up)
+                except Exception:
+                    pass
+        self._held_key_releases.clear()
         self._invalidate_all_observations()
 
     def call(self, name: str, arguments: dict[str, Any]) -> Any:
@@ -1244,8 +1252,7 @@ class MacOSBackend:
         if button in self._held_buttons:
             raise ToolError("The requested mouse button is already held; release it with mouse_up before clicking")
         for click_number in range(1, count + 1):
-            self._post_mouse(down, button, x, y, click_number)
-            self._held_buttons[button] = (up, dragged, x, y)
+            self._post_mouse_down(button, down, up, dragged, x, y, click_number)
             try:
                 self._post_mouse(up, button, x, y, click_number)
             except Exception:
@@ -1263,28 +1270,64 @@ class MacOSBackend:
             if click_number < count:
                 time.sleep(0.08)
 
+    def _post_mouse_down(
+        self,
+        button: Any,
+        down: Any,
+        up: Any,
+        dragged: Any,
+        x: float,
+        y: float,
+        click_count: int = 1,
+    ) -> None:
+        # Register before posting so shutdown can always synthesize the matching
+        # release, including an interruption immediately after the native call.
+        self._held_buttons[button] = (up, dragged, x, y)
+        try:
+            self._post_mouse(down, button, x, y, click_count)
+        except BaseException:
+            try:
+                self._post_mouse(up, button, x, y, click_count)
+            except Exception:
+                pass
+            else:
+                self._held_buttons.pop(button, None)
+            raise
+
     def tool_click(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        button_name = str(arguments.get("mouse_button", "left"))
-        count = int(arguments.get("click_count", 1))
-        if not 1 <= count <= 4:
-            raise ToolError("click_count must be between 1 and 4")
-        if "element_index" in arguments and arguments.get("element_index") is not None:
-            element = self._cached_element(window, arguments["element_index"])
-            if button_name in {"left", "l"} and count == 1 and self._ax_perform(
-                element, self._ax_attr("kAXPressAction", "AXPress")
-            ):
-                self._invalidate_window_observations(window)
-                return {"ok": True, "method": "accessibility", "element_index": int(arguments["element_index"])}
-            x, y = self._element_center(element)
-        else:
-            if arguments.get("x") is None or arguments.get("y") is None:
-                raise ToolError("click requires either element_index or both x and y")
-            x, y = self._relative_point(window, arguments["x"], arguments["y"], arguments.get("screenshotId"))
-        button, down, up, dragged = self._button(button_name)
-        self._click_pointer(button, down, up, dragged, x, y, count)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "method": "coordinate", "screenPoint": {"x": x, "y": y}, "click_count": count}
+        try:
+            button_name = str(arguments.get("mouse_button", "left"))
+            count = int(arguments.get("click_count", 1))
+            if not 1 <= count <= 4:
+                raise ToolError("click_count must be between 1 and 4")
+            if "element_index" in arguments and arguments.get("element_index") is not None:
+                element = self._cached_element(window, arguments["element_index"])
+                if button_name in {"left", "l"} and count == 1 and self._ax_perform(
+                    element, self._ax_attr("kAXPressAction", "AXPress")
+                ):
+                    return {
+                        "ok": True,
+                        "method": "accessibility",
+                        "element_index": int(arguments["element_index"]),
+                    }
+                x, y = self._element_center(element)
+            else:
+                if arguments.get("x") is None or arguments.get("y") is None:
+                    raise ToolError("click requires either element_index or both x and y")
+                x, y = self._relative_point(
+                    window, arguments["x"], arguments["y"], arguments.get("screenshotId")
+                )
+            button, down, up, dragged = self._button(button_name)
+            self._click_pointer(button, down, up, dragged, x, y, count)
+            return {
+                "ok": True,
+                "method": "coordinate",
+                "screenPoint": {"x": x, "y": y},
+                "click_count": count,
+            }
+        finally:
+            self._invalidate_window_observations(window)
 
     def _modifier_flags(self, modifiers: Iterable[str]) -> int:
         Q = self.Quartz
@@ -1301,9 +1344,11 @@ class MacOSBackend:
 
     def tool_press_key(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        self._send_key(str(arguments["key"]))
-        self._invalidate_window_observations(window)
-        return {"ok": True, "key": arguments["key"]}
+        try:
+            self._send_key(str(arguments["key"]))
+            return {"ok": True, "key": arguments["key"]}
+        finally:
+            self._invalidate_window_observations(window)
 
     def _send_key(self, key: str) -> None:
         key_code, modifiers = parse_key_chord(key)
@@ -1315,8 +1360,47 @@ class MacOSBackend:
             raise ToolError("macOS could not create a keyboard event")
         Q.CGEventSetFlags(down, flags)
         Q.CGEventSetFlags(up, flags)
-        Q.CGEventPost(Q.kCGHIDEventTap, down)
-        Q.CGEventPost(Q.kCGHIDEventTap, up)
+        self._post_key_down(down, up)
+        self._post_key_up(up)
+
+    def _forget_key_release(self, up: Any) -> None:
+        for index, held in enumerate(self._held_key_releases):
+            if held is up:
+                self._held_key_releases.pop(index)
+                return
+
+    def _post_key_down(self, down: Any, up: Any) -> None:
+        Q = self.Quartz
+        # Register first so SIGTERM/KeyboardInterrupt between bytecodes still
+        # leaves close() enough information to post the matching key-up.
+        self._held_key_releases.append(up)
+        try:
+            Q.CGEventPost(Q.kCGHIDEventTap, down)
+        except BaseException:
+            try:
+                Q.CGEventPost(Q.kCGHIDEventTap, up)
+            except Exception:
+                pass
+            else:
+                self._forget_key_release(up)
+            raise
+
+    def _post_key_up(self, up: Any) -> None:
+        Q = self.Quartz
+        try:
+            Q.CGEventPost(Q.kCGHIDEventTap, up)
+        except BaseException:
+            # Retry once immediately; retain the event for close() if the
+            # release still cannot be posted.
+            try:
+                Q.CGEventPost(Q.kCGHIDEventTap, up)
+            except Exception:
+                pass
+            else:
+                self._forget_key_release(up)
+            raise
+        else:
+            self._forget_key_release(up)
 
     def tool_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
@@ -1342,11 +1426,11 @@ class MacOSBackend:
                     raise ToolError("macOS could not create a Unicode keyboard event")
                 Q.CGEventKeyboardSetUnicodeString(down, utf16_length, chunk)
                 Q.CGEventKeyboardSetUnicodeString(up, utf16_length, chunk)
-                Q.CGEventPost(Q.kCGHIDEventTap, down)
+                self._post_key_down(down, up)
                 # Unicode insertion occurs on key-down; count the chunk before
                 # key-up so a reported key-up failure cannot cause replay.
                 delivered += len(chunk)
-                Q.CGEventPost(Q.kCGHIDEventTap, up)
+                self._post_key_up(up)
             except Exception as error:
                 if delivered:
                     raise ToolError(
@@ -1368,46 +1452,69 @@ class MacOSBackend:
 
     def tool_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        x, y = self._relative_point(window, arguments["x"], arguments["y"], arguments.get("screenshotId"))
-        Q = self.Quartz
-        event = Q.CGEventCreateScrollWheelEvent(
-            None,
-            Q.kCGScrollEventUnitPixel,
-            2,
-            int(round(-float(arguments["scrollY"]))),
-            int(round(-float(arguments["scrollX"]))),
-        )
-        if event is None:
-            raise ToolError("macOS could not create a scroll event")
-        Q.CGEventSetLocation(event, (x, y))
-        Q.CGEventPost(Q.kCGHIDEventTap, event)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "screenPoint": {"x": x, "y": y}}
+        try:
+            x, y = self._relative_point(
+                window, arguments["x"], arguments["y"], arguments.get("screenshotId")
+            )
+            Q = self.Quartz
+            event = Q.CGEventCreateScrollWheelEvent(
+                None,
+                Q.kCGScrollEventUnitPixel,
+                2,
+                int(round(-float(arguments["scrollY"]))),
+                int(round(-float(arguments["scrollX"]))),
+            )
+            if event is None:
+                raise ToolError("macOS could not create a scroll event")
+            Q.CGEventSetLocation(event, (x, y))
+            Q.CGEventPost(Q.kCGHIDEventTap, event)
+            return {"ok": True, "screenPoint": {"x": x, "y": y}}
+        finally:
+            self._invalidate_window_observations(window)
 
     def tool_set_value(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        element = self._cached_element(window, arguments["element_index"])
-        value_attr = self._ax_attr("kAXValueAttribute", "AXValue")
-        value = str(arguments["value"])
-        if self._ax_set(element, value_attr, value):
+        try:
+            element = self._cached_element(window, arguments["element_index"])
+            value_attr = self._ax_attr("kAXValueAttribute", "AXValue")
+            value = str(arguments["value"])
+            if self._ax_set(element, value_attr, value):
+                return {
+                    "ok": True,
+                    "method": "accessibility",
+                    "element_index": int(arguments["element_index"]),
+                }
+            x, y = self._element_center(element)
+            button, down, up, dragged = self._button("left")
+            self._click_pointer(button, down, up, dragged, x, y, 1)
+            self.tool_press_key({"window": window, "key": "Command+a"})
+            self.tool_type_text({"window": window, "text": value})
+            return {
+                "ok": True,
+                "method": "focus-select-type",
+                "element_index": int(arguments["element_index"]),
+            }
+        finally:
             self._invalidate_window_observations(window)
-            return {"ok": True, "method": "accessibility", "element_index": int(arguments["element_index"])}
-        x, y = self._element_center(element)
-        button, down, up, dragged = self._button("left")
-        self._click_pointer(button, down, up, dragged, x, y, 1)
-        self.tool_press_key({"window": window, "key": "Command+a"})
-        self.tool_type_text({"window": window, "text": value})
-        self._invalidate_window_observations(window)
-        return {"ok": True, "method": "focus-select-type", "element_index": int(arguments["element_index"])}
 
     def tool_drag(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        start = self._relative_point(window, arguments["from_x"], arguments["from_y"], arguments.get("screenshotId"))
-        end = self._relative_point(window, arguments["to_x"], arguments["to_y"], arguments.get("screenshotId"))
-        duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
-        self._drag_pointer(start, end, duration)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
+        try:
+            start = self._relative_point(
+                window, arguments["from_x"], arguments["from_y"], arguments.get("screenshotId")
+            )
+            end = self._relative_point(
+                window, arguments["to_x"], arguments["to_y"], arguments.get("screenshotId")
+            )
+            duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
+            self._drag_pointer(start, end, duration)
+            return {
+                "ok": True,
+                "from": {"x": start[0], "y": start[1]},
+                "to": {"x": end[0], "y": end[1]},
+            }
+        finally:
+            self._invalidate_window_observations(window)
 
     def _drag_pointer(
         self, start: tuple[float, float], end: tuple[float, float], duration: float
@@ -1415,8 +1522,7 @@ class MacOSBackend:
         button, down, up, dragged = self._button("left")
         if button in self._held_buttons:
             raise ToolError("The left mouse button is already held; release it with mouse_up before dragging")
-        self._post_mouse(down, button, *start)
-        self._held_buttons[button] = (up, dragged, start[0], start[1])
+        self._post_mouse_down(button, down, up, dragged, *start)
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
         last = start
@@ -1450,23 +1556,25 @@ class MacOSBackend:
 
     def tool_perform_secondary_action(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
-        element = self._cached_element(window, arguments["element_index"])
-        requested = re.sub(r"[\s_-]+", "", str(arguments["action"]).lower().removeprefix("ax"))
-        actions = self._ax_actions(element)
-        matched = next(
-            (
-                action
-                for action in actions
-                if re.sub(r"[\s_-]+", "", action.lower().removeprefix("ax")) == requested
-            ),
-            None,
-        )
-        if matched is None:
-            raise ToolError(f"Action {arguments['action']!r} is unavailable; supported actions: {actions}")
-        if not self._ax_perform(element, matched):
-            raise ToolError(f"Accessibility action failed: {matched}")
-        self._invalidate_window_observations(window)
-        return {"ok": True, "action": matched, "element_index": int(arguments["element_index"])}
+        try:
+            element = self._cached_element(window, arguments["element_index"])
+            requested = re.sub(r"[\s_-]+", "", str(arguments["action"]).lower().removeprefix("ax"))
+            actions = self._ax_actions(element)
+            matched = next(
+                (
+                    action
+                    for action in actions
+                    if re.sub(r"[\s_-]+", "", action.lower().removeprefix("ax")) == requested
+                ),
+                None,
+            )
+            if matched is None:
+                raise ToolError(f"Action {arguments['action']!r} is unavailable; supported actions: {actions}")
+            if not self._ax_perform(element, matched):
+                raise ToolError(f"Accessibility action failed: {matched}")
+            return {"ok": True, "action": matched, "element_index": int(arguments["element_index"])}
+        finally:
+            self._invalidate_window_observations(window)
 
     def tool_desktop_click(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
@@ -1475,15 +1583,19 @@ class MacOSBackend:
         if not 1 <= count <= 4:
             raise ToolError("click_count must be between 1 and 4")
         button, down, up, dragged = self._button(button_name)
-        self._click_pointer(button, down, up, dragged, x, y, count)
-        self._invalidate_all_observations()
-        return {"ok": True, "screenPoint": {"x": x, "y": y}, "click_count": count}
+        try:
+            self._click_pointer(button, down, up, dragged, x, y, count)
+            return {"ok": True, "screenPoint": {"x": x, "y": y}, "click_count": count}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_desktop_press_key(self, arguments: dict[str, Any]) -> dict[str, Any]:
         self._validate_desktop_screenshot(arguments["screenshotId"])
-        self._send_key(str(arguments["key"]))
-        self._invalidate_all_observations()
-        return {"ok": True, "key": arguments["key"]}
+        try:
+            self._send_key(str(arguments["key"]))
+            return {"ok": True, "key": arguments["key"]}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_desktop_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
         self._validate_desktop_screenshot(arguments["screenshotId"])
@@ -1496,20 +1608,22 @@ class MacOSBackend:
 
     def tool_desktop_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
-        Q = self.Quartz
-        event = Q.CGEventCreateScrollWheelEvent(
-            None,
-            Q.kCGScrollEventUnitPixel,
-            2,
-            int(round(-float(arguments["scrollY"]))),
-            int(round(-float(arguments["scrollX"]))),
-        )
-        if event is None:
-            raise ToolError("macOS could not create a desktop scroll event")
-        Q.CGEventSetLocation(event, (x, y))
-        Q.CGEventPost(Q.kCGHIDEventTap, event)
-        self._invalidate_all_observations()
-        return {"ok": True, "screenPoint": {"x": x, "y": y}}
+        try:
+            Q = self.Quartz
+            event = Q.CGEventCreateScrollWheelEvent(
+                None,
+                Q.kCGScrollEventUnitPixel,
+                2,
+                int(round(-float(arguments["scrollY"]))),
+                int(round(-float(arguments["scrollX"]))),
+            )
+            if event is None:
+                raise ToolError("macOS could not create a desktop scroll event")
+            Q.CGEventSetLocation(event, (x, y))
+            Q.CGEventPost(Q.kCGHIDEventTap, event)
+            return {"ok": True, "screenPoint": {"x": x, "y": y}}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_desktop_drag(self, arguments: dict[str, Any]) -> dict[str, Any]:
         start = self._desktop_relative_point(
@@ -1519,9 +1633,15 @@ class MacOSBackend:
             arguments["to_x"], arguments["to_y"], arguments["screenshotId"]
         )
         duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
-        self._drag_pointer(start, end, duration)
-        self._invalidate_all_observations()
-        return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
+        try:
+            self._drag_pointer(start, end, duration)
+            return {
+                "ok": True,
+                "from": {"x": start[0], "y": start[1]},
+                "to": {"x": end[0], "y": end[1]},
+            }
+        finally:
+            self._invalidate_all_observations()
 
     def _cursor(self) -> tuple[float, float]:
         Q = self.Quartz
@@ -1569,36 +1689,41 @@ class MacOSBackend:
                     (None, Q.kCGEventMouseMoved, start[0], start[1]),
                 )
             ]
-        for step in range(1, steps + 1):
-            fraction = step / steps
-            x = start[0] + (target[0] - start[0]) * fraction
-            y = start[1] + (target[1] - start[1]) * fraction
-            for held_button, (held_up, event_type, _held_x, _held_y) in routes:
-                self._post_mouse(event_type, held_button, x, y)
-                if held_up is not None:
-                    self._held_buttons[held_button] = (held_up, event_type, x, y)
-            if delay:
-                time.sleep(delay)
-        self._invalidate_all_observations()
-        return {"ok": True, "position": {"x": target[0], "y": target[1]}}
+        try:
+            for step in range(1, steps + 1):
+                fraction = step / steps
+                x = start[0] + (target[0] - start[0]) * fraction
+                y = start[1] + (target[1] - start[1]) * fraction
+                for held_button, (held_up, event_type, _held_x, _held_y) in routes:
+                    self._post_mouse(event_type, held_button, x, y)
+                    if held_up is not None:
+                        self._held_buttons[held_button] = (held_up, event_type, x, y)
+                if delay:
+                    time.sleep(delay)
+            return {"ok": True, "position": {"x": target[0], "y": target[1]}}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_mouse_down(self, arguments: dict[str, Any]) -> dict[str, Any]:
         point = self._optional_point(arguments)
         button, down, up, dragged = self._button(str(arguments.get("mouse_button", "left")))
         if button in self._held_buttons:
             raise ToolError("The requested mouse button is already held; call mouse_up before mouse_down again")
-        self._post_mouse(down, button, *point)
-        self._held_buttons[button] = (up, dragged, point[0], point[1])
-        self._invalidate_all_observations()
-        return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+        try:
+            self._post_mouse_down(button, down, up, dragged, *point)
+            return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_mouse_up(self, arguments: dict[str, Any]) -> dict[str, Any]:
         point = self._optional_point(arguments)
         button, _down, up, _dragged = self._button(str(arguments.get("mouse_button", "left")))
-        self._post_mouse(up, button, *point)
-        self._held_buttons.pop(button, None)
-        self._invalidate_all_observations()
-        return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+        try:
+            self._post_mouse(up, button, *point)
+            self._held_buttons.pop(button, None)
+            return {"ok": True, "position": {"x": point[0], "y": point[1]}}
+        finally:
+            self._invalidate_all_observations()
 
     def tool_get_cursor_position(self, arguments: dict[str, Any]) -> dict[str, Any]:
         x, y = self._cursor()
