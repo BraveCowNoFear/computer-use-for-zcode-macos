@@ -168,6 +168,10 @@ When an element advertises `AXPress` or another requested AX action but native
 delivery does not report success, fallback returns `suspected_noop` and never
 adds a pixel click in that same call. Re-observe first; use the recommended
 pixel rung only if fresh state proves the AX action did not land.
+Fallback `set_value` follows the same one-rung rule. It uses focus/select/type
+immediately only when Accessibility explicitly reports the value attribute is
+not settable. A settable or unknown attribute whose write returns failure yields
+`suspected_noop`; re-observe before using the pixel/keyboard route.
 
 Fallback text can also return an MCP error with structured
 `effect:"partial"`/`code:"type_text_incomplete"`. Its screenshot and AX handles

@@ -57,6 +57,9 @@ class ContractTests(unittest.TestCase):
         backend = MacOSBackend()
         self.assertIsNone(backend.native_error)
         self.assertTrue(hasattr(backend.ApplicationServices, "AXUIElementCreateApplication"))
+        self.assertTrue(
+            hasattr(backend.ApplicationServices, "AXUIElementIsAttributeSettable")
+        )
         self.assertTrue(hasattr(backend.ApplicationServices, "AXIsProcessTrusted"))
         self.assertTrue(hasattr(backend.Quartz, "CGEventPost"))
         self.assertTrue(hasattr(backend.Quartz, "CGWindowListCreateImage"))
@@ -610,6 +613,50 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(mismatch["effect"], "suspected_noop")
         self.assertFalse(mismatch["verified"])
         self.assertEqual(mismatch["escalation"]["recommended"], "px")
+
+    def test_failed_settable_ax_value_does_not_same_call_retype(self):
+        backend = MacOSBackend()
+        window = {"id": 7, "app": "com.example.Editor", "pid": 70}
+        element = object()
+        backend._activate_current = lambda value: window
+        backend._cached_element = lambda value, index: element
+        backend._ax_attr = lambda name, fallback: fallback
+        backend._ax_is_settable = lambda target, attribute: True
+        backend._ax_set = lambda target, attribute, value: False
+        backend._click_pointer = mock.Mock()
+        backend.tool_press_key = mock.Mock()
+        backend.tool_type_text = mock.Mock()
+        backend._invalidate_window_observations = lambda value: None
+        result = backend.tool_set_value(
+            {"window": window, "element_index": 3, "value": "replacement"}
+        )
+        self.assertEqual(result["effect"], "suspected_noop")
+        self.assertEqual(result["escalation"]["recommended"], "px")
+        backend._click_pointer.assert_not_called()
+        backend.tool_press_key.assert_not_called()
+        backend.tool_type_text.assert_not_called()
+
+    def test_explicitly_nonsettable_ax_value_uses_one_focus_select_type_path(self):
+        backend = MacOSBackend()
+        window = {"id": 7, "app": "com.example.Editor", "pid": 70}
+        element = object()
+        backend._activate_current = lambda value: window
+        backend._cached_element = lambda value, index: element
+        backend._ax_attr = lambda name, fallback: fallback
+        backend._ax_is_settable = lambda target, attribute: False
+        backend._element_center = lambda target: (10.0, 20.0)
+        backend._button = lambda value: ("button", "down", "up", "dragged")
+        backend._click_pointer = mock.Mock()
+        backend.tool_press_key = mock.Mock()
+        backend.tool_type_text = mock.Mock()
+        backend._invalidate_window_observations = lambda value: None
+        result = backend.tool_set_value(
+            {"window": window, "element_index": 3, "value": "replacement"}
+        )
+        self.assertEqual(result["method"], "focus-select-type")
+        backend._click_pointer.assert_called_once()
+        backend.tool_press_key.assert_called_once()
+        backend.tool_type_text.assert_called_once()
 
     def test_clipboard_set_verifies_the_exact_written_text(self):
         class Pasteboard:

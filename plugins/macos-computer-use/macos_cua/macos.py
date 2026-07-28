@@ -705,6 +705,21 @@ class MacOSBackend:
         except Exception:
             return False
 
+    def _ax_is_settable(self, element: Any, attribute: Any) -> bool | None:
+        try:
+            result = self.ApplicationServices.AXUIElementIsAttributeSettable(
+                element, attribute, None
+            )
+        except Exception:
+            return None
+        if isinstance(result, tuple) and len(result) == 2:
+            error, settable = result
+            try:
+                return bool(settable) if int(error) == 0 else None
+            except (TypeError, ValueError):
+                return None
+        return bool(result) if isinstance(result, bool) else None
+
     def _ax_value(self, value: Any, value_type: Any) -> Any:
         if value is None:
             return None
@@ -1678,32 +1693,45 @@ class MacOSBackend:
             element = self._cached_element(window, arguments["element_index"])
             value_attr = self._ax_attr("kAXValueAttribute", "AXValue")
             value = str(arguments["value"])
-            if self._ax_set(element, value_attr, value):
-                result = {
-                    "ok": True,
-                    "method": "accessibility",
-                    "element_index": int(arguments["element_index"]),
-                }
-                observed = self._ax_copy(element, value_attr)
-                if observed is not None and str(observed) == value:
-                    return {**result, "effect": "confirmed", "verified": True}
-                if observed is None:
+            settable = self._ax_is_settable(element, value_attr)
+            if settable is not False:
+                if self._ax_set(element, value_attr, value):
+                    result = {
+                        "ok": True,
+                        "method": "accessibility",
+                        "element_index": int(arguments["element_index"]),
+                    }
+                    observed = self._ax_copy(element, value_attr)
+                    if observed is not None and str(observed) == value:
+                        return {**result, "effect": "confirmed", "verified": True}
+                    if observed is None:
+                        return {
+                            **result,
+                            "effect": "unverifiable",
+                            "verified": False,
+                            "escalation": {
+                                "recommended": "px",
+                                "reason": "Accessibility value could not be read back",
+                            },
+                        }
                     return {
                         **result,
-                        "effect": "unverifiable",
+                        "effect": "suspected_noop",
                         "verified": False,
                         "escalation": {
                             "recommended": "px",
-                            "reason": "Accessibility value could not be read back",
+                            "reason": "Accessibility value read-back did not match",
                         },
                     }
                 return {
-                    **result,
+                    "ok": True,
+                    "method": "accessibility",
+                    "element_index": int(arguments["element_index"]),
                     "effect": "suspected_noop",
                     "verified": False,
                     "escalation": {
                         "recommended": "px",
-                        "reason": "Accessibility value read-back did not match",
+                        "reason": "Settable Accessibility value did not report success; refresh before pixel delivery",
                     },
                 }
             x, y = self._element_center(element)

@@ -183,6 +183,9 @@ An advertised `AXPress` or secondary AX action that does not report success
 returns `suspected_noop` with a pixel recommendation; the same tool call never
 also emits a coordinate click. Refresh state before crossing that delivery rung
 so an AX action that actually landed cannot become a double click.
+`set_value` likewise crosses to focus/select/type in the same call only when AX
+explicitly marks the value attribute non-settable. A failed write to a settable
+or unknown attribute returns `suspected_noop`; refresh before any retyping.
 App launch and foreground activation conservatively invalidate prior fallback
 observations even when their completion probe fails. A launch timeout or an
 accepted launch that cannot be matched returns a structured unknown effect;
