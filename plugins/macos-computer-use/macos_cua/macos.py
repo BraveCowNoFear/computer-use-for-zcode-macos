@@ -211,7 +211,14 @@ class MacOSBackend:
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
-        if not self._screenshot_dir.is_dir():
+        # Cleanup must never follow a substituted temp-directory symlink or
+        # touch a directory owned by another account.
+        if self._screenshot_dir.is_symlink() or not self._screenshot_dir.is_dir():
+            return
+        try:
+            if hasattr(os, "getuid") and self._screenshot_dir.stat().st_uid != os.getuid():
+                return
+        except OSError:
             return
         cutoff = time.time() - 24 * 60 * 60
         for path in self._screenshot_dir.glob("*.png"):

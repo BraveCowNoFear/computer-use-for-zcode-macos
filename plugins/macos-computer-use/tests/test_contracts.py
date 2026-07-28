@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import math
+import os
 import sys
 import tempfile
 import time
@@ -361,6 +362,22 @@ class ContractTests(unittest.TestCase):
             backend._screenshot_dir = unsafe
             with self.assertRaisesRegex(ToolError, "unsafe screenshot directory"):
                 backend._ensure_screenshot_dir()
+
+    @unittest.skipIf(os.name == "nt", "ordinary Windows users may not create symlinks")
+    def test_orphan_cleanup_never_follows_a_screenshot_directory_symlink(self):
+        backend = MacOSBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            old_png = target / "keep.png"
+            old_png.write_bytes(b"user-file")
+            os.utime(old_png, (time.time() - 48 * 60 * 60,) * 2)
+            link = root / "screenshots"
+            link.symlink_to(target, target_is_directory=True)
+            backend._screenshot_dir = link
+            backend._cleanup_orphaned_screenshots()
+            self.assertEqual(old_png.read_bytes(), b"user-file")
 
     def test_tool_errors_do_not_kill_server(self):
         server = MCPServer(FakeBackend())
