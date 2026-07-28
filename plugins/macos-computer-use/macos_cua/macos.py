@@ -854,15 +854,24 @@ class MacOSBackend:
         for container in (root, focused):
             if container is None:
                 continue
+            if len(selected_elements) >= 64:
+                truncated = True
+                break
             for attr_name, fallback in (
                 ("kAXSelectedChildrenAttribute", "AXSelectedChildren"),
                 ("kAXSelectedRowsAttribute", "AXSelectedRows"),
                 ("kAXSelectedCellsAttribute", "AXSelectedCells"),
             ):
+                if len(selected_elements) >= 64:
+                    truncated = True
+                    break
                 selected = self._ax_copy(container, self._ax_attr(attr_name, fallback)) or []
                 if not isinstance(selected, (list, tuple)):
                     selected = [selected]
                 for item in selected:
+                    if len(selected_elements) >= 64:
+                        truncated = True
+                        break
                     identity = id(item)
                     if identity in selected_seen:
                         continue

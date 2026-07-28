@@ -909,6 +909,34 @@ class ContractTests(unittest.TestCase):
         )
         self.assertTrue(state["truncated"])
 
+    def test_large_accessibility_selection_is_bounded_and_reported(self):
+        backend = MacOSBackend()
+        root, app = object(), object()
+        selected = [object() for _ in range(64)]
+        omitted_row = object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: root
+        backend._format_element = lambda element, index, depth: f"[{index}] item"
+        values = {
+            (root, "AXChildren"): [],
+            (root, "AXSelectedChildren"): selected,
+            (root, "AXSelectedRows"): [omitted_row],
+            (app, "AXFocusedUIElement"): None,
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        state = backend._accessibility_state(window)
+        self.assertTrue(state["truncated"])
+        self.assertEqual(len(state["selected_elements"]), 64)
+        self.assertEqual(len(backend._element_cache[("com.example.App", 80, 8)]["elements"]), 65)
+
     def test_accessibility_window_rejects_an_equal_distance_tie(self):
         backend = MacOSBackend()
         first, second = object(), object()

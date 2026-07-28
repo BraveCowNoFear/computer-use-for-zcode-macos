@@ -108,6 +108,9 @@ mixed Retina/non-Retina layouts do not share an incorrect global scale.
 Fallback screenshots are published only after complete capture/encoding inside
 a current-user-owned 0700 temporary directory. Timeouts and failed window or
 desktop captures delete any unpublished partial PNG immediately.
+Fallback AX observations bound the normal tree and separately cap extra selected
+rows/cells/children at 64; `truncated:true` means re-observe a narrower state
+instead of assuming the omitted selection is actionable.
 For raw mouse tools, a `screenshotId` without `window` binds the supplied
 coordinates to that exact fresh desktop image; it is never silently ignored.
 When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
