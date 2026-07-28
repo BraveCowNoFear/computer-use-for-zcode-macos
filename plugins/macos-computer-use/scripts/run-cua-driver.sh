@@ -36,6 +36,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+if [[ -L "$TELEMETRY_HOME" ]] || { [[ -e "$TELEMETRY_HOME" ]] && [[ ! -d "$TELEMETRY_HOME" ]]; }; then
+  echo "Refusing unsafe plugin telemetry directory: $TELEMETRY_HOME" >&2
+  exit 1
+fi
+mkdir -p "$TELEMETRY_HOME"
+telemetry_owner="$(/usr/bin/stat -f '%u' "$TELEMETRY_HOME" 2>/dev/null || true)"
+if [[ "$telemetry_owner" != "$UID" ]]; then
+  echo "Refusing plugin telemetry directory not owned by uid $UID: $TELEMETRY_HOME" >&2
+  exit 1
+fi
+chmod 700 "$TELEMETRY_HOME"
+
 has_required_surface() {
   local candidate="$1"
   local bundle="${2:-$APP_BUNDLE}"

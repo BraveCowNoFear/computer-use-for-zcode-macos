@@ -80,6 +80,7 @@ jobs:
           HOME="$unrelated_home" MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-cua-driver.sh --prepare-only
           test ! -e "$unrelated_home/.cua-driver"
           test ! -e "$unrelated_home/.cua-driver-rs"
+          test "$(stat -f '%Lp' "$data/cua-telemetry")" = "700"
           product_app="$data/cua-driver-app/v0.12.6/CuaDriver.app"
           product_binary="$product_app/Contents/MacOS/cua-driver"
           test -x "$product_binary"
