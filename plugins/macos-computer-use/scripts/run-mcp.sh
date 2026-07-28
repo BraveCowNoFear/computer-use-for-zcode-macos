@@ -8,7 +8,7 @@ DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}"
 source "$ROOT/scripts/runtime-common.sh"
 
 DEV_PYTHON="$ROOT/.venv/bin/python3"
-RUNTIME_VERSION="0.6.0"
+RUNTIME_VERSION="0.7.0"
 DATA_VENV="$DATA_DIR/venv-$RUNTIME_VERSION"
 DATA_PYTHON="$DATA_VENV/bin/python3"
 

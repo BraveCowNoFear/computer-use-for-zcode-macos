@@ -52,18 +52,22 @@ reachable before switching backends, call `end_session` best-effort.
 ## Select a real target
 
 1. Use `list_apps` or `launch_app`; prefer an exact bundle ID when known.
-2. Select a `(pid, window_id)` pair returned by `launch_app` or
-   `list_windows({pid})`. Never synthesize a handle or choose a window only by
-   largest area.
-3. Re-list after launch, a long pause, a modal transition, or a disappeared
+2. Filter returned windows by the task's bundle ID, exact title, or a fresh
+   per-window observation. Continue only when exactly one candidate remains;
+   never choose the first item, largest area, or z-order as a guess.
+3. Select that returned `(pid, window_id)` pair from `launch_app` or
+   `list_windows({pid})`. Never synthesize a handle.
+4. Re-list after launch, a long pause, a modal transition, or a disappeared
    window. Treat modals and sheets as their returned target window.
 
 ## Observe, act once, verify
 
 Every action uses a fresh point-in-time loop:
 
-1. `get_window_state({session, pid, window_id})` returns the Accessibility tree
-   and screenshot together.
+1. Request only the signal needed for the next decision. For normal visual work
+   use `include_screenshot:true,include_text:false`; for an AX-indexed action use
+   `include_screenshot:false,include_text:true`. Request both only when the next
+   decision genuinely needs pixel/AX disambiguation or dual verification.
 2. Ground exactly one action in that response.
 3. Perform the action against the same pid/window.
 4. Immediately call `get_window_state` again and verify the visible or AX
@@ -75,13 +79,18 @@ has rendered it; if pixels and AX disagree, continue observing or change the
 delivery rung instead of declaring success from the tree alone.
 
 A focus click is still an action: re-observe before typing. When possible, use
-one `type_text` call with the fresh editable `element_index` so it focuses and
-types atomically instead of issuing a separate click first.
+one primary `type_text` call with the fresh editable `element_index` so it
+focuses and types atomically instead of issuing a separate click first. The
+Codex-shaped fallback `type_text` has no `element_index`: click its field,
+re-observe and verify focus, then type.
 
 Element indexes/tokens are invalid after the next observation. Screenshot
 coordinates are window-local pixels in the exact returned image: top-left
 origin, x right, y down. Never reuse an old element index or pixel after layout,
 focus, content, selection, dialog, or window changes.
+
+MCP image blocks are already rendered by the host. Inspect them directly; do
+not decode, print, or re-emit their base64 payload just to see the screenshot.
 
 For menu bar, Dock, desktop, or other windowless system UI under a `desktop`
 session, use `get_desktop_state({session})`, then a windowless input such as
@@ -115,14 +124,19 @@ target app. Call fallback `computer_use_health`, then `permission_status`.
 Launch or enumerate with `launch_app`/`list_windows`, rehydrate one exact result
 with `get_window`, then use its own
 `get_window_state → one action → get_window_state` loop. The fallback is
-stateless and has no `start_session`/`end_session`. Do not mix a primary
+sessionless but keeps screenshot/AX handles in its MCP process; it has no
+`start_session`/`end_session`. After a ZCode reload, stdio restart, or server
+failure, discard every handle and begin from `list_windows`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
 Fallback `launch_app` returns the matched running pid and its current windows;
-select one of those exact windows directly when present. Its
+select it directly only when exactly one task-matching window remains, and
+preserve the whole
+window object, including `pid`, so a recycled macOS window number cannot rebind
+to a restarted process. Its
 `get_window_state` returns both the screenshot and indexed AX tree by default,
-matching the primary observe-first contract. Disable either only as an explicit
-performance or permission-aware choice. When Accessibility is granted but
+but explicitly disable the unneeded channel using the same signal-routing rule
+as the primary path. When Accessibility is granted but
 Screen Recording is not, `computer_use_health.axControlReady` remains true and
 `get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
 coordinate and desktop routes remain unavailable until Screen Recording is
@@ -170,13 +184,19 @@ outcome authoritative.
 ## Recovery
 
 - Stale element or window: discard it, re-list/re-observe, retry once.
+- Read-only timeout: retry once. Input timeout means outcome unknown; observe
+  before deciding whether any retry is needed.
+- MCP restart or ZCode reload: discard every fallback handle and rebuild the
+  target and state from enumeration; never replay the last input blindly.
 - New modal: enumerate windows and target the returned modal explicitly.
 - `off_space`, minimized, or hidden window: keep AX background control when it
   verifies; use desktop/foreground only when the requested outcome needs it.
 - Locked Mac: ask the user to unlock it; synthetic input cannot unlock TCC.
 - Missing fallback Accessibility: call `request_permissions` once, let the user
-  grant Python/ZCode Accessibility, then restart ZCode. Request Screen
-  Recording as well only when pixels/screenshots are required.
+  with `accessibility:true,screen_recording:false`, let the user grant
+  Python/ZCode Accessibility, then restart ZCode. Request only Screen Recording
+  with `accessibility:false,screen_recording:true` when pixels/screenshots are
+  required.
 - Primary reports a non-unrestricted or policy-constrained daemon: let the
   launcher stop only its versioned plugin socket and recreate it without
   inherited Cua policy variables; do not reuse a global/default daemon.

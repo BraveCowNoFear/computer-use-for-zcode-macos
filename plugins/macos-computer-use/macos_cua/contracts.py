@@ -46,8 +46,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "request_permissions",
-        "description": "Ask macOS to show the native Accessibility and Screen Recording permission prompts.",
-        "inputSchema": _object({"open_settings": {"type": "boolean", "default": True}}),
+        "description": "Ask macOS for only the requested native Accessibility and/or Screen Recording grants.",
+        "inputSchema": _object(
+            {
+                "accessibility": {"type": "boolean", "default": True},
+                "screen_recording": {"type": "boolean", "default": False},
+                "open_settings": {"type": "boolean", "default": True},
+            }
+        ),
     },
     {
         "name": "list_windows",
@@ -57,7 +63,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "get_window",
         "description": "Rehydrate a currently open window by an ID returned by list_windows or list_apps.",
-        "inputSchema": _object({"id": {"type": "integer"}, "app": {"type": "string"}}, ["id"]),
+        "inputSchema": _object(
+            {"id": {"type": "integer"}, "app": {"type": "string"}, "pid": {"type": "integer"}},
+            ["id"],
+        ),
     },
     {
         "name": "list_apps",
@@ -227,7 +236,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "move_mouse",
         "description": "Move the pointer to a screen coordinate or a target-window-relative coordinate.",
         "inputSchema": _object(
-            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "duration": {"type": "number", "minimum": 0, "maximum": 30, "default": 0}},
+            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "screenshotId": {"type": "string"}, "duration": {"type": "number", "minimum": 0, "maximum": 30, "default": 0}},
             ["x", "y"],
         ),
     },
@@ -235,14 +244,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "mouse_down",
         "description": "Press and hold a mouse button at the current pointer or a supplied coordinate.",
         "inputSchema": _object(
-            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"}}
+            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "screenshotId": {"type": "string"}, "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"}}
         ),
     },
     {
         "name": "mouse_up",
         "description": "Release a held mouse button at the current pointer or a supplied coordinate.",
         "inputSchema": _object(
-            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"}}
+            {"x": {"type": "number"}, "y": {"type": "number"}, "window": WINDOW_SCHEMA, "screenshotId": {"type": "string"}, "mouse_button": {"type": "string", "enum": ["left", "right", "middle", "l", "r", "m"], "default": "left"}}
         ),
     },
     {

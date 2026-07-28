@@ -54,6 +54,9 @@ class ContractTests(unittest.TestCase):
     def test_codex_core_is_complete(self):
         self.assertTrue(CORE_CODEX_TOOL_NAMES.issubset(TOOL_NAMES))
         self.assertEqual(len(TOOL_NAMES), len(TOOL_DEFINITIONS))
+        definitions = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
+        for name in ("click", "scroll", "drag"):
+            self.assertNotIn("screenshotId", definitions[name]["inputSchema"].get("required", []))
 
     def test_direct_desktop_fallback_surface_is_complete(self):
         self.assertTrue(
@@ -103,6 +106,44 @@ class ContractTests(unittest.TestCase):
         self.assertFalse(health["pixelObservationReady"])
         self.assertFalse(health["desktopObservationReady"])
         self.assertIn("AX-only", health["message"])
+
+    def test_permission_request_only_prompts_for_requested_grants(self):
+        prompts = {"accessibility": 0, "screenRecording": 0}
+
+        class FakeAX:
+            kAXTrustedCheckOptionPrompt = "prompt"
+
+            @staticmethod
+            def AXIsProcessTrusted():
+                return False
+
+            @staticmethod
+            def AXIsProcessTrustedWithOptions(options):
+                self.assertEqual(options, {"prompt": True})
+                prompts["accessibility"] += 1
+
+        class FakeQuartz:
+            @staticmethod
+            def CGPreflightScreenCaptureAccess():
+                return False
+
+            @staticmethod
+            def CGRequestScreenCaptureAccess():
+                prompts["screenRecording"] += 1
+
+        backend = MacOSBackend()
+        backend.native_error = None
+        backend.ApplicationServices = FakeAX
+        backend.Quartz = FakeQuartz
+        backend.AppKit = object()
+        backend.tool_request_permissions(
+            {"accessibility": True, "screen_recording": False, "open_settings": False}
+        )
+        self.assertEqual(prompts, {"accessibility": 1, "screenRecording": 0})
+        backend.tool_request_permissions(
+            {"accessibility": False, "screen_recording": True, "open_settings": False}
+        )
+        self.assertEqual(prompts, {"accessibility": 1, "screenRecording": 1})
 
     def test_launch_app_returns_the_running_pid_and_exact_windows(self):
         class FakeRunningApp:
@@ -206,7 +247,16 @@ class ContractTests(unittest.TestCase):
             "created": time.monotonic(),
             "path": str(PLUGIN_ROOT / "__never_created_test_shot__.png"),
         }
-        self.assertEqual(backend._relative_point(window, 800, 600, "retina"), (500, 350))
+        self.assertEqual(backend._relative_point(window, 799, 599, "retina"), (499.5, 349.5))
+        backend._get_window = lambda value: window
+        self.assertEqual(
+            backend._optional_point(
+                {"window": window, "x": 799, "y": 599, "screenshotId": "retina"}
+            ),
+            (499.5, 349.5),
+        )
+        with self.assertRaisesRegex(ToolError, "outside"):
+            backend._relative_point(window, 1600, 600, "retina")
 
     def test_retina_desktop_pixels_map_to_quartz_screen_points(self):
         backend = MacOSBackend()
@@ -220,7 +270,9 @@ class ContractTests(unittest.TestCase):
             "created": time.monotonic(),
             "path": str(PLUGIN_ROOT / "__never_created_desktop_test_shot__.png"),
         }
-        self.assertEqual(backend._desktop_relative_point(1600, 600, "desktop"), (0, 300))
+        self.assertEqual(backend._desktop_relative_point(1599, 599, "desktop"), (-0.5, 299.5))
+        with self.assertRaisesRegex(ToolError, "outside"):
+            backend._desktop_relative_point(3200, 600, "desktop")
 
     def test_mixed_scale_desktop_screens_map_independently(self):
         backend = MacOSBackend()
@@ -262,7 +314,7 @@ class ContractTests(unittest.TestCase):
             "created": time.monotonic(),
             "path": str(PLUGIN_ROOT / "__never_created_right_desktop_test_shot__.png"),
         }
-        self.assertEqual(backend._desktop_relative_point(1440, 900, "retina-left"), (-720, 450))
+        self.assertEqual(backend._desktop_relative_point(1439, 899, "retina-left"), (-720.5, 449.5))
         self.assertEqual(backend._desktop_relative_point(960, 540, "standard-right"), (960, 540))
 
     def test_appkit_screen_layout_converts_each_display_to_quartz_coordinates(self):
@@ -391,6 +443,204 @@ class ContractTests(unittest.TestCase):
             backend._validate_screenshot("old-shot", new_process_window)
         with self.assertRaisesRegex(ToolError, "No Accessibility observation exists"):
             backend._cached_element(new_process_window, 0)
+
+    def test_window_rehydration_rejects_a_reused_id_from_another_process(self):
+        backend = MacOSBackend()
+        current = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 81,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        backend._list_windows = lambda: [current]
+        self.assertEqual(backend._get_window(current), current)
+        with self.assertRaisesRegex(ToolError, "pid=80"):
+            backend._get_window({**current, "pid": 80})
+
+    def test_activation_rehydrates_the_window_before_an_action(self):
+        backend = MacOSBackend()
+        before = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        after = {**before, "bounds": {"x": 300, "y": 200, "width": 100, "height": 100}}
+        windows = [before]
+        backend._list_windows = lambda: [windows[0]]
+
+        def activate(window):
+            windows[0] = after
+
+        backend._activate = activate
+        self.assertEqual(backend._activate_current(before)["bounds"], after["bounds"])
+
+    def test_activation_reports_an_explicit_appkit_refusal(self):
+        backend = MacOSBackend()
+        running = types.SimpleNamespace(activateWithOptions_=lambda options: False)
+        backend.AppKit = types.SimpleNamespace(
+            NSRunningApplication=types.SimpleNamespace(
+                runningApplicationWithProcessIdentifier_=lambda pid: running
+            ),
+            NSApplicationActivateIgnoringOtherApps=2,
+            NSApplicationActivateAllWindows=1,
+        )
+        with self.assertRaisesRegex(ToolError, "refused to activate"):
+            backend._activate({"pid": 80})
+
+    def test_accessibility_window_prefers_the_exact_cg_window_number(self):
+        backend = MacOSBackend()
+        first, second = object(), object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: "application"
+        )
+        values = {
+            ("application", "AXWindows"): [first, second],
+            (first, "AXWindowNumber"): 7,
+            (second, "AXWindowNumber"): 8,
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "title": "Same title",
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        self.assertIs(backend._ax_window(window), second)
+
+    def test_focused_and_selected_elements_remain_actionable_and_keep_newlines(self):
+        backend = MacOSBackend()
+        root, focused, app = object(), object(), object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: root
+        backend._format_element = lambda element, index, depth: f"[{index}] item"
+        values = {
+            (root, "AXChildren"): [],
+            (root, "AXSelectedChildren"): [focused],
+            (app, "AXFocusedUIElement"): focused,
+            (focused, "AXWindow"): root,
+            (focused, "AXSelectedText"): "alpha\nbeta",
+            (focused, "AXRole"): "AXTextArea",
+            (focused, "AXValue"): "line one\nline two",
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        state = backend._accessibility_state(window)
+        self.assertEqual(state["focused_element"], "[1] item")
+        self.assertEqual(state["selected_elements"], ["[1] item"])
+        self.assertEqual(state["selected_text"], "alpha\nbeta")
+        self.assertEqual(state["document_text"], "line one\nline two")
+        self.assertIs(backend._cached_element(window, 1), focused)
+
+    def test_focused_element_from_another_window_is_not_cached(self):
+        backend = MacOSBackend()
+        root, other_root, focused, app = object(), object(), object(), object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: root
+        backend._format_element = lambda element, index, depth: f"[{index}] item"
+        values = {
+            (root, "AXChildren"): [],
+            (app, "AXFocusedUIElement"): focused,
+            (focused, "AXWindow"): other_root,
+            (other_root, "AXWindowNumber"): 9,
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        state = backend._accessibility_state(window)
+        self.assertIsNone(state["focused_element"])
+        self.assertEqual(len(backend._element_cache[("com.example.App", 80, 8)]["elements"]), 1)
+
+    def test_accessibility_window_rejects_an_equal_distance_tie(self):
+        backend = MacOSBackend()
+        first, second = object(), object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: "application"
+        )
+        values = {
+            ("application", "AXWindows"): [first, second],
+            (first, "AXTitle"): "Same",
+            (second, "AXTitle"): "Same",
+            (first, "AXPosition"): (0, 0),
+            (second, "AXPosition"): (0, 0),
+            (first, "AXSize"): (100, 100),
+            (second, "AXSize"): (100, 100),
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        backend._ax_value = lambda value, value_type: value
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "title": "Same",
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        with self.assertRaisesRegex(ToolError, "binding is ambiguous"):
+            backend._ax_window(window)
+
+    def test_failed_drag_releases_the_mouse_button(self):
+        backend = MacOSBackend()
+        backend._button = lambda value: ("button", "down", "up", "dragged")
+        events = []
+
+        def post(event_type, button, x, y, click_count=1):
+            events.append((event_type, x, y))
+            if event_type == "dragged":
+                raise RuntimeError("injected drag failure")
+
+        backend._post_mouse = post
+        with self.assertRaisesRegex(RuntimeError, "injected drag failure"):
+            backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
+        self.assertEqual(events[0][0], "down")
+        self.assertEqual(events[-1][0], "up")
+
+    def test_raw_held_button_moves_as_a_drag_and_releases_on_close(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventLeftMouseDown="left-down",
+            kCGEventLeftMouseUp="left-up",
+            kCGEventLeftMouseDragged="left-dragged",
+            kCGEventMouseMoved="moved",
+        )
+        positions = iter([(1.0, 2.0), (1.0, 2.0)])
+        backend._cursor = lambda: next(positions)
+        events = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(
+            (event, button, x, y)
+        )
+        backend.tool_mouse_down({"x": 1, "y": 2})
+        backend.tool_move_mouse({"x": 5, "y": 6, "duration": 0})
+        backend.close()
+        self.assertEqual([event[0] for event in events], ["left-down", "left-dragged", "left-up"])
+
+    def test_invalid_click_count_never_posts_an_event(self):
+        backend = MacOSBackend()
+        window = {
+            "id": 8,
+            "app": "com.example.App",
+            "pid": 80,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        backend._activate_current = lambda value: window
+        backend._post_mouse = mock.Mock()
+        with self.assertRaisesRegex(ToolError, "between 1 and 4"):
+            backend.tool_click({"window": window, "x": 1, "y": 2, "click_count": 0})
+        backend._post_mouse.assert_not_called()
 
 
 if __name__ == "__main__":

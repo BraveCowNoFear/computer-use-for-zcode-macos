@@ -221,10 +221,17 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("check_permissions({prompt:true,probe_direct_capture:false})", skill)
         self.assertNotIn("prompt:true`, which the driver refuses", skill)
         self.assertIn('scope:"desktop"', skill)
-        self.assertIn("fallback is\nstateless", skill)
+        self.assertIn("fallback is\nsessionless", skill)
         self.assertIn("screenshot as the final truth", skill)
         self.assertIn("global menu bar belongs to the frontmost app", skill)
         self.assertIn("Never send selection keys\n  from the pre-open observation", skill)
+        self.assertIn("fallback `type_text` has no `element_index`", skill)
+        self.assertIn("accessibility:true,screen_recording:false", skill)
+        self.assertIn("preserve the whole\nwindow object, including `pid`", skill)
+        self.assertIn("only when exactly one candidate remains", skill)
+        self.assertIn("Input timeout means outcome unknown", skill)
+        self.assertIn("Request only the signal needed", skill)
+        self.assertIn("include_screenshot:true,include_text:false", skill)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

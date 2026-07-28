@@ -118,6 +118,28 @@ class MacOSBackend:
         self._screenshot_cache: dict[str, dict[str, Any]] = {}
         self._installed_cache: tuple[float, list[dict[str, Any]]] | None = None
         self._screenshot_dir = Path(tempfile.gettempdir()) / "zcode-macos-computer-use"
+        self._held_buttons: dict[Any, tuple[Any, Any, float, float]] = {}
+        self._cleanup_orphaned_screenshots()
+
+    def _cleanup_orphaned_screenshots(self) -> None:
+        if not self._screenshot_dir.is_dir():
+            return
+        cutoff = time.time() - 24 * 60 * 60
+        for path in self._screenshot_dir.glob("*.png"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
+    def close(self) -> None:
+        for button, (up, _dragged, x, y) in list(self._held_buttons.items()):
+            try:
+                self._post_mouse(up, button, x, y)
+            except Exception:
+                pass
+        self._held_buttons.clear()
+        self._invalidate_all_observations()
 
     def call(self, name: str, arguments: dict[str, Any]) -> Any:
         method = getattr(self, f"tool_{name}", None)
@@ -200,22 +222,30 @@ class MacOSBackend:
     def tool_request_permissions(self, arguments: dict[str, Any]) -> dict[str, Any]:
         AX = self.ApplicationServices
         Q = self.Quartz
-        options = {getattr(AX, "kAXTrustedCheckOptionPrompt", "AXTrustedCheckOptionPrompt"): True}
-        try:
-            AX.AXIsProcessTrustedWithOptions(options)
-        except Exception:
-            pass
-        request_capture = getattr(Q, "CGRequestScreenCaptureAccess", None)
-        if callable(request_capture):
+        request_accessibility = bool(arguments.get("accessibility", True))
+        request_screen_recording = bool(arguments.get("screen_recording", False))
+        if request_accessibility:
+            options = {getattr(AX, "kAXTrustedCheckOptionPrompt", "AXTrustedCheckOptionPrompt"): True}
             try:
-                request_capture()
+                AX.AXIsProcessTrustedWithOptions(options)
             except Exception:
                 pass
+        if request_screen_recording:
+            request_capture = getattr(Q, "CGRequestScreenCaptureAccess", None)
+            if callable(request_capture):
+                try:
+                    request_capture()
+                except Exception:
+                    pass
         status = self._permission_status()
-        if arguments.get("open_settings", True) and not status["accessibility"]:
+        if arguments.get("open_settings", True) and request_accessibility and not status["accessibility"]:
             subprocess.Popen(["/usr/bin/open", status["settings"]["accessibility"]])
-        elif arguments.get("open_settings", True) and not status["screenRecording"]:
+        elif arguments.get("open_settings", True) and request_screen_recording and not status["screenRecording"]:
             subprocess.Popen(["/usr/bin/open", status["settings"]["screenRecording"]])
+        status["requested"] = {
+            "accessibility": request_accessibility,
+            "screenRecording": request_screen_recording,
+        }
         status["restartRequiredAfterGrant"] = True
         return status
 
@@ -275,17 +305,23 @@ class MacOSBackend:
     def tool_list_windows(self, arguments: dict[str, Any]) -> list[dict[str, Any]]:
         return self._list_windows()
 
-    def _get_window(self, value: Any, app: str | None = None) -> dict[str, Any]:
+    def _get_window(
+        self, value: Any, app: str | None = None, pid: int | None = None
+    ) -> dict[str, Any]:
         if isinstance(value, dict):
             window_id = int(value.get("id", 0))
             app = str(value.get("app")) if value.get("app") is not None else app
+            pid = int(value["pid"]) if value.get("pid") is not None else pid
         else:
             window_id = int(value)
         candidates = [window for window in self._list_windows() if window["id"] == window_id]
         if app:
             candidates = [window for window in candidates if window["app"] == app]
+        if pid is not None:
+            candidates = [window for window in candidates if int(window["pid"]) == int(pid)]
         if len(candidates) != 1:
-            raise ToolError(f"Expected one current window for id={window_id}; found {len(candidates)}. Re-run list_windows.")
+            identity = f"id={window_id}, app={app!r}, pid={pid!r}"
+            raise ToolError(f"Expected one current window for {identity}; found {len(candidates)}. Re-run list_windows.")
         return candidates[0]
 
     @staticmethod
@@ -294,7 +330,7 @@ class MacOSBackend:
         return str(window["app"]), int(window["pid"]), int(window["id"])
 
     def tool_get_window(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        return self._get_window(arguments["id"], arguments.get("app"))
+        return self._get_window(arguments["id"], arguments.get("app"), arguments.get("pid"))
 
     def _installed_apps(self) -> list[dict[str, Any]]:
         if self._installed_cache and time.monotonic() - self._installed_cache[0] < 60:
@@ -521,14 +557,25 @@ class MacOSBackend:
         windows = self._ax_copy(app_element, self._ax_attr("kAXWindowsAttribute", "AXWindows")) or []
         if not isinstance(windows, (list, tuple)):
             windows = [windows]
+        number_attr = self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber")
+        number_matches = []
+        for item in windows:
+            try:
+                if int(self._ax_copy(item, number_attr)) == int(window["id"]):
+                    number_matches.append(item)
+            except (TypeError, ValueError):
+                continue
+        if len(number_matches) == 1:
+            return number_matches[0]
+        if len(number_matches) > 1:
+            raise ToolError("Accessibility exposed multiple windows with the target CGWindowID; use fresh pixels")
         title_attr = self._ax_attr("kAXTitleAttribute", "AXTitle")
         position_attr = self._ax_attr("kAXPositionAttribute", "AXPosition")
         size_attr = self._ax_attr("kAXSizeAttribute", "AXSize")
         title_matches = [item for item in windows if str(self._ax_copy(item, title_attr) or "") == window.get("title", "")]
         candidates = title_matches or list(windows)
         target_bounds = window["bounds"]
-        best: Any = None
-        best_distance = float("inf")
+        ranked: list[tuple[float, Any]] = []
         for item in candidates:
             position = self._point_components(
                 self._ax_value(self._ax_copy(item, position_attr), self._ax_attr("kAXValueCGPointType", 1))
@@ -545,18 +592,26 @@ class MacOSBackend:
                 )
             else:
                 distance = 1_000_000
-            if distance < best_distance:
-                best = item
-                best_distance = distance
-        if best is None:
+            ranked.append((distance, item))
+        ranked.sort(key=lambda item: item[0])
+        if not ranked:
             raise ToolError("The target app exposes no Accessibility window. Grant Accessibility and re-observe.")
-        return best
+        if len(ranked) > 1 and abs(ranked[0][0] - ranked[1][0]) <= 1:
+            raise ToolError("Accessibility window binding is ambiguous; use a fresh pixel observation for this window")
+        return ranked[0][1]
 
     @staticmethod
     def _short(value: Any, limit: int = 240) -> str:
         if value is None:
             return ""
         text = " ".join(str(value).replace("\x00", "").split())
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+    @staticmethod
+    def _preserve_text(value: Any, limit: int) -> str:
+        if value is None:
+            return ""
+        text = str(value).replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n").strip()
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
     def _format_element(self, element: Any, index: int, depth: int) -> str:
@@ -609,25 +664,64 @@ class MacOSBackend:
         focused_line = None
         selected_text = None
         document_text = None
+        selected_elements: list[str] = []
+        if focused is not None and focused not in elements:
+            owner = self._ax_copy(focused, self._ax_attr("kAXWindowAttribute", "AXWindow"))
+            owner_number = self._ax_copy(
+                owner, self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber")
+            ) if owner is not None else None
+            try:
+                belongs = owner == root or int(owner_number) == int(window["id"])
+            except (TypeError, ValueError):
+                belongs = owner == root
+            if not belongs:
+                focused = None
         if focused is not None:
             try:
                 focused_index = elements.index(focused)
             except ValueError:
                 focused_index = len(elements)
+                # A focused element can live outside the traversed window tree
+                # (or beyond its cap). If we advertise an index, keep its native
+                # reference actionable for this observation.
+                elements.append(focused)
             focused_line = self._format_element(focused, focused_index, 0)
-            selected_text = self._short(
+            selected_text = self._preserve_text(
                 self._ax_copy(focused, self._ax_attr("kAXSelectedTextAttribute", "AXSelectedText")), 4000
             ) or None
             role = self._short(self._ax_copy(focused, self._ax_attr("kAXRoleAttribute", "AXRole")))
             if role in {"AXTextArea", "AXTextField", "AXWebArea", "AXStaticText"}:
-                document_text = self._short(
+                document_text = self._preserve_text(
                     self._ax_copy(focused, self._ax_attr("kAXValueAttribute", "AXValue")), 12000
                 ) or None
+        selected_seen: set[int] = set()
+        for container in (root, focused):
+            if container is None:
+                continue
+            for attr_name, fallback in (
+                ("kAXSelectedChildrenAttribute", "AXSelectedChildren"),
+                ("kAXSelectedRowsAttribute", "AXSelectedRows"),
+                ("kAXSelectedCellsAttribute", "AXSelectedCells"),
+            ):
+                selected = self._ax_copy(container, self._ax_attr(attr_name, fallback)) or []
+                if not isinstance(selected, (list, tuple)):
+                    selected = [selected]
+                for item in selected:
+                    identity = id(item)
+                    if identity in selected_seen:
+                        continue
+                    selected_seen.add(identity)
+                    try:
+                        index = elements.index(item)
+                    except ValueError:
+                        index = len(elements)
+                        elements.append(item)
+                    selected_elements.append(self._format_element(item, index, 0))
         return {
             "tree": "\n".join(lines),
             "focused_element": focused_line,
             "selected_text": selected_text,
-            "selected_elements": [],
+            "selected_elements": selected_elements,
             "document_text": document_text,
             "generation": generation,
             "truncated": len(elements) >= 350,
@@ -845,7 +939,7 @@ class MacOSBackend:
         rel_x, rel_y = float(x), float(y)
         width = float(cached["imageWidth"])
         height = float(cached["imageHeight"])
-        if not (0 <= rel_x <= width and 0 <= rel_y <= height):
+        if not (0 <= rel_x < width and 0 <= rel_y < height):
             raise ToolError(f"Desktop point ({rel_x}, {rel_y}) is outside {width}x{height}; re-observe")
         bounds = cached["bounds"]
         return (
@@ -861,12 +955,41 @@ class MacOSBackend:
         options = int(getattr(A, "NSApplicationActivateIgnoringOtherApps", 1 << 1)) | int(
             getattr(A, "NSApplicationActivateAllWindows", 1 << 0)
         )
-        app.activateWithOptions_(options)
-        try:
-            self._ax_perform(self._ax_window(window), self._ax_attr("kAXRaiseAction", "AXRaise"))
-        except Exception:
-            pass
-        time.sleep(0.08)
+        activated = app.activateWithOptions_(options)
+        if activated is False:
+            raise ToolError("macOS refused to activate the target app; re-observe before sending input")
+        target_ax_window = self._ax_window(window)
+        self._ax_perform(target_ax_window, self._ax_attr("kAXRaiseAction", "AXRaise"))
+        workspace = self.AppKit.NSWorkspace.sharedWorkspace()
+        deadline = time.monotonic() + 0.6
+        while time.monotonic() < deadline:
+            frontmost = workspace.frontmostApplication()
+            front_pid = int(frontmost.processIdentifier()) if frontmost is not None else 0
+            if front_pid == int(window["pid"]):
+                app_element = self.ApplicationServices.AXUIElementCreateApplication(int(window["pid"]))
+                focused = self._ax_copy(
+                    app_element,
+                    self._ax_attr("kAXFocusedWindowAttribute", "AXFocusedWindow"),
+                )
+                focused_number = self._ax_copy(
+                    focused,
+                    self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber"),
+                ) if focused is not None else None
+                try:
+                    focused_matches = int(focused_number) == int(window["id"])
+                except (TypeError, ValueError):
+                    focused_matches = focused is not None and focused == target_ax_window
+                if focused_matches:
+                    return
+            time.sleep(0.02)
+        raise ToolError("The target window did not become frontmost; no input was sent")
+
+    def _activate_current(self, value: Any) -> dict[str, Any]:
+        window = self._get_window(value)
+        self._activate(window)
+        # Activation can switch Spaces, reveal a sheet, or let an app reposition
+        # its window. Rehydrate before converting any observed coordinate.
+        return self._get_window(window)
 
     def tool_activate_window(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._get_window(arguments["window"])
@@ -922,7 +1045,7 @@ class MacOSBackend:
         source_height = float(cached["imageHeight"]) if cached else float(bounds["height"])
         if source_width <= 0 or source_height <= 0:
             raise ToolError("The latest screenshot has invalid dimensions; re-observe before acting")
-        if not (0 <= rel_x <= source_width and 0 <= rel_y <= source_height):
+        if not (0 <= rel_x < source_width and 0 <= rel_y < source_height):
             raise ToolError(
                 f"Window-relative point ({rel_x}, {rel_y}) is outside {source_width}x{source_height}; re-observe"
             )
@@ -983,10 +1106,11 @@ class MacOSBackend:
         Q.CGEventPost(Q.kCGHIDEventTap, event)
 
     def tool_click(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         button_name = str(arguments.get("mouse_button", "left"))
         count = int(arguments.get("click_count", 1))
+        if not 1 <= count <= 4:
+            raise ToolError("click_count must be between 1 and 4")
         if "element_index" in arguments and arguments.get("element_index") is not None:
             element = self._cached_element(window, arguments["element_index"])
             if button_name in {"left", "l"} and count == 1 and self._ax_perform(
@@ -1022,8 +1146,7 @@ class MacOSBackend:
         return flags
 
     def tool_press_key(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         self._send_key(str(arguments["key"]))
         self._invalidate_window_observations(window)
         return {"ok": True, "key": arguments["key"]}
@@ -1042,8 +1165,7 @@ class MacOSBackend:
         Q.CGEventPost(Q.kCGHIDEventTap, up)
 
     def tool_type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         text = str(arguments["text"])
         self._send_text(text)
         self._invalidate_window_observations(window)
@@ -1064,8 +1186,7 @@ class MacOSBackend:
             Q.CGEventPost(Q.kCGHIDEventTap, up)
 
     def tool_scroll(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         x, y = self._relative_point(window, arguments["x"], arguments["y"], arguments.get("screenshotId"))
         Q = self.Quartz
         event = Q.CGEventCreateScrollWheelEvent(
@@ -1083,8 +1204,7 @@ class MacOSBackend:
         return {"ok": True, "screenPoint": {"x": x, "y": y}}
 
     def tool_set_value(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         element = self._cached_element(window, arguments["element_index"])
         value_attr = self._ax_attr("kAXValueAttribute", "AXValue")
         value = str(arguments["value"])
@@ -1101,29 +1221,43 @@ class MacOSBackend:
         return {"ok": True, "method": "focus-select-type", "element_index": int(arguments["element_index"])}
 
     def tool_drag(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         start = self._relative_point(window, arguments["from_x"], arguments["from_y"], arguments.get("screenshotId"))
         end = self._relative_point(window, arguments["to_x"], arguments["to_y"], arguments.get("screenshotId"))
         duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
+        self._drag_pointer(start, end, duration)
+        self._invalidate_window_observations(window)
+        return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
+
+    def _drag_pointer(
+        self, start: tuple[float, float], end: tuple[float, float], duration: float
+    ) -> None:
         button, down, up, dragged = self._button("left")
         self._post_mouse(down, button, *start)
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
-        for step in range(1, steps + 1):
-            fraction = step / steps
-            x = start[0] + (end[0] - start[0]) * fraction
-            y = start[1] + (end[1] - start[1]) * fraction
-            self._post_mouse(dragged, button, x, y)
-            if delay:
-                time.sleep(delay)
+        last = start
+        try:
+            for step in range(1, steps + 1):
+                fraction = step / steps
+                last = (
+                    start[0] + (end[0] - start[0]) * fraction,
+                    start[1] + (end[1] - start[1]) * fraction,
+                )
+                self._post_mouse(dragged, button, *last)
+                if delay:
+                    time.sleep(delay)
+        except BaseException:
+            # A failed/interrupted drag must not leave the physical button held.
+            try:
+                self._post_mouse(up, button, *last)
+            except Exception:
+                pass
+            raise
         self._post_mouse(up, button, *end)
-        self._invalidate_window_observations(window)
-        return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
 
     def tool_perform_secondary_action(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        window = self._get_window(arguments["window"])
-        self._activate(window)
+        window = self._activate_current(arguments["window"])
         element = self._cached_element(window, arguments["element_index"])
         requested = re.sub(r"[\s_-]+", "", str(arguments["action"]).lower().removeprefix("ax"))
         actions = self._ax_actions(element)
@@ -1146,6 +1280,8 @@ class MacOSBackend:
         x, y = self._desktop_relative_point(arguments["x"], arguments["y"], arguments["screenshotId"])
         button_name = str(arguments.get("mouse_button", "left"))
         count = int(arguments.get("click_count", 1))
+        if not 1 <= count <= 4:
+            raise ToolError("click_count must be between 1 and 4")
         button, down, up, _dragged = self._button(button_name)
         for click_number in range(1, count + 1):
             self._post_mouse(down, button, x, y, click_number)
@@ -1193,18 +1329,7 @@ class MacOSBackend:
             arguments["to_x"], arguments["to_y"], arguments["screenshotId"]
         )
         duration = max(0.0, min(30.0, float(arguments.get("duration", 0.35))))
-        button, down, up, dragged = self._button("left")
-        self._post_mouse(down, button, *start)
-        steps = max(1, min(300, int(duration * 60)))
-        delay = duration / steps if steps else 0
-        for step in range(1, steps + 1):
-            fraction = step / steps
-            x = start[0] + (end[0] - start[0]) * fraction
-            y = start[1] + (end[1] - start[1]) * fraction
-            self._post_mouse(dragged, button, x, y)
-            if delay:
-                time.sleep(delay)
-        self._post_mouse(up, button, *end)
+        self._drag_pointer(start, end, duration)
         self._invalidate_all_observations()
         return {"ok": True, "from": {"x": start[0], "y": start[1]}, "to": {"x": end[0], "y": end[1]}}
 
@@ -1218,8 +1343,12 @@ class MacOSBackend:
         if arguments.get("x") is None or arguments.get("y") is None:
             return self._cursor()
         if arguments.get("window") is not None:
+            if not arguments.get("screenshotId"):
+                raise ToolError("Window-relative pointer input requires a fresh screenshotId")
             window = self._get_window(arguments["window"])
-            return self._relative_point(window, arguments["x"], arguments["y"])
+            return self._relative_point(
+                window, arguments["x"], arguments["y"], arguments.get("screenshotId")
+            )
         return float(arguments["x"]), float(arguments["y"])
 
     def tool_move_mouse(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1229,20 +1358,31 @@ class MacOSBackend:
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
         Q = self.Quartz
+        if self._held_buttons:
+            held_button, (held_up, event_type, _held_x, _held_y) = next(
+                reversed(self._held_buttons.items())
+            )
+        else:
+            held_button = Q.kCGMouseButtonLeft
+            held_up = None
+            event_type = Q.kCGEventMouseMoved
         for step in range(1, steps + 1):
             fraction = step / steps
             x = start[0] + (target[0] - start[0]) * fraction
             y = start[1] + (target[1] - start[1]) * fraction
-            self._post_mouse(Q.kCGEventMouseMoved, Q.kCGMouseButtonLeft, x, y)
+            self._post_mouse(event_type, held_button, x, y)
             if delay:
                 time.sleep(delay)
+        if held_up is not None:
+            self._held_buttons[held_button] = (held_up, event_type, target[0], target[1])
         self._invalidate_all_observations()
         return {"ok": True, "position": {"x": target[0], "y": target[1]}}
 
     def tool_mouse_down(self, arguments: dict[str, Any]) -> dict[str, Any]:
         point = self._optional_point(arguments)
-        button, down, _up, _dragged = self._button(str(arguments.get("mouse_button", "left")))
+        button, down, up, dragged = self._button(str(arguments.get("mouse_button", "left")))
         self._post_mouse(down, button, *point)
+        self._held_buttons[button] = (up, dragged, point[0], point[1])
         self._invalidate_all_observations()
         return {"ok": True, "position": {"x": point[0], "y": point[1]}}
 
@@ -1250,6 +1390,7 @@ class MacOSBackend:
         point = self._optional_point(arguments)
         button, _down, up, _dragged = self._button(str(arguments.get("mouse_button", "left")))
         self._post_mouse(up, button, *point)
+        self._held_buttons.pop(button, None)
         self._invalidate_all_observations()
         return {"ok": True, "position": {"x": point[0], "y": point[1]}}
 

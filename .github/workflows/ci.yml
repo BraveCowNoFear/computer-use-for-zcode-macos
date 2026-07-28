@@ -58,6 +58,7 @@ jobs:
           binary="$app/Contents/MacOS/cua-driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
+          codesign -dv --verbose=4 "$app" 2>&1
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
           "$binary" --version | grep -F "0.12.6"

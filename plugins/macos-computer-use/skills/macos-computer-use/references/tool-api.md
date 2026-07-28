@@ -68,7 +68,7 @@ core is:
 | Tool | Required input | Purpose |
 | --- | --- | --- |
 | `list_windows` | none | Return targetable windows front-to-back. |
-| `get_window` | `id`, optional `app` | Rehydrate a returned window. |
+| `get_window` | `id`, optional `app`/`pid` | Rehydrate a returned window; carry `pid` for exact process binding. |
 | `list_apps` | none | Return installed/running apps and windows. |
 | `launch_app` | `app` | Launch and return matched pid plus current windows. |
 | `get_window_state` | `window` | Return screenshot and AX by default; either can be disabled explicitly. |
@@ -88,6 +88,10 @@ desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
 `desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
 `get_desktop_state` returns one image and screenshot ID per active display so
 mixed Retina/non-Retina layouts do not share an incorrect global scale.
+When `move_mouse`, `mouse_down`, or `mouse_up` uses window-image coordinates,
+pass that window's fresh `screenshotId` too so Retina pixels map to logical
+Quartz points. The core `click`, `scroll`, and `drag` tools accept the same
+field; always include it when x/y came from a returned screenshot.
 
 Fallback startup sequence:
 
@@ -96,14 +100,17 @@ computer_use_health → permission_status → launch_app/list_windows → get_wi
 → get_window_state → one action → get_window_state
 ```
 
-The fallback is stateless and has no session cleanup tool. If its permissions
-are missing, read the granular health fields first. Accessibility alone makes
+The fallback is sessionless, not stateless: screenshot IDs and AX indexes live
+only in its current MCP process, and it has no session cleanup tool. After a
+stdio/server restart, enumerate and observe again. If permissions are missing,
+read the granular health fields first. Accessibility alone makes
 `axControlReady=true`; use `get_window_state` with
 `include_screenshot:false` for an AX-completable task. Screen Recording is
 required for `pixelObservationReady`, window screenshots, coordinate grounding,
-and every desktop-state route. Call `request_permissions` only for the grant the
-requested task actually needs, then wait for the user to grant the Python/ZCode
-responsible app before restarting ZCode.
+and every desktop-state route. Use
+`request_permissions({accessibility:true,screen_recording:false})` for AX alone,
+or `{accessibility:false,screen_recording:true}` for pixels alone. Then wait for
+the user to grant the Python/ZCode responsible app before restarting ZCode.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
@@ -116,6 +123,10 @@ Do not pass primary handles to fallback tools. A fallback window looks like:
   "bounds": {"x": 100, "y": 80, "width": 900, "height": 700}
 }
 ```
+
+Preserve that whole object in fallback calls. `pid` is an optional extension to
+the Codex-shaped `get_window({id,app})` input, but supplying it prevents an old
+handle from binding to a new process if macOS reuses the numeric window ID.
 
 Fallback screenshot IDs remain valid for five minutes and only for their exact
 `(app, pid, window_id)` process/window identity. If an app restarts, re-list and

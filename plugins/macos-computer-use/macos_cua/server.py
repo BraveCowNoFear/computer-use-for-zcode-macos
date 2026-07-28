@@ -120,21 +120,26 @@ class MCPServer:
 
 def serve(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout, backend: Any | None = None) -> None:
     server = MCPServer(backend)
-    for line in stdin:
-        if not line.strip():
-            continue
-        try:
-            message = json.loads(line)
-            if not isinstance(message, dict):
-                raise ValueError("message must be an object")
-            response = server.handle(message)
-            if response is not None:
-                stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
+    try:
+        for line in stdin:
+            if not line.strip():
+                continue
+            try:
+                message = json.loads(line)
+                if not isinstance(message, dict):
+                    raise ValueError("message must be an object")
+                response = server.handle(message)
+                if response is not None:
+                    stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
+                    stdout.flush()
+            except Exception as error:
+                response = MCPServer._error(None, -32700, f"Parse error: {error}")
+                stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
                 stdout.flush()
-        except Exception as error:
-            response = MCPServer._error(None, -32700, f"Parse error: {error}")
-            stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
-            stdout.flush()
+    finally:
+        close = getattr(server.backend, "close", None)
+        if callable(close):
+            close()
 
 
 def self_test() -> int:

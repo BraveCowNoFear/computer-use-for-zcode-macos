@@ -76,6 +76,8 @@ by explicitly omitting screenshots; pixel and desktop routes still require it.
 - Discover and launch native apps and select exact returned windows.
 - Launch directly into a matched pid/window set, then capture a screenshot and
   indexed Accessibility tree together on both backends.
+- Bind fallback observations to app, pid, CGWindowID, and AXWindowNumber when
+  available; refuse ambiguous Accessibility windows instead of guessing.
 - Click AX elements or window-local pixels, double/right-click, drag, and
   scroll.
 - Type Unicode, press Mac shortcuts, and set Accessibility values.
@@ -84,6 +86,9 @@ by explicitly omitting screenshots; pixel and desktop routes still require it.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
+- Request fallback Accessibility and Screen Recording independently, map Retina
+  pointer input through fresh screenshot IDs, and release held buttons on MCP
+  shutdown or an interrupted drag.
 - Observe and act on every visible display directly, including menu bar, Dock,
   and system UI, with independent coordinates for mixed Retina scales when the
   primary desktop route cannot deliver.
