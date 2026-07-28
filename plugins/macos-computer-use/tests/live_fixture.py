@@ -32,6 +32,25 @@ class FixtureHandler(NSObject):
         self.slider_label.setStringValue_(f"Slider: {int(round(sender.doubleValue()))}")
 
 
+class ScrollProbeView(AppKit.NSView):
+    def initWithFrame_statusLabel_(self, frame, status_label):
+        self = objc.super(ScrollProbeView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self.status_label = status_label
+        self.total_scroll = 0
+        self.setAccessibilityLabel_("Scroll probe")
+        return self
+
+    def drawRect_(self, _dirty_rect) -> None:
+        AppKit.NSColor.systemBlueColor().setFill()
+        AppKit.NSBezierPath.fillRect_(self.bounds())
+
+    def scrollWheel_(self, event) -> None:
+        self.total_scroll += max(1, int(round(abs(event.scrollingDeltaY()))))
+        self.status_label.setStringValue_(f"Scrolled: {self.total_scroll}")
+
+
 def label(frame, value: str):
     control = AppKit.NSTextField.alloc().initWithFrame_(frame)
     control.setStringValue_(value)
@@ -74,15 +93,30 @@ def main() -> int:
     slider.setAccessibilityLabel_("Smoke slider")
     slider_result = label(AppKit.NSMakeRect(240, 75, 360, 24), "Slider: 0")
     slider_result.setAccessibilityLabel_("Smoke slider result")
-    result = label(AppKit.NSMakeRect(40, 45, 560, 24), "Waiting")
+    result = label(AppKit.NSMakeRect(40, 45, 190, 24), "Waiting")
     result.setAccessibilityLabel_("Smoke result")
+    scroll_result = label(AppKit.NSMakeRect(240, 45, 170, 24), "Scrolled: 0")
+    scroll_result.setAccessibilityLabel_("Smoke scroll result")
+    scroll_probe = ScrollProbeView.alloc().initWithFrame_statusLabel_(
+        AppKit.NSMakeRect(420, 45, 180, 24),
+        scroll_result,
+    )
 
     handler = FixtureHandler.alloc().initWithField_label_sliderLabel_(field, result, slider_result)
     button.setTarget_(handler)
     button.setAction_("submit:")
     slider.setTarget_(handler)
     slider.setAction_("sliderChanged:")
-    for control in (prompt, field, button, slider, slider_result, result):
+    for control in (
+        prompt,
+        field,
+        button,
+        slider,
+        slider_result,
+        result,
+        scroll_result,
+        scroll_probe,
+    ):
         content.addSubview_(control)
 
     app.finishLaunching()

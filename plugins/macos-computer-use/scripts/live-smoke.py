@@ -22,6 +22,8 @@ FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
 FIXTURE_SLIDER_START_X = 252.0
 FIXTURE_SLIDER_END_X = 588.0
 FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
+FIXTURE_SCROLL_PROBE_CENTER_X = 510.0
+FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM = 57.0
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -76,7 +78,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.21"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.9.22"},
             },
         )
         self.notify("notifications/initialized")
@@ -420,6 +422,36 @@ def run_fallback() -> dict[str, Any]:
         if expected not in final_state["accessibility"]["tree"]:
             raise RuntimeError(f"Fallback final visible/AX result did not contain {expected!r}")
         report["steps"].append("fallback_visible_result_verified")
+
+        scroll_point = fixture_screenshot_point(
+            final_state,
+            FIXTURE_SCROLL_PROBE_CENTER_X,
+            FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        scrolled, _ = client.call(
+            "scroll",
+            {
+                "window": final_state["window"],
+                "x": scroll_point[0],
+                "y": scroll_point[1],
+                "scrollX": 0,
+                "scrollY": 120,
+                "screenshotId": final_state["screenshots"][0]["id"],
+            },
+        )
+        require_action_verdict(scrolled, "fallback physical scroll")
+        scroll_state, scroll_content = client.call(
+            "get_window_state",
+            {"window": window, "include_screenshot": True, "include_text": True},
+        )
+        require_image(scroll_content, "fallback window state after physical scroll")
+        scroll_match = re.search(r"Scrolled: (\d+)", scroll_state["accessibility"]["tree"])
+        if scroll_match is None or int(scroll_match.group(1)) <= 0:
+            raise RuntimeError(
+                f"Fallback physical scroll did not reach its coordinate probe: {scroll_state['accessibility']['tree']}"
+            )
+        report["steps"].append("fallback_physical_scroll_verified")
+
         restored, _ = client.call(
             "move_mouse",
             {"x": original_cursor["x"], "y": original_cursor["y"], "duration": 0.1},
