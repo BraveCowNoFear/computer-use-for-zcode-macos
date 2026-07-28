@@ -10,7 +10,7 @@ source "$ROOT/scripts/runtime-common.sh"
 DEV_PYTHON="$ROOT/.venv/bin/python3"
 DATA_PYTHON="$DATA_DIR/venv/bin/python3"
 VERSION_FILE="$DATA_DIR/runtime-version"
-RUNTIME_VERSION="0.2.0"
+RUNTIME_VERSION="0.3.0"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
@@ -18,6 +18,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 if [[ -x "$DEV_PYTHON" ]]; then
+  require_supported_python "$DEV_PYTHON"
   PYTHON="$DEV_PYTHON"
 else
   mkdir -p "$DATA_DIR"
@@ -27,18 +28,17 @@ else
     trap 'release_runtime_lock "$LOCK_DIR"' EXIT
     if [[ ! -x "$DATA_PYTHON" ]] || [[ ! -f "$VERSION_FILE" ]] || [[ "$(<"$VERSION_FILE" 2>/dev/null || true)" != "$RUNTIME_VERSION" ]]; then
       echo "Preparing the local macOS Computer Use runtime..." >&2
-      command -v python3 >/dev/null 2>&1 || {
-        echo "python3 is required. Install Python 3.10+ and re-enable the plugin." >&2
-        exit 1
-      }
+      require_supported_python python3
       python3 -m venv "$DATA_DIR/venv"
-      "$DATA_PYTHON" -m pip install --disable-pip-version-check --quiet -r "$ROOT/requirements.txt" >&2
+      require_supported_python "$DATA_PYTHON"
+      "$DATA_PYTHON" -m pip install --disable-pip-version-check --only-binary=:all: --quiet -r "$ROOT/requirements.txt" >&2
       printf '%s' "$RUNTIME_VERSION" > "$VERSION_FILE"
     fi
     release_runtime_lock "$LOCK_DIR"
     trap - EXIT
   fi
   PYTHON="$DATA_PYTHON"
+  require_supported_python "$PYTHON"
 fi
 
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"

@@ -57,8 +57,8 @@ Gatekeeper assessment; disables its telemetry; and launches a plugin-owned daemo
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted`; the socket is private, per-user, and
-versioned. The fallback creates a private Python environment and installs
-PyObjC.
+versioned. The fallback requires CPython 3.10 or newer, creates a private
+environment, and installs the exact tested PyObjC 12.2.1 binary wheels.
 
 If `/Applications` is not writable, the background backend reports that exact
 diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed
@@ -76,8 +76,9 @@ by any plugin.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
-- Observe and act on the full visible desktop directly, including menu bar,
-  Dock, and system UI, when the primary desktop route cannot deliver.
+- Observe and act on every visible display directly, including menu bar, Dock,
+  and system UI, with independent coordinates for mixed Retina scales when the
+  primary desktop route cannot deliver.
 
 Primary schemas come from the installed Cua Driver MCP. The fallback exposes the
 Codex-compatible names `list_windows`, `get_window`, `list_apps`, `launch_app`,

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,6 +32,38 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertEqual(zcode[field], codex[field])
         self.assertTrue((PLUGIN / zcode["mcpServers"]).exists())
         self.assertTrue((PLUGIN / zcode["skills"] / "macos-computer-use" / "SKILL.md").exists())
+
+    def test_release_versions_are_synchronized(self):
+        expected = json.loads((ROOT / "marketplace.json").read_text(encoding="utf-8"))["plugins"][0]["version"]
+        package = (PLUGIN / "macos_cua" / "__init__.py").read_text(encoding="utf-8")
+        launcher = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
+        self.assertEqual(re.search(r'__version__ = "([^"]+)"', package).group(1), expected)
+        self.assertEqual(re.search(r'RUNTIME_VERSION="([^"]+)"', launcher).group(1), expected)
+
+    def test_fallback_dependencies_are_exact_binary_wheels(self):
+        requirements = (PLUGIN / "requirements.txt").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(
+            requirements,
+            [
+                'pyobjc-framework-Cocoa==12.2.1; sys_platform == "darwin"',
+                'pyobjc-framework-Quartz==12.2.1; sys_platform == "darwin"',
+                'pyobjc-framework-ApplicationServices==12.2.1; sys_platform == "darwin"',
+            ],
+        )
+        for script in ("install.sh", "run-mcp.sh"):
+            self.assertIn("--only-binary=:all:", (PLUGIN / "scripts" / script).read_text(encoding="utf-8"))
+        self.assertIn("--only-binary=:all:", (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+
+    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
+    def test_runtime_accepts_the_ci_cpython(self):
+        common = PLUGIN / "scripts" / "runtime-common.sh"
+        script = (
+            f"source {shlex.quote(str(common))}\n"
+            f"python_is_supported {shlex.quote(sys.executable)}\n"
+            f"require_supported_python {shlex.quote(sys.executable)}\n"
+        )
+        completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_mcp_launchers_are_local_stdio(self):
         config = json.loads((PLUGIN / ".mcp.json").read_text(encoding="utf-8"))

@@ -635,14 +635,15 @@ class MacOSBackend:
         accessibility = self._accessibility_state(window) if include_text else None
         return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
 
-    def _desktop_bounds(self) -> dict[str, float]:
+    def _desktop_layout(self) -> list[dict[str, Any]]:
         screens = list(self.AppKit.NSScreen.screens() or [])
         if not screens:
             raise ToolError("macOS reports no active display")
         main_frame = screens[0].frame()
         main_height = float(main_frame.size.height)
-        rectangles: list[tuple[float, float, float, float]] = []
-        for screen in screens:
+        layout: list[dict[str, Any]] = []
+        screen_number_key = getattr(self.AppKit, "NSScreenNumber", "NSScreenNumber")
+        for index, screen in enumerate(screens):
             frame = screen.frame()
             width = float(frame.size.width)
             height = float(frame.size.height)
@@ -650,20 +651,47 @@ class MacOSBackend:
             # NSScreen is bottom-left-origin; Quartz input/window coordinates
             # are top-left-origin relative to the main display.
             y = main_height - (float(frame.origin.y) + height)
-            rectangles.append((x, y, width, height))
-        left = min(item[0] for item in rectangles)
-        top = min(item[1] for item in rectangles)
-        right = max(item[0] + item[2] for item in rectangles)
-        bottom = max(item[1] + item[3] for item in rectangles)
+            description = screen.deviceDescription() or {}
+            display_id = description.get(screen_number_key, description.get("NSScreenNumber", index))
+            layout.append(
+                {
+                    "displayId": int(display_id),
+                    "bounds": {"x": x, "y": y, "width": width, "height": height},
+                    "backingScaleFactor": float(screen.backingScaleFactor()),
+                    "isMain": index == 0,
+                }
+            )
+        return layout
+
+    @staticmethod
+    def _bounds_for_layout(layout: list[dict[str, Any]]) -> dict[str, float]:
+        rectangles = [screen["bounds"] for screen in layout]
+        left = min(float(item["x"]) for item in rectangles)
+        top = min(float(item["y"]) for item in rectangles)
+        right = max(float(item["x"]) + float(item["width"]) for item in rectangles)
+        bottom = max(float(item["y"]) + float(item["height"]) for item in rectangles)
         return {"x": left, "y": top, "width": right - left, "height": bottom - top}
 
-    def _capture_desktop(self) -> dict[str, Any]:
-        status = self._permission_status()
-        if not status["screenRecording"]:
-            raise ToolError("Screen Recording permission is not granted. Run request_permissions, grant it, and restart ZCode.")
+    def _desktop_bounds(self) -> dict[str, float]:
+        return self._bounds_for_layout(self._desktop_layout())
+
+    @staticmethod
+    def _layout_fingerprint(layout: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "displayId": int(screen["displayId"]),
+                "bounds": {key: float(screen["bounds"][key]) for key in ("x", "y", "width", "height")},
+                "backingScaleFactor": float(screen["backingScaleFactor"]),
+            }
+            for screen in layout
+        ]
+
+    def _capture_desktop_screen(
+        self, screen: dict[str, Any], layout: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         Q = self.Quartz
         A = self.AppKit
-        bounds = self._desktop_bounds()
+        bounds = screen["bounds"]
         rect = Q.CGRectMake(bounds["x"], bounds["y"], bounds["width"], bounds["height"])
         image = Q.CGWindowListCreateImage(
             rect,
@@ -688,13 +716,15 @@ class MacOSBackend:
         except OSError:
             pass
         screenshot_id = uuid.uuid4().hex
-        path = self._screenshot_dir / f"desktop-{screenshot_id}.png"
+        path = self._screenshot_dir / f"desktop-{screen['displayId']}-{screenshot_id}.png"
         path.write_bytes(raw)
         cached = {
             "id": screenshot_id,
             "scope": "desktop",
             "windowKey": None,
-            "bounds": bounds,
+            "displayId": int(screen["displayId"]),
+            "bounds": dict(bounds),
+            "layout": self._layout_fingerprint(layout),
             "imageWidth": width,
             "imageHeight": height,
             "created": time.monotonic(),
@@ -705,6 +735,8 @@ class MacOSBackend:
             "id": screenshot_id,
             "width": width,
             "height": height,
+            "displayId": int(screen["displayId"]),
+            "backingScaleFactor": float(screen["backingScaleFactor"]),
             "originX": bounds["x"],
             "originY": bounds["y"],
             "path": str(path),
@@ -714,8 +746,17 @@ class MacOSBackend:
 
     def tool_get_desktop_state(self, arguments: dict[str, Any]) -> dict[str, Any]:
         self._invalidate_all_observations()
-        screenshot = self._capture_desktop()
-        return {"scope": "desktop", "bounds": self._desktop_bounds(), "screenshots": [screenshot]}
+        status = self._permission_status()
+        if not status["screenRecording"]:
+            raise ToolError("Screen Recording permission is not granted. Run request_permissions, grant it, and restart ZCode.")
+        layout = self._desktop_layout()
+        screenshots = [self._capture_desktop_screen(screen, layout) for screen in layout]
+        return {
+            "scope": "desktop",
+            "bounds": self._bounds_for_layout(layout),
+            "displays": layout,
+            "screenshots": screenshots,
+        }
 
     def _validate_desktop_screenshot(self, screenshot_id: Any) -> dict[str, Any]:
         cached = self._screenshot_cache.get(str(screenshot_id))
@@ -723,9 +764,16 @@ class MacOSBackend:
             raise ToolError("screenshotId is not the latest direct desktop observation; call get_desktop_state")
         if time.monotonic() - float(cached["created"]) > 300:
             raise ToolError("desktop screenshotId is stale; call get_desktop_state again")
-        current = self._desktop_bounds()
-        if any(abs(float(cached["bounds"][field]) - float(current[field])) > 1 for field in current):
-            raise ToolError("The desktop display layout changed after this screenshot; re-observe before acting")
+        if cached.get("layout") is not None:
+            current_layout = self._layout_fingerprint(self._desktop_layout())
+            if cached["layout"] != current_layout:
+                raise ToolError("The desktop display layout changed after this screenshot; re-observe before acting")
+        else:
+            # Backward-compatible validation for observations created before
+            # the per-display layout contract or by focused unit tests.
+            current = self._desktop_bounds()
+            if any(abs(float(cached["bounds"][field]) - float(current[field])) > 1 for field in current):
+                raise ToolError("The desktop display layout changed after this screenshot; re-observe before acting")
         return cached
 
     def _desktop_relative_point(self, x: Any, y: Any, screenshot_id: Any) -> tuple[float, float]:

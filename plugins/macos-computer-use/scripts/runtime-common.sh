@@ -4,6 +4,26 @@
 # atomic on macOS without requiring flock. The PID marker lets a later ZCode
 # process recover a lock left behind by a killed installer.
 
+python_is_supported() {
+  local python="$1"
+  [[ -x "$(command -v "$python" 2>/dev/null || true)" ]] || return 1
+  "$python" -c 'import platform, sys; raise SystemExit(0 if platform.python_implementation() == "CPython" and sys.version_info >= (3, 10) else 1)' \
+    >/dev/null 2>&1
+}
+
+require_supported_python() {
+  local python="$1"
+  if python_is_supported "$python"; then
+    return 0
+  fi
+  local detected="not found"
+  if command -v "$python" >/dev/null 2>&1; then
+    detected="$("$python" -c 'import platform, sys; print(f"{platform.python_implementation()} {sys.version.split()[0]}")' 2>/dev/null || printf 'unreadable')"
+  fi
+  echo "The direct fallback requires CPython 3.10 or newer; $python is $detected." >&2
+  return 1
+}
+
 runtime_lock_mtime() {
   local lock_dir="$1"
   if [[ "$(uname -s)" == "Darwin" ]]; then

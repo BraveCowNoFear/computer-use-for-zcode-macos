@@ -103,12 +103,13 @@ stateless and has no `start_session`/`end_session`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
 When the primary desktop path itself is unavailable or refuses a system-UI
-operation, the fallback can control the complete visible desktop. Call fallback
-`get_desktop_state`, ground one `desktop_click`, `desktop_scroll`,
-`desktop_drag`, `desktop_press_key`, or `desktop_type_text` call in its returned
-`screenshotId`, then call `get_desktop_state` again. Each desktop action
-invalidates that screenshot ID. These direct tools intentionally have no app,
-window, or target restriction.
+operation, the fallback can control every visible display. Call fallback
+`get_desktop_state`, choose the returned per-display screenshot containing the
+target (each has its own screenshot ID and coordinate scale), ground one
+`desktop_click`, `desktop_scroll`, `desktop_drag`, `desktop_press_key`, or
+`desktop_type_text` call in its returned `screenshotId`, then call
+`get_desktop_state` again. Each desktop action invalidates that screenshot ID.
+These direct tools intentionally have no app, window, or target restriction.
 
 ## Inputs
 

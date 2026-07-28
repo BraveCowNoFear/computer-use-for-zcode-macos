@@ -2,14 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/runtime-common.sh"
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This installer must run on macOS." >&2
   exit 1
 fi
-command -v python3 >/dev/null 2>&1 || {
-  echo "python3 3.10+ is required." >&2
-  exit 1
-}
+require_supported_python python3
 
 echo "Preparing the background Cua Driver backend..."
 MACOS_CUA_PLUGIN_ROOT="$ROOT" \
@@ -18,7 +16,7 @@ MACOS_CUA_DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}" \
 
 echo "Preparing the direct Quartz/PyObjC fallback..."
 python3 -m venv "$ROOT/.venv"
-"$ROOT/.venv/bin/python3" -m pip install --disable-pip-version-check -r "$ROOT/requirements.txt"
+"$ROOT/.venv/bin/python3" -m pip install --disable-pip-version-check --only-binary=:all: -r "$ROOT/requirements.txt"
 export PYTHONPATH="$ROOT"
 "$ROOT/.venv/bin/python3" -m macos_cua.server --self-test
 

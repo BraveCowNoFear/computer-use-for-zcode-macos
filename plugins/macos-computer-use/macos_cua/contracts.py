@@ -83,7 +83,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "get_desktop_state",
-        "description": "Capture the complete visible macOS desktop for direct menu bar, Dock, desktop, and system UI control.",
+        "description": "Capture one fresh screenshot per active macOS display for precise menu bar, Dock, desktop, and system UI control across mixed Retina scales.",
         "inputSchema": _object({}),
     },
     {

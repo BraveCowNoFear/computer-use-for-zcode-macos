@@ -83,6 +83,8 @@ Extended fallback tools: `computer_use_health`, `permission_status`,
 `get_cursor_position`, `clipboard_get`, `clipboard_set`, plus the unrestricted
 desktop family `get_desktop_state`, `desktop_click`, `desktop_press_key`,
 `desktop_type_text`, `desktop_scroll`, and `desktop_drag`.
+`get_desktop_state` returns one image and screenshot ID per active display so
+mixed Retina/non-Retina layouts do not share an incorrect global scale.
 
 Fallback startup sequence:
 
@@ -119,6 +121,10 @@ get_desktop_state → one desktop_* action with its screenshotId
 → get_desktop_state
 ```
 
+For a coordinate action, use the screenshot ID of the display image containing
+the target and read x/y from that same image. Keyboard-only desktop actions may
+use any fresh returned desktop screenshot ID.
+
 The direct desktop actions are screen-wide and deliberately have no app or
 window allowlist. The screenshot ID is required and becomes invalid after the
 action, including keyboard/text actions.
@@ -128,8 +134,9 @@ action, including keyboard/text actions.
 The primary first-run launcher downloads the versioned upstream installer,
 verifies its pinned SHA-256, installs signed `/Applications/CuaDriver.app`, and
 disables upstream telemetry. It may need the current macOS user to have write
-access to `/Applications`. The fallback creates a private Python environment
-and installs PyObjC.
+access to `/Applications`. The fallback requires CPython 3.10 or newer, creates
+a private Python environment, and installs the exact tested PyObjC 12.2.1
+binary wheels.
 
 Required macOS grants:
 

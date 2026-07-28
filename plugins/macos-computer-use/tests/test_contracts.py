@@ -5,6 +5,7 @@ import io
 import json
 import sys
 import time
+import types
 import unittest
 from pathlib import Path
 
@@ -152,6 +153,112 @@ class ContractTests(unittest.TestCase):
             "path": str(PLUGIN_ROOT / "__never_created_desktop_test_shot__.png"),
         }
         self.assertEqual(backend._desktop_relative_point(1600, 600, "desktop"), (0, 300))
+
+    def test_mixed_scale_desktop_screens_map_independently(self):
+        backend = MacOSBackend()
+        layout = [
+            {
+                "displayId": 1,
+                "bounds": {"x": -1440, "y": 0, "width": 1440, "height": 900},
+                "backingScaleFactor": 2.0,
+                "isMain": False,
+            },
+            {
+                "displayId": 2,
+                "bounds": {"x": 0, "y": 0, "width": 1920, "height": 1080},
+                "backingScaleFactor": 1.0,
+                "isMain": True,
+            },
+        ]
+        backend._desktop_layout = lambda: layout
+        fingerprint = backend._layout_fingerprint(layout)
+        backend._screenshot_cache["retina-left"] = {
+            "scope": "desktop",
+            "windowKey": None,
+            "displayId": 1,
+            "bounds": dict(layout[0]["bounds"]),
+            "layout": fingerprint,
+            "imageWidth": 2880,
+            "imageHeight": 1800,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_left_desktop_test_shot__.png"),
+        }
+        backend._screenshot_cache["standard-right"] = {
+            "scope": "desktop",
+            "windowKey": None,
+            "displayId": 2,
+            "bounds": dict(layout[1]["bounds"]),
+            "layout": fingerprint,
+            "imageWidth": 1920,
+            "imageHeight": 1080,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_right_desktop_test_shot__.png"),
+        }
+        self.assertEqual(backend._desktop_relative_point(1440, 900, "retina-left"), (-720, 450))
+        self.assertEqual(backend._desktop_relative_point(960, 540, "standard-right"), (960, 540))
+
+    def test_appkit_screen_layout_converts_each_display_to_quartz_coordinates(self):
+        class FakeScreen:
+            def __init__(self, display_id, x, y, width, height, scale):
+                self._display_id = display_id
+                self._frame = types.SimpleNamespace(
+                    origin=types.SimpleNamespace(x=x, y=y),
+                    size=types.SimpleNamespace(width=width, height=height),
+                )
+                self._scale = scale
+
+            def frame(self):
+                return self._frame
+
+            def deviceDescription(self):
+                return {"ScreenNumber": self._display_id}
+
+            def backingScaleFactor(self):
+                return self._scale
+
+        screens = [
+            FakeScreen(10, 0, 0, 1920, 1080, 1),
+            FakeScreen(20, -1440, 180, 1440, 900, 2),
+            FakeScreen(30, 0, 1080, 1280, 720, 2),
+        ]
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSScreen=types.SimpleNamespace(screens=lambda: screens),
+            NSScreenNumber="ScreenNumber",
+        )
+        layout = backend._desktop_layout()
+        self.assertEqual([item["displayId"] for item in layout], [10, 20, 30])
+        self.assertEqual(layout[0]["bounds"], {"x": 0.0, "y": 0.0, "width": 1920.0, "height": 1080.0})
+        self.assertEqual(layout[1]["bounds"], {"x": -1440.0, "y": 0.0, "width": 1440.0, "height": 900.0})
+        self.assertEqual(layout[2]["bounds"], {"x": 0.0, "y": -720.0, "width": 1280.0, "height": 720.0})
+        self.assertEqual([item["backingScaleFactor"] for item in layout], [1.0, 2.0, 2.0])
+
+    def test_desktop_screenshot_rejects_display_layout_drift(self):
+        backend = MacOSBackend()
+        original = [
+            {
+                "displayId": 1,
+                "bounds": {"x": 0, "y": 0, "width": 1000, "height": 800},
+                "backingScaleFactor": 2.0,
+                "isMain": True,
+            }
+        ]
+        backend._desktop_layout = lambda: original
+        backend._screenshot_cache["before-drift"] = {
+            "scope": "desktop",
+            "windowKey": None,
+            "displayId": 1,
+            "bounds": dict(original[0]["bounds"]),
+            "layout": backend._layout_fingerprint(original),
+            "imageWidth": 2000,
+            "imageHeight": 1600,
+            "created": time.monotonic(),
+            "path": str(PLUGIN_ROOT / "__never_created_layout_drift_test_shot__.png"),
+        }
+        changed = [dict(original[0], backingScaleFactor=1.0)]
+        backend._desktop_layout = lambda: changed
+        with self.assertRaisesRegex(ToolError, "display layout changed"):
+            backend._desktop_relative_point(100, 100, "before-drift")
 
     def test_state_changing_action_can_invalidate_observation_handles(self):
         backend = MacOSBackend()

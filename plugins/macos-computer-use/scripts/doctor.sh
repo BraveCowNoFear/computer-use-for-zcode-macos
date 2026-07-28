@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/runtime-common.sh"
 if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "Primary background backend:"
   MACOS_CUA_PLUGIN_ROOT="$ROOT" \
@@ -19,5 +20,6 @@ if [[ -z "$PYTHON" ]]; then
   echo "python3 is not installed." >&2
   exit 1
 fi
+require_supported_python "$PYTHON"
 export PYTHONPATH="$ROOT"
 exec "$PYTHON" -m macos_cua.server --self-test
