@@ -57,6 +57,8 @@ MIN_SCREENSHOT_SCALE = 0.25
 SCREENSHOT_RESIZE_STEP = 0.85
 SCREENSHOT_RESIZE_TIMEOUT_SECONDS = 5
 MODIFIER_KEY_ORDER = ("command", "control", "option", "shift")
+CLICK_EVENT_SETTLE_SECONDS = 0.03
+MULTICLICK_ADDITIONAL_GAP_SECONDS = 0.05
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -1716,7 +1718,9 @@ class MacOSBackend:
                 x,
                 y,
             )
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             self._post_mouse_down(button, down, up, dragged, x, y, click_number)
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             try:
                 self._post_mouse(up, button, x, y, click_number)
             except Exception as first_error:
@@ -1740,8 +1744,9 @@ class MacOSBackend:
                     self._held_buttons.pop(button, None)
             else:
                 self._held_buttons.pop(button, None)
+            time.sleep(CLICK_EVENT_SETTLE_SECONDS)
             if click_number < count:
-                time.sleep(0.08)
+                time.sleep(MULTICLICK_ADDITIONAL_GAP_SECONDS)
 
     def _post_mouse_down(
         self,
@@ -2184,10 +2189,10 @@ class MacOSBackend:
                     start[0] + (end[0] - start[0]) * fraction,
                     start[1] + (end[1] - start[1]) * fraction,
                 )
-                self._post_mouse(dragged, button, *last)
-                self._held_buttons[button] = (up, dragged, last[0], last[1])
                 if delay:
                     time.sleep(delay)
+                self._post_mouse(dragged, button, *last)
+                self._held_buttons[button] = (up, dragged, last[0], last[1])
         except BaseException as error:
             # A failed/interrupted drag must not leave the physical button held.
             release_pending = True
@@ -2407,12 +2412,12 @@ class MacOSBackend:
                 fraction = step / steps
                 x = start[0] + (target[0] - start[0]) * fraction
                 y = start[1] + (target[1] - start[1]) * fraction
+                if delay:
+                    time.sleep(delay)
                 for held_button, (held_up, event_type, _held_x, _held_y) in routes:
                     self._post_mouse(event_type, held_button, x, y)
                     if held_up is not None:
                         self._held_buttons[held_button] = (held_up, event_type, x, y)
-                if delay:
-                    time.sleep(delay)
             try:
                 observed = self._cursor()
             except ToolError:

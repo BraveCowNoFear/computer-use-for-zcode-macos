@@ -2021,7 +2021,8 @@ class ContractTests(unittest.TestCase):
         backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(
             (event, click_count)
         )
-        backend._click_pointer("button", "down", "up", "dragged", 1, 2, 3)
+        with mock.patch("macos_cua.macos.time.sleep") as pause:
+            backend._click_pointer("button", "down", "up", "dragged", 1, 2, 3)
         self.assertEqual(
             events,
             [
@@ -2036,6 +2037,57 @@ class ContractTests(unittest.TestCase):
                 ("up", 3),
             ],
         )
+        self.assertEqual(
+            [call.args[0] for call in pause.call_args_list],
+            [0.03, 0.03, 0.03, 0.05, 0.03, 0.03, 0.03, 0.05, 0.03, 0.03, 0.03],
+        )
+        self.assertFalse(backend._held_buttons)
+
+    def test_timed_pointer_move_posts_each_frame_after_its_delay(self):
+        backend = MacOSBackend()
+        backend.Quartz = types.SimpleNamespace(
+            kCGMouseButtonLeft="left-button",
+            kCGEventMouseMoved="moved",
+        )
+        positions = iter([(0.0, 0.0), (6.0, 3.0)])
+        backend._cursor = lambda: next(positions)
+        timeline = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: timeline.append(
+            ("post", x, y)
+        )
+        backend._invalidate_all_observations = lambda: None
+        with mock.patch(
+            "macos_cua.macos.time.sleep",
+            side_effect=lambda delay: timeline.append(("sleep", delay)),
+        ):
+            result = backend.tool_move_mouse({"x": 6, "y": 3, "duration": 0.05})
+        self.assertEqual([item[0] for item in timeline], ["sleep", "post"] * 3)
+        self.assertAlmostEqual(
+            sum(item[1] for item in timeline if item[0] == "sleep"),
+            0.05,
+        )
+        self.assertEqual(timeline[-1], ("post", 6.0, 3.0))
+        self.assertTrue(result["verified"])
+
+    def test_timed_drag_waits_before_each_dragged_frame(self):
+        backend = MacOSBackend()
+        backend._button = lambda value: ("button", "down", "up", "dragged")
+        timeline = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: timeline.append(
+            ("post", event, x, y)
+        )
+        with mock.patch(
+            "macos_cua.macos.time.sleep",
+            side_effect=lambda delay: timeline.append(("sleep", delay)),
+        ):
+            backend._drag_pointer((0.0, 0.0), (6.0, 3.0), 0.05)
+        self.assertEqual([item[0] for item in timeline[2:-1]], ["sleep", "post"] * 3)
+        self.assertAlmostEqual(
+            sum(item[1] for item in timeline if item[0] == "sleep"),
+            0.05,
+        )
+        self.assertEqual(timeline[-2], ("post", "dragged", 6.0, 3.0))
+        self.assertEqual(timeline[-1], ("post", "up", 6.0, 3.0))
         self.assertFalse(backend._held_buttons)
 
     def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
