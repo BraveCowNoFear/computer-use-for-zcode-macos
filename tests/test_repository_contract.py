@@ -123,6 +123,10 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertEqual(server["type"], "stdio")
             self.assertEqual(server["command"], "/bin/bash")
             self.assertNotIn("url", server)
+        self.assertEqual(
+            config["mcpServers"]["macos-computer-use"]["env"]["CUA_DRIVER_TELEMETRY_HOME"],
+            "${CLAUDE_PLUGIN_DATA}/cua-telemetry",
+        )
 
     def test_primary_launcher_is_pinned_and_unrestricted(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(encoding="utf-8")
@@ -146,6 +150,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
         self.assertIn("--env CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
         self.assertIn("--env CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
+        self.assertIn('TELEMETRY_HOME="$DATA_DIR/cua-telemetry"', launcher)
+        self.assertIn('export CUA_DRIVER_TELEMETRY_HOME="$TELEMETRY_HOME"', launcher)
+        self.assertIn('--env "CUA_DRIVER_TELEMETRY_HOME=$TELEMETRY_HOME"', launcher)
+        self.assertIn("Never change the user's ~/.cua-driver preference", launcher)
         self.assertIn('"source"[[:space:]]*:[[:space:]]*"persisted"', launcher)
         self.assertNotIn("telemetry disable >/dev/null 2>&1 || true", launcher)
         self.assertNotIn("--no-permissions-gate", launcher)
@@ -169,6 +177,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"$APP_BUNDLE" --args', launcher)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("cua-policy-proof.sock", workflow)
+        self.assertIn('test ! -e "$unrelated_home/.cua-driver"', workflow)
+        self.assertIn('test ! -e "$unrelated_home/.cua-driver-rs"', workflow)
+        self.assertIn('CUA_DRIVER_TELEMETRY_HOME="$data/cua-telemetry"', workflow)
         self.assertIn("permission mode: unrestricted", workflow)
         self.assertIn("user policy: configured=false, active=false, valid=true", workflow)
         self.assertIn("managed policy: configured=false, active=false, valid=true", workflow)

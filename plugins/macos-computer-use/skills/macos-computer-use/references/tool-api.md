@@ -186,7 +186,8 @@ action, including keyboard/text actions.
 The primary first-run launcher downloads the pinned upstream release archive,
 verifies its SHA-256, atomically publishes `CuaDriver.app` inside the plugin data
 directory, and accepts only the tested Cua AI Team ID/signing authority. It
-proves persisted telemetry is disabled, turns off the separate update check,
+proves telemetry persisted inside plugin data is disabled without changing the
+user's unrelated `~/.cua-driver` preference, turns off the separate update check,
 and never overwrites a global `/Applications` app. The fallback requires CPython
 3.10 through 3.15, creates a private Python environment, and installs the exact tested PyObjC 12.2.1
 five-package binary-wheel closure with dependency resolution disabled.

@@ -45,7 +45,7 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 
 第一次启动时，主启动器只下载固定版本的 Cua Driver 通用发布归档，校验
 SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI Team ID 和
-签名 Authority。它会证明持久遥测设置已关闭，同时关闭独立更新检查，再以
+签名 Authority。它会证明仅保存在 Plugin 数据目录内的持久遥测设置已关闭，同时关闭独立更新检查，再以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
 专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
@@ -86,8 +86,8 @@ Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖
 ## 完全访问与隐私
 
 - 截图、AX 树、剪贴板内容和输入参数留在本机。
-- 主后端启动前会用环境变量和持久设置读回双重关闭 Cua Driver 遥测，并关闭
-  与遥测独立的版本更新检查。
+- 主后端启动前会用环境变量和 Plugin 私有持久设置读回双重关闭 Cua Driver
+  遥测，不修改用户其他 Cua 实例的 `~/.cua-driver` 偏好，并关闭与遥测独立的版本更新检查。
 - Plugin 只在首次下载依赖时联网；被控制的浏览器/App 仍可能自行联网。
 - 单纯控制 GUI 不需要“完全磁盘访问”；只有实际文件任务需要时才另外授予
   ZCode。

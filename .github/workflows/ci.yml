@@ -73,20 +73,24 @@ jobs:
           "$binary" --version | grep -F "0.12.6"
           /usr/bin/open -h 2>&1 | grep -F -- "--env"
           data="$RUNNER_TEMP/zcode-primary-first-run"
+          unrelated_home="$RUNNER_TEMP/unrelated-cua-home"
+          mkdir -p "$unrelated_home"
           mkdir -p "$data/installers"
           cp /tmp/cua-driver-release.tar.gz "$data/installers/cua-driver-rs-0.12.6-darwin-universal.tar.gz"
-          MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-cua-driver.sh --prepare-only
+          HOME="$unrelated_home" MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-cua-driver.sh --prepare-only
+          test ! -e "$unrelated_home/.cua-driver"
+          test ! -e "$unrelated_home/.cua-driver-rs"
           product_app="$data/cua-driver-app/v0.12.6/CuaDriver.app"
           product_binary="$product_app/Contents/MacOS/cua-driver"
           test -x "$product_binary"
           test "$product_app" != "/Applications/CuaDriver.app"
           product_signing_info="$(codesign -dv --verbose=4 "$product_app" 2>&1)"
           grep -Fx "TeamIdentifier=YCK386LBJ7" <<<"$product_signing_info"
-          telemetry_status="$(env -u CUA_DRIVER_RS_TELEMETRY_ENABLED -u CUA_TELEMETRY_ENABLED "$product_binary" telemetry status --json)"
+          telemetry_status="$(env -u CUA_DRIVER_RS_TELEMETRY_ENABLED -u CUA_TELEMETRY_ENABLED CUA_DRIVER_TELEMETRY_HOME="$data/cua-telemetry" "$product_binary" telemetry status --json)"
           grep -Eq '"enabled"[[:space:]]*:[[:space:]]*false' <<<"$telemetry_status"
           grep -Eq '"source"[[:space:]]*:[[:space:]]*"persisted"' <<<"$telemetry_status"
           socket="$RUNNER_TEMP/cua-policy-proof.sock"
-          CUA_DRIVER_RS_TELEMETRY_ENABLED=false CUA_DRIVER_RS_UPDATE_CHECK=false "$product_binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
+          CUA_DRIVER_RS_TELEMETRY_ENABLED=false CUA_DRIVER_RS_UPDATE_CHECK=false CUA_DRIVER_TELEMETRY_HOME="$data/cua-telemetry" "$product_binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
           daemon_pid=$!
           cleanup_policy_proof() {
             "$product_binary" stop --socket "$socket" >/dev/null 2>&1 || true

@@ -13,7 +13,7 @@ Create a ZCode plugin for macOS that mirrors the practical Codex Computer Use lo
 - Primary implementation: signed `CuaDriver.app` 0.12.6, launched on a private per-user/version socket in unrestricted mode for background AX/pixel control without focus stealing; startup verifies exact app version, required tools, and the daemon's reported permission mode.
 - Fallback implementation: repository-owned Python/PyObjC MCP using AppKit, Quartz, and macOS Accessibility for unrestricted direct foreground window and full-desktop control when the driver is unavailable or refuses an operation.
 - Authorization boundary: ZCode Full Access plus macOS Accessibility and Screen Recording TCC grants.
-- Privacy boundary: runtime screen, Accessibility, clipboard, and input payloads remain local; upstream Cua Driver telemetry is disabled by environment and persisted preference.
+- Privacy boundary: runtime screen, Accessibility, clipboard, and input payloads remain local; upstream Cua Driver telemetry is disabled by environment and a plugin-private persisted preference that never edits the user's unrelated `~/.cua-driver` config.
 
 ## Compatibility contract
 
@@ -70,5 +70,6 @@ The core tool names mirror Codex Computer Use: `list_windows`, `get_window`, `li
 - 2026-07-28: plugin 0.8.14 makes failed delivery conservative across every direct input: old observations expire in `finally`, and keyboard/mouse down events are pre-registered so immediate retry or MCP shutdown can always post the matching release.
 - 2026-07-28: plugin 0.8.15 incorporates three pinned macOS Skill recovery cases without its approval policy: missing screenshots never produce guessed coordinates, sparse Chromium AX gets one bounded refresh, and minimized-window key no-ops switch to fresh actionable AX controls.
 - 2026-07-28: plugin 0.8.16 passes the official Codex plugin packaging shape audit: its separate `.agents` marketplace already carries required source/policy/category metadata, and `interface.defaultPrompt` is now a bounded string array instead of a non-canonical scalar.
+- 2026-07-28: plugin 0.8.17 isolates Cua telemetry persistence under Plugin data through `CUA_DRIVER_TELEMETRY_HOME`; the fail-closed opt-out proof remains, while tests prove the user's unrelated `~/.cua-driver/config.json` is not created or modified.
 - 2026-07-28: macOS CI now launches the verified Cua 0.12.6 binary on a disposable socket with the permissions onboarding disabled only for this non-GUI proof, checks its real status for unrestricted mode plus absent user/managed/session policies, then stops and reaps it.
 - Remaining hardware gate: run a live background screenshot/action/re-screenshot loop on an unlocked user Mac after granting CuaDriver.app Accessibility and Screen Recording. Hosted GitHub runners cannot receive interactive TCC grants.

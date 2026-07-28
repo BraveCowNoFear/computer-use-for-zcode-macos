@@ -24,10 +24,12 @@ LOCK_DIR="$DATA_DIR/cua-driver-install.lock"
 SOCKET_DIR="/tmp/zcode-cua-${UID}"
 SOCKET="$SOCKET_DIR/v${CUA_VERSION}.sock"
 START_LOCK="$SOCKET_DIR/v${CUA_VERSION}.start.lock"
+TELEMETRY_HOME="$DATA_DIR/cua-telemetry"
 
 export CUA_DRIVER_RS_TELEMETRY_ENABLED=0
 export CUA_TELEMETRY_ENABLED=0
 export CUA_DRIVER_RS_UPDATE_CHECK=false
+export CUA_DRIVER_TELEMETRY_HOME="$TELEMETRY_HOME"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "The background Cua Driver backend requires macOS. The fallback MCP remains available." >&2
@@ -139,10 +141,11 @@ if [[ -z "$BIN" ]]; then
   exit 1
 fi
 
-# Persist and prove the opt-out as well as setting it in this process, so a
-# LaunchServices daemon cannot re-enable content-free upstream telemetry.
+# Persist and prove the opt-out inside plugin data as well as setting it in this
+# process. Never change the user's ~/.cua-driver preference for unrelated Cua
+# installations, and never let LaunchServices re-enable upstream telemetry.
 if ! "$BIN" telemetry disable >/dev/null 2>&1; then
-  echo "Cua Driver could not persist its telemetry opt-out; refusing the primary backend." >&2
+  echo "Cua Driver could not persist its plugin-private telemetry opt-out; refusing the primary backend." >&2
   exit 1
 fi
 telemetry_status="$(/usr/bin/env -u CUA_DRIVER_RS_TELEMETRY_ENABLED -u CUA_TELEMETRY_ENABLED "$BIN" telemetry status --json 2>/dev/null || true)"
@@ -220,6 +223,7 @@ if ! daemon_is_verified; then
     --env CUA_DRIVER_RS_TELEMETRY_ENABLED=0 \
     --env CUA_TELEMETRY_ENABLED=0 \
     --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+    --env "CUA_DRIVER_TELEMETRY_HOME=$TELEMETRY_HOME" \
     "$APP_BUNDLE" --args \
     serve \
     --socket "$SOCKET" \

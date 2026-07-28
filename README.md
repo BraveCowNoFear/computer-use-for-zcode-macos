@@ -53,8 +53,8 @@ tests live in this repository.
 On first start, the primary launcher downloads the pinned universal Cua Driver
 release archive, verifies its SHA-256, atomically publishes the signed app in
 the plugin data directory, and checks Gatekeeper plus the expected Cua AI Team
-ID and signing authority. It proves the persisted telemetry preference is off,
-disables the separate update check, and launches a plugin-owned daemon with
+ID and signing authority. It proves a telemetry preference persisted only under
+plugin data is off, disables the separate update check, and launches a plugin-owned daemon with
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted` with no user, managed, or session policy
@@ -106,7 +106,8 @@ apply no app/window target restriction.
 
 - Screenshots, AX trees, clipboard data, and input payloads stay on the Mac.
 - Upstream Cua Driver telemetry is disabled before runtime use and via a
-  fail-closed persisted-setting readback; its independent update check is off.
+  fail-closed plugin-private persisted-setting readback; the user's unrelated
+  `~/.cua-driver` preference is untouched, and the independent update check is off.
 - The one-time dependency download is the only plugin setup network request;
   browser apps may of course use their own network connection.
 - Full Disk Access is not needed for GUI control. Grant it to ZCode separately

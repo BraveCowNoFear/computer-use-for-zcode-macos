@@ -10,7 +10,8 @@
         "MACOS_CUA_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
         "CUA_DRIVER_RS_TELEMETRY_ENABLED": "0",
         "CUA_TELEMETRY_ENABLED": "0",
-        "CUA_DRIVER_RS_UPDATE_CHECK": "false"
+        "CUA_DRIVER_RS_UPDATE_CHECK": "false",
+        "CUA_DRIVER_TELEMETRY_HOME": "${CLAUDE_PLUGIN_DATA}/cua-telemetry"
       },
       "enabled": true,
       "timeoutMs": 300000
