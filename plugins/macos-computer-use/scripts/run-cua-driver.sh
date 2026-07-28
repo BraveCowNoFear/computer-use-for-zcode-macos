@@ -10,21 +10,16 @@ source "$ROOT/scripts/runtime-common.sh"
 
 CUA_VERSION="0.12.6"
 CUA_TAG="cua-driver-rs-v${CUA_VERSION}"
-INSTALLER_URL="https://raw.githubusercontent.com/trycua/cua/${CUA_TAG}/libs/cua-driver/scripts/_install-rust.sh"
-INSTALLER_SHA256="351878e9d7ac1b915b77572ba906102be10a6d93293073ad3e98544817984069"
-INSTALLER_COMMON_URL="https://raw.githubusercontent.com/trycua/cua/${CUA_TAG}/libs/cua-driver/scripts/_install-common.sh"
-INSTALLER_COMMON_SHA256="5bc3aa010eb8667a099b582a9ada9a8f93001745b842cc7cf3cc6c472520cf29"
 ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"
 ASSET_URL="https://github.com/trycua/cua/releases/download/${CUA_TAG}/${ASSET_NAME}"
 ASSET_SHA256="c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f"
-BIN_DIR="$DATA_DIR/cua-driver-bin"
-PLUGIN_BIN="$BIN_DIR/cua-driver"
-APP_BUNDLE="/Applications/CuaDriver.app"
+EXPECTED_TEAM_ID="YCK386LBJ7"
+EXPECTED_AUTHORITY="Developer ID Application: Cua AI, Inc. (YCK386LBJ7)"
+APP_PARENT="$DATA_DIR/cua-driver-app"
+APP_ROOT="$APP_PARENT/v${CUA_VERSION}"
+APP_BUNDLE="$APP_ROOT/CuaDriver.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/cua-driver"
-INSTALLER="$DATA_DIR/installers/cua-driver-${CUA_VERSION}.sh"
-INSTALLER_COMMON="$DATA_DIR/installers/_install-common.sh"
 ASSET="$DATA_DIR/installers/$ASSET_NAME"
-CURL_SHIM_DIR="$ROOT/scripts/pinned-curl"
 LOCK_DIR="$DATA_DIR/cua-driver-install.lock"
 SOCKET_DIR="/tmp/zcode-cua-${UID}"
 SOCKET="$SOCKET_DIR/v${CUA_VERSION}.sock"
@@ -32,6 +27,7 @@ START_LOCK="$SOCKET_DIR/v${CUA_VERSION}.start.lock"
 
 export CUA_DRIVER_RS_TELEMETRY_ENABLED=0
 export CUA_TELEMETRY_ENABLED=0
+export CUA_DRIVER_RS_UPDATE_CHECK=false
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "The background Cua Driver backend requires macOS. The fallback MCP remains available." >&2
@@ -40,10 +36,17 @@ fi
 
 has_required_surface() {
   local candidate="$1"
+  local bundle="${2:-$APP_BUNDLE}"
   [[ -x "$candidate" ]] || return 1
-  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)" == "com.trycua.driver" ]] || return 1
-  /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || return 1
-  /usr/sbin/spctl --assess --type execute "$APP_BUNDLE" >/dev/null 2>&1 || return 1
+  [[ "$candidate" -ef "$bundle/Contents/MacOS/cua-driver" ]] || return 1
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist" 2>/dev/null || true)" == "com.trycua.driver" ]] || return 1
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist" 2>/dev/null || true)" == "$CUA_VERSION" ]] || return 1
+  /usr/bin/codesign --verify --deep --strict "$bundle" >/dev/null 2>&1 || return 1
+  /usr/sbin/spctl --assess --type execute "$bundle" >/dev/null 2>&1 || return 1
+  local signing_info
+  signing_info="$(/usr/bin/codesign -dv --verbose=4 "$bundle" 2>&1)" || return 1
+  grep -Fxq "TeamIdentifier=$EXPECTED_TEAM_ID" <<< "$signing_info" || return 1
+  grep -Fxq "Authority=$EXPECTED_AUTHORITY" <<< "$signing_info" || return 1
   local version
   version="$($candidate --version 2>/dev/null | tail -n 1)" || return 1
   version="${version##* }"
@@ -62,13 +65,10 @@ resolve_existing_binary() {
   local candidate
   for candidate in \
     "${CUA_DRIVER_BIN:-}" \
-    "$PLUGIN_BIN" \
-    "$APP_BIN" \
-    "$(command -v cua-driver 2>/dev/null || true)"; do
+    "$APP_BIN"; do
     # The daemon is launched through the signed app for correct TCC
     # attribution. Never pair it with an unrelated CLI binary.
-    if [[ -n "$candidate" ]] && [[ -x "$APP_BIN" ]] \
-      && [[ "$candidate" -ef "$APP_BIN" ]] && has_required_surface "$candidate"; then
+    if [[ -n "$candidate" ]] && has_required_surface "$candidate" "$APP_BUNDLE"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -82,44 +82,49 @@ verify_sha256() {
   if [[ "$actual" != "$expected" ]]; then
     echo "Refusing to use the Cua Driver $label: SHA-256 mismatch." >&2
     echo "Expected $expected but received $actual." >&2
-    exit 1
+    return 1
   fi
 }
 
 install_driver() {
-  mkdir -p "$DATA_DIR/installers" "$BIN_DIR"
-  acquire_runtime_lock "$LOCK_DIR" "Cua Driver installer" 240 5
-  trap 'release_runtime_lock "$LOCK_DIR"' EXIT
+  mkdir -p "$DATA_DIR/installers" "$APP_PARENT"
+  acquire_runtime_lock "$LOCK_DIR" "Cua Driver installer" 240 30
+  local staging="$APP_PARENT/.v${CUA_VERSION}.install.$$"
+  local download="$ASSET.download.$$"
+  cleanup_driver_install() {
+    rm -rf -- "$staging"
+    rm -f -- "$download"
+    release_runtime_lock "$LOCK_DIR"
+  }
+  trap cleanup_driver_install EXIT
 
   if ! resolve_existing_binary >/dev/null; then
-    echo "Installing signed Cua Driver ${CUA_VERSION} for background macOS control..." >&2
-    command -v curl >/dev/null 2>&1 || {
-      echo "curl is required for the one-time Cua Driver download." >&2
-      exit 1
-    }
-    curl -fsSL "$INSTALLER_URL" -o "$INSTALLER"
-    curl -fsSL "$INSTALLER_COMMON_URL" -o "$INSTALLER_COMMON"
-    curl -fsSL "$ASSET_URL" -o "$ASSET"
-    verify_sha256 "$INSTALLER" "$INSTALLER_SHA256" "installer"
-    verify_sha256 "$INSTALLER_COMMON" "$INSTALLER_COMMON_SHA256" "installer helper"
+    echo "Installing signed Cua Driver ${CUA_VERSION} in the plugin data directory..." >&2
+    if [[ -f "$ASSET" ]] && ! verify_sha256 "$ASSET" "$ASSET_SHA256" "cached release archive"; then
+      echo "Discarding the incomplete or corrupted cached release archive." >&2
+      rm -f -- "$ASSET"
+    fi
+    if [[ ! -f "$ASSET" ]]; then
+      /usr/bin/curl -fsSL "$ASSET_URL" -o "$download"
+      verify_sha256 "$download" "$ASSET_SHA256" "downloaded release archive"
+      mv "$download" "$ASSET"
+    fi
     verify_sha256 "$ASSET" "$ASSET_SHA256" "release archive"
-    [[ -x "$CURL_SHIM_DIR/curl" ]] || {
-      echo "Pinned curl shim is not executable: $CURL_SHIM_DIR/curl" >&2
+    rm -rf -- "$staging"
+    mkdir -p "$staging"
+    /usr/bin/tar -xzf "$ASSET" -C "$staging"
+    local extracted="$staging/cua-driver-rs-${CUA_VERSION}-darwin-universal"
+    local extracted_app="$extracted/CuaDriver.app"
+    local extracted_bin="$extracted_app/Contents/MacOS/cua-driver"
+    if ! has_required_surface "$extracted_bin" "$extracted_app"; then
+      echo "Refusing the Cua Driver release: signer identity or required surface mismatch." >&2
       exit 1
-    }
-    # The verified upstream installer normally downloads its release archive
-    # itself without checking a digest. Route that one exact URL to our already
-    # verified local copy while leaving all other curl behavior unchanged.
-    PINNED_CUA_ASSET_URL="$ASSET_URL" \
-    PINNED_CUA_ASSET_PATH="$ASSET" \
-    PATH="$CURL_SHIM_DIR:$PATH" \
-    CUA_DRIVER_RS_VERSION="$CUA_VERSION" \
-    CUA_DRIVER_RS_INSTALL_DIR="$BIN_DIR" \
-    CUA_DRIVER_RS_NO_MODIFY_PATH=1 \
-      /bin/bash "$INSTALLER" --bin-dir "$BIN_DIR" --no-modify-path >&2
+    fi
+    rm -rf -- "$APP_ROOT"
+    mv "$extracted" "$APP_ROOT"
   fi
 
-  release_runtime_lock "$LOCK_DIR"
+  cleanup_driver_install
   trap - EXIT
 }
 
@@ -134,9 +139,21 @@ if [[ -z "$BIN" ]]; then
   exit 1
 fi
 
-# Persist the opt-out as well as setting it in this process, so a LaunchServices
-# daemon cannot re-enable content-free upstream telemetry.
-"$BIN" telemetry disable >/dev/null 2>&1 || true
+# Persist and prove the opt-out as well as setting it in this process, so a
+# LaunchServices daemon cannot re-enable content-free upstream telemetry.
+if ! "$BIN" telemetry disable >/dev/null 2>&1; then
+  echo "Cua Driver could not persist its telemetry opt-out; refusing the primary backend." >&2
+  exit 1
+fi
+telemetry_status="$(/usr/bin/env -u CUA_DRIVER_RS_TELEMETRY_ENABLED -u CUA_TELEMETRY_ENABLED "$BIN" telemetry status --json 2>/dev/null || true)"
+grep -Eq '"enabled"[[:space:]]*:[[:space:]]*false' <<< "$telemetry_status" || {
+  echo "Cua Driver telemetry did not remain disabled without the environment override." >&2
+  exit 1
+}
+grep -Eq '"source"[[:space:]]*:[[:space:]]*"persisted"' <<< "$telemetry_status" || {
+  echo "Cua Driver did not report the persisted telemetry preference." >&2
+  exit 1
+}
 
 if [[ "${1:-}" == "--prepare-only" ]]; then
   echo "$BIN"
@@ -162,12 +179,29 @@ daemon_is_verified() {
   driver_reports_unrestricted "$BIN" "$SOCKET"
 }
 
-acquire_runtime_lock "$START_LOCK" "Cua Driver startup" 60 5
+stop_plugin_daemon_bounded() {
+  local stop_pid attempt=0
+  "$BIN" stop --socket "$SOCKET" >/dev/null 2>&1 &
+  stop_pid=$!
+  while kill -0 "$stop_pid" 2>/dev/null && [[ "$attempt" -lt 20 ]]; do
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  if kill -0 "$stop_pid" 2>/dev/null; then
+    kill "$stop_pid" 2>/dev/null || true
+    sleep 0.1
+    kill -9 "$stop_pid" 2>/dev/null || true
+  fi
+  wait "$stop_pid" 2>/dev/null || true
+  rm -f -- "$SOCKET"
+}
+
+acquire_runtime_lock "$START_LOCK" "Cua Driver startup" 60 30
 trap 'release_runtime_lock "$START_LOCK"' EXIT
 
 if ! daemon_is_verified; then
   if "$BIN" status --socket "$SOCKET" >/dev/null 2>&1; then
-    "$BIN" stop --socket "$SOCKET" >/dev/null 2>&1 || true
+    stop_plugin_daemon_bounded
   fi
   rm -f -- "$SOCKET"
   # This is a plugin-owned full-access daemon. Do not silently inherit a Cua
@@ -211,6 +245,7 @@ if ! daemon_is_verified; then
       echo "Cua Driver did not become ready within 30 seconds." >&2
       echo "Grant Accessibility and Screen Recording to CuaDriver.app, then restart ZCode." >&2
     fi
+    stop_plugin_daemon_bounded
     exit 1
   fi
 fi

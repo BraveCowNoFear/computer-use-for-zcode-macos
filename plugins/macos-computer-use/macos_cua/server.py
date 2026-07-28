@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import sys
 import traceback
 from typing import Any, TextIO
@@ -14,6 +15,49 @@ from .contracts import TOOL_DEFINITIONS, TOOL_NAMES, ToolError
 
 
 SUPPORTED_PROTOCOLS = {"2024-11-05", "2025-03-26", "2025-06-18"}
+TOOL_SCHEMAS = {tool["name"]: tool["inputSchema"] for tool in TOOL_DEFINITIONS}
+
+
+def _matches_type(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return True
+
+
+def _validate_schema(value: Any, schema: dict[str, Any], path: str = "arguments") -> None:
+    expected = schema.get("type")
+    if isinstance(expected, str) and not _matches_type(value, expected):
+        raise ToolError(f"{path} must be {expected}")
+    if expected == "number" and not math.isfinite(float(value)):
+        raise ToolError(f"{path} must be finite")
+    if expected == "object":
+        assert isinstance(value, dict)
+        properties = schema.get("properties", {})
+        for required in schema.get("required", []):
+            if required not in value:
+                raise ToolError(f"{path}.{required} is required")
+        if schema.get("additionalProperties") is False:
+            extras = sorted(set(value) - set(properties))
+            if extras:
+                raise ToolError(f"{path} contains unsupported fields: {extras}")
+        for key, item in value.items():
+            child = properties.get(key)
+            if isinstance(child, dict):
+                _validate_schema(item, child, f"{path}.{key}")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ToolError(f"{path} must be one of {schema['enum']}")
+    if "minimum" in schema and value < schema["minimum"]:
+        raise ToolError(f"{path} must be at least {schema['minimum']}")
+    if "maximum" in schema and value > schema["maximum"]:
+        raise ToolError(f"{path} must be at most {schema['maximum']}")
 
 
 def _backend_factory() -> Any:
@@ -91,6 +135,7 @@ class MCPServer:
         if not isinstance(arguments, dict):
             return self._error(request_id, -32602, "Tool arguments must be an object")
         try:
+            _validate_schema(arguments, TOOL_SCHEMAS[str(name)])
             raw = self.backend.call(str(name), arguments)
             image_blocks: list[dict[str, str]] = []
             public = _public_payload(copy.deepcopy(raw), image_blocks)
@@ -157,7 +202,9 @@ def self_test() -> int:
         "health": health,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if report["toolCount"] >= 13 else 1
+    structured_health = health["result"].get("structuredContent", {}) if health else {}
+    native_ready = sys.platform != "darwin" or structured_health.get("nativeDependencies") is True
+    return 0 if report["toolCount"] >= 13 and native_ready else 1
 
 
 def main(argv: list[str] | None = None) -> int:

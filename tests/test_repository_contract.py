@@ -49,8 +49,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("runtime-version", launcher)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("Verify automatic fallback first run", workflow)
-        self.assertIn('MACOS_CUA_DATA_DIR="$data" bash plugins/macos-computer-use/scripts/run-mcp.sh', workflow)
+        self.assertIn('MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-mcp.sh', workflow)
         self.assertIn('test -x "$data/venv-$version/bin/python3"', workflow)
+        self.assertIn("native_runtime_ready", launcher)
 
     def test_fallback_dependencies_are_exact_binary_wheels(self):
         requirement_text = (PLUGIN / "requirements.txt").read_text(encoding="utf-8")
@@ -68,11 +69,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(requirement_text.count('==12.2.1; sys_platform == "darwin"'), 5)
         self.assertEqual(requirement_text.count("--hash=sha256:"), 45)
         self.assertNotIn(">=", requirement_text)
-        for script in ("install.sh", "run-mcp.sh"):
-            source = (PLUGIN / "scripts" / script).read_text(encoding="utf-8")
-            self.assertIn("--only-binary=:all:", source)
-            self.assertIn("--no-deps", source)
-            self.assertIn("--require-hashes", source)
+        source = (PLUGIN / "scripts" / "run-mcp.sh").read_text(encoding="utf-8")
+        self.assertIn("--only-binary=:all:", source)
+        self.assertIn("--no-deps", source)
+        self.assertIn("--require-hashes", source)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("--only-binary=:all:", workflow)
         self.assertIn("--no-deps", workflow)
@@ -100,23 +100,31 @@ class RepositoryContractTests(unittest.TestCase):
         )
         for server in config["mcpServers"].values():
             self.assertEqual(server["type"], "stdio")
-            self.assertEqual(server["command"], "bash")
+            self.assertEqual(server["command"], "/bin/bash")
             self.assertNotIn("url", server)
 
     def test_primary_launcher_is_pinned_and_unrestricted(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(encoding="utf-8")
         self.assertIn('CUA_VERSION="0.12.6"', launcher)
-        self.assertRegex(launcher, r'INSTALLER_SHA256="[0-9a-f]{64}"')
-        self.assertRegex(launcher, r'INSTALLER_COMMON_SHA256="[0-9a-f]{64}"')
         self.assertRegex(launcher, r'ASSET_SHA256="[0-9a-f]{64}"')
         self.assertIn('ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"', launcher)
-        self.assertIn('PATH="$CURL_SHIM_DIR:$PATH"', launcher)
         self.assertIn('verify_sha256 "$ASSET" "$ASSET_SHA256"', launcher)
+        self.assertIn('APP_ROOT="$APP_PARENT/v${CUA_VERSION}"', launcher)
+        self.assertNotIn('/Applications/CuaDriver.app', launcher)
+        self.assertIn('mv "$extracted" "$APP_ROOT"', launcher)
+        self.assertIn('local download="$ASSET.download.$$"', launcher)
+        self.assertIn('mv "$download" "$ASSET"', launcher)
         self.assertIn("codesign --verify --deep --strict", launcher)
         self.assertIn("spctl --assess --type execute", launcher)
+        self.assertIn('EXPECTED_TEAM_ID="YCK386LBJ7"', launcher)
+        self.assertIn('EXPECTED_AUTHORITY="Developer ID Application: Cua AI, Inc. (YCK386LBJ7)"', launcher)
+        self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
+        self.assertIn("CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
+        self.assertIn('"source"[[:space:]]*:[[:space:]]*"persisted"', launcher)
+        self.assertNotIn("telemetry disable >/dev/null 2>&1 || true", launcher)
         self.assertNotIn("--no-permissions-gate", launcher)
         self.assertIn('SOCKET_DIR="/tmp/zcode-cua-${UID}"', launcher)
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
@@ -142,6 +150,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("managed policy: configured=false, active=false, valid=true", workflow)
         self.assertIn("session policy: configured=false, approved_at_startup=false, valid=true", workflow)
 
+    def test_manual_install_and_doctor_reuse_the_automatic_fallback_runtime(self):
+        install = (PLUGIN / "scripts" / "install.sh").read_text(encoding="utf-8")
+        doctor = (PLUGIN / "scripts" / "doctor.sh").read_text(encoding="utf-8")
+        for source in (install, doctor):
+            self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', source)
+        self.assertNotIn('python3 -m venv "$ROOT/.venv"', install)
+
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
     def test_runtime_lock_recovers_a_dead_owner(self):
         common = PLUGIN / "scripts" / "runtime-common.sh"
@@ -155,6 +170,31 @@ class RepositoryContractTests(unittest.TestCase):
                 f'test "$(cat "{lock}/pid")" = "$$"\n'
                 f'release_runtime_lock "{lock}"\n'
                 f'test ! -e "{lock}"\n'
+            )
+            completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
+    def test_runtime_lock_rejects_an_incomplete_fresh_owner_and_recovers_pid_reuse(self):
+        common = PLUGIN / "scripts" / "runtime-common.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = Path(directory) / "fresh.lock"
+            reused = Path(directory) / "reused.lock"
+            script = (
+                f'source "{common}"\n'
+                f'mkdir "{fresh}"\n'
+                f'! acquire_runtime_lock "{fresh}" "fresh incomplete test" 0 30\n'
+                f'test -d "{fresh}"\n'
+                f'rmdir "{fresh}"\n'
+                f'mkdir "{reused}"\n'
+                f'printf "%s\\n" "$$" > "{reused}/pid"\n'
+                f'printf "%s\\n" "impossible-old-start" > "{reused}/started"\n'
+                f'printf "%s\\n" "old-token" > "{reused}/token"\n'
+                f'acquire_runtime_lock "{reused}" "pid reuse test" 2 0\n'
+                f'test "$(cat "{reused}/pid")" = "$$"\n'
+                f'test "$(cat "{reused}/token")" = "$RUNTIME_LOCK_TOKEN"\n'
+                f'release_runtime_lock "{reused}"\n'
+                f'test ! -e "{reused}"\n'
             )
             completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
             self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -180,36 +220,6 @@ class RepositoryContractTests(unittest.TestCase):
         )
         completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
         self.assertEqual(completed.returncode, 0, completed.stderr)
-
-    def test_pinned_curl_only_intercepts_the_exact_release_asset(self):
-        shim = (PLUGIN / "scripts" / "pinned-curl" / "curl").read_text(encoding="utf-8")
-        self.assertIn('requested_url" == "$asset_url', shim)
-        self.assertIn('exec "$REAL_CURL" "$@"', shim)
-        self.assertNotIn("eval", shim)
-
-    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
-    def test_pinned_curl_serves_the_verified_local_archive(self):
-        shim = PLUGIN / "scripts" / "pinned-curl" / "curl"
-        with tempfile.TemporaryDirectory() as directory:
-            asset = Path(directory) / "asset.tar.gz"
-            output = Path(directory) / "output.tar.gz"
-            asset.write_bytes(b"verified-release-bytes")
-            environment = os.environ.copy()
-            environment.update(
-                {
-                    "PINNED_CUA_ASSET_URL": "https://example.invalid/pinned.tar.gz",
-                    "PINNED_CUA_ASSET_PATH": str(asset),
-                }
-            )
-            completed = subprocess.run(
-                ["bash", str(shim), "-fsSL", "-o", str(output), environment["PINNED_CUA_ASSET_URL"]],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                env=environment,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertEqual(output.read_bytes(), asset.read_bytes())
 
     def test_skill_routes_primary_then_direct_fallback(self):
         skill = (PLUGIN / "skills" / "macos-computer-use" / "SKILL.md").read_text(encoding="utf-8")
@@ -260,8 +270,16 @@ class RepositoryContractTests(unittest.TestCase):
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
             '"fallback_visible_result_verified"',
+            '"fallback_window_activated"',
         ):
             self.assertIn(marker, smoke)
+
+    def test_github_actions_are_commit_pinned(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        uses = re.findall(r"uses:\s*([^\s#]+)", workflow)
+        self.assertTrue(uses)
+        for action in uses:
+            self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "window": WINDOW_SCHEMA,
                 "include_screenshot": {"type": "boolean", "default": True},
-                "include_text": {"type": "boolean", "default": True},
+                "include_text": {"type": "boolean", "default": False},
             },
             ["window"],
         ),

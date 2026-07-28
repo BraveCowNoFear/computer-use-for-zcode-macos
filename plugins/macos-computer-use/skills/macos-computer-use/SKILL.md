@@ -129,14 +129,19 @@ sessionless but keeps screenshot/AX handles in its MCP process; it has no
 failure, discard every handle and begin from `list_windows`. Do not mix a primary
 pid/window, screenshot ID, or element index with fallback tools.
 
+Because fallback input is foreground delivery, call `activate_window` before
+its first input (or after a Space/focus change), then capture a new
+`get_window_state` and ground the action in that post-activation state. Do not
+drive a focus-changing activation from the older background screenshot.
+
 Fallback `launch_app` returns the matched running pid and its current windows;
 select it directly only when exactly one task-matching window remains, and
 preserve the whole
 window object, including `pid`, so a recycled macOS window number cannot rebind
 to a restarted process. Its
-`get_window_state` returns both the screenshot and indexed AX tree by default,
-but explicitly disable the unneeded channel using the same signal-routing rule
-as the primary path. When Accessibility is granted but
+`get_window_state` defaults to a screenshot without AX text, matching the Codex
+core. Explicitly select only the needed channel using the same signal-routing
+rule as the primary path. When Accessibility is granted but
 Screen Recording is not, `computer_use_health.axControlReady` remains true and
 `get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
 coordinate and desktop routes remain unavailable until Screen Recording is

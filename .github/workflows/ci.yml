@@ -13,8 +13,8 @@ jobs:
         python: ["3.12"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python }}
       - name: Install native dependencies
@@ -34,21 +34,17 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           data="$RUNNER_TEMP/zcode-fallback-first-run"
-          MACOS_CUA_DATA_DIR="$data" bash plugins/macos-computer-use/scripts/run-mcp.sh </dev/null
+          MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-mcp.sh </dev/null
           version="$(PYTHONPATH=plugins/macos-computer-use python -c 'from macos_cua import __version__; print(__version__)')"
           test -x "$data/venv-$version/bin/python3"
           shopt -s nullglob
           staging=("$data"/.venv-*.install.*)
           test "${#staging[@]}" -eq 0
-      - name: Verify pinned Cua Driver installer
+      - name: Verify and launch the pinned Cua Driver release
         if: runner.os == 'macOS'
         run: |
-          curl -fsSL https://raw.githubusercontent.com/trycua/cua/cua-driver-rs-v0.12.6/libs/cua-driver/scripts/_install-rust.sh -o /tmp/cua-driver-installer.sh
-          curl -fsSL https://raw.githubusercontent.com/trycua/cua/cua-driver-rs-v0.12.6/libs/cua-driver/scripts/_install-common.sh -o /tmp/cua-driver-installer-common.sh
           curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/checksums.txt -o /tmp/cua-driver-checksums.txt
           curl -fsSL https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.6/cua-driver-rs-0.12.6-darwin-universal.tar.gz -o /tmp/cua-driver-release.tar.gz
-          echo "351878e9d7ac1b915b77572ba906102be10a6d93293073ad3e98544817984069  /tmp/cua-driver-installer.sh" | shasum -a 256 -c -
-          echo "5bc3aa010eb8667a099b582a9ada9a8f93001745b842cc7cf3cc6c472520cf29  /tmp/cua-driver-installer-common.sh" | shasum -a 256 -c -
           echo "21486096e0c5901cafcaaf652144308abb3f088a2d9785941585a002c571233f  /tmp/cua-driver-checksums.txt" | shasum -a 256 -c -
           echo "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  /tmp/cua-driver-release.tar.gz" | shasum -a 256 -c -
           grep -F "c86d6a9ccb074e6e3bc17292adc31b9c76933c646cb2b52a7d8813429a5a6e6f  cua-driver-rs-0.12.6-darwin-universal.tar.gz" /tmp/cua-driver-checksums.txt
@@ -58,21 +54,36 @@ jobs:
           binary="$app/Contents/MacOS/cua-driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.12.6"
-          codesign -dv --verbose=4 "$app" 2>&1
+          signing_info="$(codesign -dv --verbose=4 "$app" 2>&1)"
+          grep -Fx "TeamIdentifier=YCK386LBJ7" <<<"$signing_info"
+          grep -Fx "Authority=Developer ID Application: Cua AI, Inc. (YCK386LBJ7)" <<<"$signing_info"
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
           "$binary" --version | grep -F "0.12.6"
+          data="$RUNNER_TEMP/zcode-primary-first-run"
+          mkdir -p "$data/installers"
+          cp /tmp/cua-driver-release.tar.gz "$data/installers/cua-driver-rs-0.12.6-darwin-universal.tar.gz"
+          MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/run-cua-driver.sh --prepare-only
+          product_app="$data/cua-driver-app/v0.12.6/CuaDriver.app"
+          product_binary="$product_app/Contents/MacOS/cua-driver"
+          test -x "$product_binary"
+          test "$product_app" != "/Applications/CuaDriver.app"
+          product_signing_info="$(codesign -dv --verbose=4 "$product_app" 2>&1)"
+          grep -Fx "TeamIdentifier=YCK386LBJ7" <<<"$product_signing_info"
+          telemetry_status="$(env -u CUA_DRIVER_RS_TELEMETRY_ENABLED -u CUA_TELEMETRY_ENABLED "$product_binary" telemetry status --json)"
+          grep -Eq '"enabled"[[:space:]]*:[[:space:]]*false' <<<"$telemetry_status"
+          grep -Eq '"source"[[:space:]]*:[[:space:]]*"persisted"' <<<"$telemetry_status"
           socket="$RUNNER_TEMP/cua-policy-proof.sock"
-          "$binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
+          CUA_DRIVER_RS_TELEMETRY_ENABLED=false CUA_DRIVER_RS_UPDATE_CHECK=false "$product_binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
           daemon_pid=$!
           cleanup_policy_proof() {
-            "$binary" stop --socket "$socket" >/dev/null 2>&1 || true
+            "$product_binary" stop --socket "$socket" >/dev/null 2>&1 || true
             wait "$daemon_pid" 2>/dev/null || true
           }
           trap cleanup_policy_proof EXIT
           ready=0
           for attempt in {1..100}; do
-            if status="$("$binary" status --socket "$socket" 2>/dev/null)"; then
+            if status="$("$product_binary" status --socket "$socket" 2>/dev/null)"; then
               ready=1
               break
             fi
@@ -85,3 +96,23 @@ jobs:
           grep -F "session policy: configured=false, approved_at_startup=false, valid=true" <<<"$status"
           cleanup_policy_proof
           trap - EXIT
+
+  fallback-python-compat:
+    name: fallback CPython ${{ matrix.python }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15", "3.13t", "3.14t", "3.15t"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+      - name: Install exact native wheel closure
+        run: 'python -m pip install --require-hashes --no-deps --only-binary=:all: -r plugins/macos-computer-use/requirements.txt'
+      - name: Import native frameworks and self-test MCP
+        run: |
+          python -c 'import AppKit, ApplicationServices, Quartz'
+          PYTHONPATH=plugins/macos-computer-use python -m macos_cua.server --self-test

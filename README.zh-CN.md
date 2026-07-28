@@ -43,9 +43,9 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 6. macOS 询问时给 `CuaDriver.app` 授予“辅助功能”和“屏幕录制”，然后重启
    ZCode。若启用原生兜底，系统也可能要求给对应的 Python/ZCode 进程授权。
 
-第一次启动时，主启动器会下载固定版本的 Cua Driver 安装器、辅助脚本和通用
-发布归档，逐一校验 SHA-256，安装签名的 `/Applications/CuaDriver.app`，再验证
-代码签名和 Gatekeeper 评估，关闭其遥测，然后以
+第一次启动时，主启动器只下载固定版本的 Cua Driver 通用发布归档，校验
+SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI Team ID 和
+签名 Authority。它会证明持久遥测设置已关闭，同时关闭独立更新检查，再以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
 专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
@@ -55,8 +55,8 @@ Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视�
 CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip 强制使用 hash 模式。
 首次启动会先在临时环境内完成安装与自检，再原子发布到按 Plugin 版本隔离的运行时目录。
 
-如果当前用户不能写入 `/Applications`，主后端会给出明确诊断，原生兜底仍
-可使用。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖辅助功能树的任务可显式关闭截图，在未授予
+Plugin 不会覆盖全局 `/Applications/CuaDriver.app`，也不会停止用户无关的
+Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖辅助功能树的任务可显式关闭截图，在未授予
 “屏幕录制”时继续；像素和全桌面路径仍需要该授权。
 
 ## 能做什么
@@ -64,7 +64,7 @@ CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip �
 - 发现、启动原生 App，直接取得匹配的 pid/窗口集合，并精确选择工具真实返回的窗口。
 - 兜底观察同时绑定 App、pid、CGWindowID，并在可用时用 AXWindowNumber
   精确关联辅助功能窗口；遇到等价候选会拒绝猜测。
-- 两个后端都默认同时获取窗口截图和带索引的辅助功能树。
+- 兜底端与 Codex 核心一致，默认只取截图；需要索引时显式请求辅助功能树，也可按需同时获取两者。
 - 按 AX 元素或窗口内像素点击、双击、右击、拖拽和滚动。
 - 输入 Unicode、使用 Mac 快捷键、直接设置辅助功能控件值。
 - 默认在后台完成工作；只有刷新后确认动作未送达才临时切前台。
@@ -86,7 +86,8 @@ CPython 3.10–3.15 的所有发布 wheel 均按 SHA-256 白名单校验，pip �
 ## 完全访问与隐私
 
 - 截图、AX 树、剪贴板内容和输入参数留在本机。
-- 主后端启动前会用环境变量和持久设置双重关闭 Cua Driver 遥测。
+- 主后端启动前会用环境变量和持久设置读回双重关闭 Cua Driver 遥测，并关闭
+  与遥测独立的版本更新检查。
 - Plugin 只在首次下载依赖时联网；被控制的浏览器/App 仍可能自行联网。
 - 单纯控制 GUI 不需要“完全磁盘访问”；只有实际文件任务需要时才另外授予
   ZCode。
@@ -102,7 +103,7 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
 
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
-兜底，并检查固定版本的安装器、辅助脚本和发布归档校验契约。真实的后台
+兜底，并检查固定发布归档、Cua AI 签名身份和真实 Plugin 自有首次安装。真实的后台
 “截图 → 点击/输入 → 再截图”
 闭环必须在已解锁且授予 TCC 的交互式 Mac 上测试，托管 CI 无法伪造这一点。
 

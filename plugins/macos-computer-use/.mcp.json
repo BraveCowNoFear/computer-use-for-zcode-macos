@@ -2,21 +2,22 @@
   "mcpServers": {
     "macos-computer-use": {
       "type": "stdio",
-      "command": "bash",
+      "command": "/bin/bash",
       "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/run-cua-driver.sh"],
       "cwd": "${CLAUDE_PLUGIN_ROOT}",
       "env": {
         "MACOS_CUA_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}",
         "MACOS_CUA_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
         "CUA_DRIVER_RS_TELEMETRY_ENABLED": "0",
-        "CUA_TELEMETRY_ENABLED": "0"
+        "CUA_TELEMETRY_ENABLED": "0",
+        "CUA_DRIVER_RS_UPDATE_CHECK": "false"
       },
       "enabled": true,
       "timeoutMs": 300000
     },
     "macos-computer-use-fallback": {
       "type": "stdio",
-      "command": "bash",
+      "command": "/bin/bash",
       "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/run-mcp.sh"],
       "cwd": "${CLAUDE_PLUGIN_ROOT}",
       "env": {

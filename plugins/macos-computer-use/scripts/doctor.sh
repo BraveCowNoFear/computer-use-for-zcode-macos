@@ -12,14 +12,6 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 echo "Direct native fallback:"
-PYTHON="$ROOT/.venv/bin/python3"
-if [[ ! -x "$PYTHON" ]]; then
-  PYTHON="$(command -v python3 || true)"
-fi
-if [[ -z "$PYTHON" ]]; then
-  echo "python3 is not installed." >&2
-  exit 1
-fi
-require_supported_python "$PYTHON"
-export PYTHONPATH="$ROOT"
-exec "$PYTHON" -m macos_cua.server --self-test
+MACOS_CUA_PLUGIN_ROOT="$ROOT" \
+MACOS_CUA_DATA_DIR="${MACOS_CUA_DATA_DIR:-$ROOT/.local-data}" \
+  exec "$ROOT/scripts/run-mcp.sh" --self-test

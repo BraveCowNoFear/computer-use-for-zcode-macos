@@ -71,7 +71,7 @@ core is:
 | `get_window` | `id`, optional `app`/`pid` | Rehydrate a returned window; carry `pid` for exact process binding. |
 | `list_apps` | none | Return installed/running apps and windows. |
 | `launch_app` | `app` | Launch and return matched pid plus current windows. |
-| `get_window_state` | `window` | Return screenshot and AX by default; either can be disabled explicitly. |
+| `get_window_state` | `window` | Return a screenshot by default; request AX text explicitly when needed. |
 | `click` | `window`, element index or `x`/`y` | Click by AX or pixels. |
 | `press_key` | `window`, `key` | Press a key or `+`-separated chord. |
 | `type_text` | `window`, `text` | Send literal Unicode. |
@@ -153,11 +153,12 @@ action, including keyboard/text actions.
 
 ## Installation and permissions
 
-The primary first-run launcher downloads the versioned upstream installer,
-verifies its pinned SHA-256, installs signed `/Applications/CuaDriver.app`, and
-disables upstream telemetry. It may need the current macOS user to have write
-access to `/Applications`. The fallback requires CPython 3.10 through 3.15, creates
-a private Python environment, and installs the exact tested PyObjC 12.2.1
+The primary first-run launcher downloads the pinned upstream release archive,
+verifies its SHA-256, atomically publishes `CuaDriver.app` inside the plugin data
+directory, and accepts only the tested Cua AI Team ID/signing authority. It
+proves persisted telemetry is disabled, turns off the separate update check,
+and never overwrites a global `/Applications` app. The fallback requires CPython
+3.10 through 3.15, creates a private Python environment, and installs the exact tested PyObjC 12.2.1
 five-package binary-wheel closure with dependency resolution disabled.
 Every supported wheel variant is pinned by its PyPI SHA-256 and installation
 uses hash-required mode.
@@ -167,7 +168,7 @@ interrupted install is never reused as healthy.
 
 Required macOS grants:
 
-1. Privacy & Security → Accessibility for `CuaDriver.app` (and Python/ZCode if
+1. Privacy & Security → Accessibility for the plugin-owned `CuaDriver.app` (and Python/ZCode if
    the direct fallback is used).
 2. Privacy & Security → Screen Recording for the same responsible app.
 

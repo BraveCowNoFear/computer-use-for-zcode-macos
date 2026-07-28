@@ -8,9 +8,10 @@
 - License: MIT
 
 This repository does not vendor the Cua Driver binary or source. The plugin's
-macOS launcher downloads the versioned upstream installer, verifies the pinned
-installer SHA-256, and installs the upstream signed app. Cua Driver remains
-subject to its upstream license and notices.
+macOS launcher downloads the versioned universal release archive, verifies its
+pinned SHA-256 and Cua AI signing identity, and publishes the upstream signed
+app inside the plugin's data directory. Cua Driver remains subject to its
+upstream license and notices.
 
 ## Hermes Agent macOS Computer Use Skill
 

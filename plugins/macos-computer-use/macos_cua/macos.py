@@ -57,6 +57,12 @@ MODIFIER_ALIASES: dict[str, str] = {
     "alt": "option", "option": "option", "alt_l": "option", "alt_r": "option",
 }
 
+SHIFTED_KEY_ALIASES: dict[str, str] = {
+    "greater": ".",
+    "less": ",",
+    "question": "/",
+}
+
 
 def normalize_key_name(value: str) -> str:
     stripped = value.strip()
@@ -78,6 +84,10 @@ def parse_key_chord(value: str) -> tuple[int, set[str]]:
         modifier = MODIFIER_ALIASES.get(normalized_modifier)
         if modifier:
             modifiers.add(modifier)
+            continue
+        if normalized_modifier in SHIFTED_KEY_ALIASES:
+            modifiers.add("shift")
+            normal.append(SHIFTED_KEY_ALIASES[normalized_modifier])
             continue
         if len(raw) == 1 and raw.isalpha() and raw.isupper():
             uppercase_shift = True
@@ -333,11 +343,12 @@ class MacOSBackend:
         return self._get_window(arguments["id"], arguments.get("app"), arguments.get("pid"))
 
     def _installed_apps(self) -> list[dict[str, Any]]:
-        if self._installed_cache and time.monotonic() - self._installed_cache[0] < 60:
-            return [dict(item) for item in self._installed_cache[1]]
         A = self.AppKit
         apps: dict[str, dict[str, Any]] = {}
         workspace = A.NSWorkspace.sharedWorkspace()
+        # Running state and PIDs are process-lifetime facts, so refresh them on
+        # every call. Only the comparatively expensive installed-app catalog is
+        # cached; otherwise a quit/relaunch can be reported stale for 60 seconds.
         for running in workspace.runningApplications():
             bundle_id = running.bundleIdentifier()
             pid = int(running.processIdentifier())
@@ -352,38 +363,51 @@ class MacOSBackend:
                 "pid": pid,
             }
 
-        roots = [Path("/Applications"), Path("/System/Applications"), Path.home() / "Applications"]
-        discovered = 0
-        for root in roots:
-            if not root.exists():
-                continue
-            for current, dirs, _files in os.walk(root):
-                app_dirs = [directory for directory in dirs if directory.lower().endswith(".app")]
-                dirs[:] = [directory for directory in dirs if not directory.lower().endswith(".app")]
-                for directory in app_dirs:
-                    path = Path(current) / directory
-                    bundle = A.NSBundle.bundleWithPath_(str(path))
-                    info = bundle.infoDictionary() if bundle is not None else None
-                    bundle_id = bundle.bundleIdentifier() if bundle is not None else None
-                    app_id = str(bundle_id or path)
-                    display = None
-                    if info:
-                        display = info.get("CFBundleDisplayName") or info.get("CFBundleName")
-                    entry = apps.setdefault(
-                        app_id,
-                        {"id": app_id, "displayName": str(display or path.stem), "path": str(path), "isRunning": False},
-                    )
-                    if not entry.get("path"):
-                        entry["path"] = str(path)
-                    discovered += 1
+        if self._installed_cache and time.monotonic() - self._installed_cache[0] < 60:
+            installed = [dict(item) for item in self._installed_cache[1]]
+        else:
+            catalog: dict[str, dict[str, Any]] = {}
+            roots = [Path("/Applications"), Path("/System/Applications"), Path.home() / "Applications"]
+            discovered = 0
+            for root in roots:
+                if not root.exists():
+                    continue
+                for current, dirs, _files in os.walk(root):
+                    app_dirs = [directory for directory in dirs if directory.lower().endswith(".app")]
+                    dirs[:] = [directory for directory in dirs if not directory.lower().endswith(".app")]
+                    for directory in app_dirs:
+                        path = Path(current) / directory
+                        bundle = A.NSBundle.bundleWithPath_(str(path))
+                        info = bundle.infoDictionary() if bundle is not None else None
+                        bundle_id = bundle.bundleIdentifier() if bundle is not None else None
+                        app_id = str(bundle_id or path)
+                        display = None
+                        if info:
+                            display = info.get("CFBundleDisplayName") or info.get("CFBundleName")
+                        catalog.setdefault(
+                            app_id,
+                            {
+                                "id": app_id,
+                                "displayName": str(display or path.stem),
+                                "path": str(path),
+                                "isRunning": False,
+                            },
+                        )
+                        discovered += 1
+                        if discovered >= 4000:
+                            break
                     if discovered >= 4000:
                         break
                 if discovered >= 4000:
                     break
-            if discovered >= 4000:
-                break
+            installed = list(catalog.values())
+            self._installed_cache = (time.monotonic(), [dict(item) for item in installed])
+
+        for installed_app in installed:
+            entry = apps.setdefault(str(installed_app["id"]), dict(installed_app))
+            if not entry.get("path"):
+                entry["path"] = installed_app.get("path")
         result = list(apps.values())
-        self._installed_cache = (time.monotonic(), [dict(item) for item in result])
         return result
 
     def tool_list_apps(self, arguments: dict[str, Any]) -> list[dict[str, Any]]:
@@ -573,7 +597,14 @@ class MacOSBackend:
         position_attr = self._ax_attr("kAXPositionAttribute", "AXPosition")
         size_attr = self._ax_attr("kAXSizeAttribute", "AXSize")
         title_matches = [item for item in windows if str(self._ax_copy(item, title_attr) or "") == window.get("title", "")]
-        candidates = title_matches or list(windows)
+        if len(title_matches) == 1:
+            candidates = title_matches
+        elif len(windows) == 1:
+            candidates = list(windows)
+        else:
+            raise ToolError(
+                "Accessibility does not expose AXWindowNumber and no unique title binds this window; use fresh pixels"
+            )
         target_bounds = window["bounds"]
         ranked: list[tuple[float, Any]] = []
         for item in candidates:
@@ -636,9 +667,12 @@ class MacOSBackend:
         elements: list[Any] = []
         lines: list[str] = []
         seen: set[int] = set()
+        truncated = False
 
         def walk(element: Any, depth: int) -> None:
+            nonlocal truncated
             if depth > 12 or len(elements) >= 350:
+                truncated = True
                 return
             identity = id(element)
             if identity in seen:
@@ -724,7 +758,7 @@ class MacOSBackend:
             "selected_elements": selected_elements,
             "document_text": document_text,
             "generation": generation,
-            "truncated": len(elements) >= 350,
+            "truncated": truncated,
         }
 
     def _capture_window(self, window: dict[str, Any]) -> dict[str, Any]:
@@ -788,7 +822,7 @@ class MacOSBackend:
         window = self._get_window(arguments["window"])
         self._invalidate_window_observations(window)
         include_screenshot = bool(arguments.get("include_screenshot", True))
-        include_text = bool(arguments.get("include_text", True))
+        include_text = bool(arguments.get("include_text", False))
         screenshots = [self._capture_window(window)] if include_screenshot else []
         accessibility = self._accessibility_state(window) if include_text else None
         return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
@@ -1105,6 +1139,36 @@ class MacOSBackend:
             Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventClickState, click_count)
         Q.CGEventPost(Q.kCGHIDEventTap, event)
 
+    def _click_pointer(
+        self,
+        button: Any,
+        down: Any,
+        up: Any,
+        dragged: Any,
+        x: float,
+        y: float,
+        count: int,
+    ) -> None:
+        for click_number in range(1, count + 1):
+            self._post_mouse(down, button, x, y, click_number)
+            self._held_buttons[button] = (up, dragged, x, y)
+            try:
+                self._post_mouse(up, button, x, y, click_number)
+            except Exception:
+                # Retry release once now; if it still fails, close() retains
+                # the registered button and releases it on MCP shutdown.
+                try:
+                    self._post_mouse(up, button, x, y, click_number)
+                except Exception:
+                    pass
+                else:
+                    self._held_buttons.pop(button, None)
+                raise
+            else:
+                self._held_buttons.pop(button, None)
+            if click_number < count:
+                time.sleep(0.08)
+
     def tool_click(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
         button_name = str(arguments.get("mouse_button", "left"))
@@ -1123,12 +1187,8 @@ class MacOSBackend:
             if arguments.get("x") is None or arguments.get("y") is None:
                 raise ToolError("click requires either element_index or both x and y")
             x, y = self._relative_point(window, arguments["x"], arguments["y"], arguments.get("screenshotId"))
-        button, down, up, _dragged = self._button(button_name)
-        for click_number in range(1, count + 1):
-            self._post_mouse(down, button, x, y, click_number)
-            self._post_mouse(up, button, x, y, click_number)
-            if click_number < count:
-                time.sleep(0.08)
+        button, down, up, dragged = self._button(button_name)
+        self._click_pointer(button, down, up, dragged, x, y, count)
         self._invalidate_window_observations(window)
         return {"ok": True, "method": "coordinate", "screenPoint": {"x": x, "y": y}, "click_count": count}
 
@@ -1212,9 +1272,8 @@ class MacOSBackend:
             self._invalidate_window_observations(window)
             return {"ok": True, "method": "accessibility", "element_index": int(arguments["element_index"])}
         x, y = self._element_center(element)
-        button, down, up, _dragged = self._button("left")
-        self._post_mouse(down, button, x, y)
-        self._post_mouse(up, button, x, y)
+        button, down, up, dragged = self._button("left")
+        self._click_pointer(button, down, up, dragged, x, y, 1)
         self.tool_press_key({"window": window, "key": "Command+a"})
         self.tool_type_text({"window": window, "text": value})
         self._invalidate_window_observations(window)
@@ -1234,6 +1293,7 @@ class MacOSBackend:
     ) -> None:
         button, down, up, dragged = self._button("left")
         self._post_mouse(down, button, *start)
+        self._held_buttons[button] = (up, dragged, start[0], start[1])
         steps = max(1, min(300, int(duration * 60)))
         delay = duration / steps if steps else 0
         last = start
@@ -1245,6 +1305,7 @@ class MacOSBackend:
                     start[1] + (end[1] - start[1]) * fraction,
                 )
                 self._post_mouse(dragged, button, *last)
+                self._held_buttons[button] = (up, dragged, last[0], last[1])
                 if delay:
                     time.sleep(delay)
         except BaseException:
@@ -1253,8 +1314,16 @@ class MacOSBackend:
                 self._post_mouse(up, button, *last)
             except Exception:
                 pass
+            else:
+                self._held_buttons.pop(button, None)
             raise
-        self._post_mouse(up, button, *end)
+        try:
+            self._post_mouse(up, button, *end)
+        except Exception:
+            # Retain the held state so close() can retry the release.
+            raise
+        else:
+            self._held_buttons.pop(button, None)
 
     def tool_perform_secondary_action(self, arguments: dict[str, Any]) -> dict[str, Any]:
         window = self._activate_current(arguments["window"])
@@ -1282,12 +1351,8 @@ class MacOSBackend:
         count = int(arguments.get("click_count", 1))
         if not 1 <= count <= 4:
             raise ToolError("click_count must be between 1 and 4")
-        button, down, up, _dragged = self._button(button_name)
-        for click_number in range(1, count + 1):
-            self._post_mouse(down, button, x, y, click_number)
-            self._post_mouse(up, button, x, y, click_number)
-            if click_number < count:
-                time.sleep(0.08)
+        button, down, up, dragged = self._button(button_name)
+        self._click_pointer(button, down, up, dragged, x, y, count)
         self._invalidate_all_observations()
         return {"ok": True, "screenPoint": {"x": x, "y": y}, "click_count": count}
 
@@ -1340,7 +1405,13 @@ class MacOSBackend:
         return float(point.x), float(point.y)
 
     def _optional_point(self, arguments: dict[str, Any]) -> tuple[float, float]:
-        if arguments.get("x") is None or arguments.get("y") is None:
+        has_x = arguments.get("x") is not None
+        has_y = arguments.get("y") is not None
+        if has_x != has_y:
+            raise ToolError("x and y must be supplied together")
+        if not has_x:
+            if arguments.get("window") is not None or arguments.get("screenshotId") is not None:
+                raise ToolError("window and screenshotId require both x and y")
             return self._cursor()
         if arguments.get("window") is not None:
             if not arguments.get("screenshotId"):

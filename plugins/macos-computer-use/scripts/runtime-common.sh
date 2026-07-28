@@ -33,11 +33,16 @@ runtime_lock_mtime() {
   fi
 }
 
+runtime_process_start() {
+  local pid="$1"
+  /bin/ps -o lstart= -p "$pid" 2>/dev/null | /usr/bin/awk '{$1=$1; print}'
+}
+
 acquire_runtime_lock() {
   local lock_dir="$1"
   local label="$2"
   local timeout_seconds="${3:-240}"
-  local orphan_grace_seconds="${4:-5}"
+  local orphan_grace_seconds="${4:-30}"
   local waited=0
 
   mkdir -p "$(dirname "$lock_dir")"
@@ -46,16 +51,25 @@ acquire_runtime_lock() {
     local now
     local modified
     local age
+    local recorded_start=""
+    local actual_start=""
     if [[ -f "$lock_dir/pid" ]]; then
       IFS= read -r owner < "$lock_dir/pid" || owner=""
+    fi
+    if [[ -f "$lock_dir/started" ]]; then
+      IFS= read -r recorded_start < "$lock_dir/started" || recorded_start=""
+    fi
+    if [[ "$owner" =~ ^[0-9]+$ ]]; then
+      actual_start="$(runtime_process_start "$owner")"
     fi
     now="$(date +%s)"
     modified="$(runtime_lock_mtime "$lock_dir")"
     age=$((now - modified))
 
-    if { [[ ! "$owner" =~ ^[0-9]+$ ]] || ! kill -0 "$owner" 2>/dev/null; } \
+    if { [[ ! "$owner" =~ ^[0-9]+$ ]] || ! kill -0 "$owner" 2>/dev/null \
+      || [[ -z "$recorded_start" ]] || [[ "$recorded_start" != "$actual_start" ]]; } \
       && [[ "$age" -ge "$orphan_grace_seconds" ]]; then
-      rm -f -- "$lock_dir/pid" "$lock_dir/created"
+      rm -f -- "$lock_dir/pid" "$lock_dir/started" "$lock_dir/token" "$lock_dir/created"
       if rmdir "$lock_dir" 2>/dev/null; then
         continue
       fi
@@ -69,18 +83,31 @@ acquire_runtime_lock() {
     waited=$((waited + 1))
   done
 
+  RUNTIME_LOCK_TOKEN="$$-$(date +%s)-${RANDOM:-0}"
+  export RUNTIME_LOCK_TOKEN
   printf '%s\n' "$$" > "$lock_dir/pid"
+  runtime_process_start "$$" > "$lock_dir/started"
+  printf '%s\n' "$RUNTIME_LOCK_TOKEN" > "$lock_dir/token"
   date +%s > "$lock_dir/created"
 }
 
 release_runtime_lock() {
   local lock_dir="$1"
   local owner=""
+  local recorded_start=""
+  local token=""
   if [[ -f "$lock_dir/pid" ]]; then
     IFS= read -r owner < "$lock_dir/pid" || owner=""
   fi
-  if [[ "$owner" == "$$" ]]; then
-    rm -f -- "$lock_dir/pid" "$lock_dir/created"
+  if [[ -f "$lock_dir/started" ]]; then
+    IFS= read -r recorded_start < "$lock_dir/started" || recorded_start=""
+  fi
+  if [[ -f "$lock_dir/token" ]]; then
+    IFS= read -r token < "$lock_dir/token" || token=""
+  fi
+  if [[ "$owner" == "$$" ]] && [[ "$recorded_start" == "$(runtime_process_start "$$")" ]] \
+    && [[ -n "${RUNTIME_LOCK_TOKEN:-}" ]] && [[ "$token" == "$RUNTIME_LOCK_TOKEN" ]]; then
+    rm -f -- "$lock_dir/pid" "$lock_dir/started" "$lock_dir/token" "$lock_dir/created"
     rmdir "$lock_dir" 2>/dev/null || true
   fi
 }

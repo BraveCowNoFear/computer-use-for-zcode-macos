@@ -50,10 +50,11 @@ tests live in this repository.
    then restart ZCode. If the direct fallback is used, macOS may also ask for
    the Python/ZCode responsible app.
 
-On first start, the primary launcher downloads the pinned Cua Driver installer,
-its helper, and the universal release archive; checks all three SHA-256 values;
-installs signed `/Applications/CuaDriver.app`; verifies its code signature and
-Gatekeeper assessment; disables its telemetry; and launches a plugin-owned daemon with
+On first start, the primary launcher downloads the pinned universal Cua Driver
+release archive, verifies its SHA-256, atomically publishes the signed app in
+the plugin data directory, and checks Gatekeeper plus the expected Cua AI Team
+ID and signing authority. It proves the persisted telemetry preference is off,
+disables the separate update check, and launches a plugin-owned daemon with
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted` with no user, managed, or session policy
@@ -66,10 +67,10 @@ pip runs in hash-required mode.
 First-run dependencies are built and self-tested in a staging environment,
 then atomically published to a plugin-versioned runtime directory.
 
-If `/Applications` is not writable, the background backend reports that exact
-diagnostic; the direct fallback remains available. macOS TCC cannot be bypassed
-by any plugin. Accessibility-only tasks can continue without Screen Recording
-by explicitly omitting screenshots; pixel and desktop routes still require it.
+The plugin never replaces a global `/Applications/CuaDriver.app` or stops the
+user's unrelated Cua daemons. macOS TCC cannot be bypassed by any plugin.
+Accessibility-only tasks can continue without Screen Recording by explicitly
+omitting screenshots; pixel and desktop routes still require it.
 
 ## What agents can do
 
@@ -104,8 +105,8 @@ apply no app/window target restriction.
 ## Access and privacy
 
 - Screenshots, AX trees, clipboard data, and input payloads stay on the Mac.
-- Upstream Cua Driver telemetry is disabled before runtime use and via its
-  persisted setting.
+- Upstream Cua Driver telemetry is disabled before runtime use and via a
+  fail-closed persisted-setting readback; its independent update check is off.
 - The one-time dependency download is the only plugin setup network request;
   browser apps may of course use their own network connection.
 - Full Disk Access is not needed for GUI control. Grant it to ZCode separately
@@ -122,8 +123,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 ```
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
-also imports the native fallback and verifies the pinned primary installer,
-helper, and release-archive checksum contract.
+also imports the native fallback, verifies the pinned release archive and Cua
+AI signer identity, and runs the real plugin-owned first-install launcher.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

@@ -70,7 +70,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.7.0"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.8.0"},
             },
         )
         self.notify("notifications/initialized")
@@ -262,6 +262,10 @@ def run_fallback() -> dict[str, Any]:
         window = matches[0]
         report["window"] = {key: window.get(key) for key in ("id", "app", "pid", "title")}
         report["steps"].append("fallback_window_bound")
+
+        activated, _ = client.call("activate_window", {"window": window})
+        window = activated["window"]
+        report["steps"].append("fallback_window_activated")
 
         state, content = client.call(
             "get_window_state",

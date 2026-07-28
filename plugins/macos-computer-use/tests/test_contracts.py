@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import sys
 import time
 import types
@@ -78,7 +79,7 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(tool["inputSchema"]["type"], "object", tool["name"])
             self.assertIn("description", tool)
 
-    def test_window_state_observes_pixels_and_accessibility_by_default(self):
+    def test_window_state_defaults_to_pixels_and_can_request_accessibility(self):
         backend = MacOSBackend()
         window = {
             "id": 7,
@@ -91,7 +92,12 @@ class ContractTests(unittest.TestCase):
         backend._accessibility_state = lambda value: {"tree": "[0] AXWindow"}
         state = backend.tool_get_window_state({"window": {"id": 7}})
         self.assertEqual(state["screenshots"], [{"id": "shot"}])
+        self.assertIsNone(state["accessibility"])
+        state = backend.tool_get_window_state({"window": {"id": 7}, "include_text": True})
+        self.assertEqual(state["screenshots"], [{"id": "shot"}])
         self.assertEqual(state["accessibility"], {"tree": "[0] AXWindow"})
+        definition = next(tool for tool in TOOL_DEFINITIONS if tool["name"] == "get_window_state")
+        self.assertFalse(definition["inputSchema"]["properties"]["include_text"]["default"])
 
     def test_health_keeps_ax_control_available_without_screen_recording(self):
         backend = MacOSBackend()
@@ -182,6 +188,47 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["windows"], [expected_window])
         self.assertEqual(result["bundleId"], "com.example.Editor")
 
+    def test_installed_app_cache_never_caches_running_state_or_pid(self):
+        class FakeRunningApp:
+            def bundleIdentifier(self):
+                return "com.example.Editor"
+
+            def processIdentifier(self):
+                return 55
+
+            def localizedName(self):
+                return "Editor"
+
+            def bundleURL(self):
+                return types.SimpleNamespace(path=lambda: "/Applications/Editor.app")
+
+        running = [FakeRunningApp()]
+        workspace = types.SimpleNamespace(runningApplications=lambda: list(running))
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSWorkspace=types.SimpleNamespace(sharedWorkspace=lambda: workspace),
+        )
+        backend._installed_cache = (
+            time.monotonic(),
+            [
+                {
+                    "id": "com.example.Editor",
+                    "displayName": "Editor",
+                    "path": "/Applications/Editor.app",
+                    "isRunning": False,
+                }
+            ],
+        )
+
+        first = backend._installed_apps()
+        self.assertTrue(first[0]["isRunning"])
+        self.assertEqual(first[0]["pid"], 55)
+
+        running.clear()
+        second = backend._installed_apps()
+        self.assertFalse(second[0]["isRunning"])
+        self.assertNotIn("pid", second[0])
+
     def test_initialize_and_list(self):
         server = MCPServer(FakeBackend())
         response = server.handle(
@@ -209,10 +256,36 @@ class ContractTests(unittest.TestCase):
     def test_tool_errors_do_not_kill_server(self):
         server = MCPServer(FakeBackend())
         response = server.handle(
-            {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "click", "arguments": {}}}
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"name": "click", "arguments": {"window": {"id": 1}}},
+            }
         )
         self.assertTrue(response["result"]["isError"])
         self.assertIn("fresh observation", response["result"]["content"][0]["text"])
+
+    def test_mcp_rejects_schema_violations_before_backend_dispatch(self):
+        backend = mock.Mock()
+        server = MCPServer(backend)
+        invalid_calls = [
+            ("get_window_state", {"window": {"id": 1}, "include_screenshot": "false"}),
+            ("permission_status", {"unexpected": True}),
+            ("click", {"window": {"id": 1}, "click_count": 0}),
+            ("drag", {"window": {"id": 1}, "from_x": math.nan, "from_y": 0, "to_x": 1, "to_y": 1}),
+        ]
+        for request_id, (name, arguments) in enumerate(invalid_calls, 10):
+            response = server.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": arguments},
+                }
+            )
+            self.assertTrue(response["result"]["isError"])
+        backend.call.assert_not_called()
 
     def test_line_protocol_end_to_end_in_memory(self):
         source = io.StringIO(
@@ -230,6 +303,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(key, 47)
         self.assertEqual(modifiers, {"command", "shift"})
         self.assertEqual(parse_key_chord("KP_0")[0], 82)
+        self.assertEqual(parse_key_chord("greater"), (47, {"shift"}))
+        self.assertEqual(parse_key_chord("less"), (43, {"shift"}))
+        self.assertEqual(parse_key_chord("question"), (44, {"shift"}))
 
     def test_retina_screenshot_pixels_map_to_logical_window_points(self):
         backend = MacOSBackend()
@@ -565,6 +641,29 @@ class ContractTests(unittest.TestCase):
         self.assertIsNone(state["focused_element"])
         self.assertEqual(len(backend._element_cache[("com.example.App", 80, 8)]["elements"]), 1)
 
+    def test_accessibility_depth_truncation_is_reported(self):
+        backend = MacOSBackend()
+        nodes = [object() for _ in range(15)]
+        app = object()
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda pid: app
+        )
+        backend._ax_window = lambda window: nodes[0]
+        backend._format_element = lambda element, index, depth: f"[{index}] item"
+        values = {(app, "AXFocusedUIElement"): None}
+        for index, node in enumerate(nodes):
+            values[(node, "AXChildren")] = [nodes[index + 1]] if index + 1 < len(nodes) else []
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+        state = backend._accessibility_state(
+            {
+                "id": 8,
+                "app": "com.example.App",
+                "pid": 80,
+                "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+            }
+        )
+        self.assertTrue(state["truncated"])
+
     def test_accessibility_window_rejects_an_equal_distance_tie(self):
         backend = MacOSBackend()
         first, second = object(), object()
@@ -589,7 +688,7 @@ class ContractTests(unittest.TestCase):
             "title": "Same",
             "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
         }
-        with self.assertRaisesRegex(ToolError, "binding is ambiguous"):
+        with self.assertRaisesRegex(ToolError, "Accessibility"):
             backend._ax_window(window)
 
     def test_failed_drag_releases_the_mouse_button(self):
@@ -607,6 +706,57 @@ class ContractTests(unittest.TestCase):
             backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
         self.assertEqual(events[0][0], "down")
         self.assertEqual(events[-1][0], "up")
+        self.assertFalse(backend._held_buttons)
+
+    def test_failed_drag_release_is_retained_for_shutdown_cleanup(self):
+        backend = MacOSBackend()
+        backend._button = lambda value: ("button", "down", "up", "dragged")
+        events = []
+        up_failures = 1
+
+        def post(event_type, button, x, y, click_count=1):
+            nonlocal up_failures
+            events.append(event_type)
+            if event_type == "dragged":
+                raise RuntimeError("injected drag failure")
+            if event_type == "up" and up_failures:
+                up_failures -= 1
+                raise RuntimeError("injected release failure")
+
+        backend._post_mouse = post
+        with self.assertRaisesRegex(RuntimeError, "injected drag failure"):
+            backend._drag_pointer((1.0, 2.0), (10.0, 20.0), 0.1)
+        self.assertIn("button", backend._held_buttons)
+        backend.close()
+        self.assertEqual(events, ["down", "dragged", "up", "up"])
+        self.assertFalse(backend._held_buttons)
+
+    def test_optional_pointer_coordinates_must_be_paired(self):
+        backend = MacOSBackend()
+        with self.assertRaisesRegex(ToolError, "supplied together"):
+            backend._optional_point({"x": 1})
+        with self.assertRaisesRegex(ToolError, "require both"):
+            backend._optional_point({"window": {"id": 1}})
+
+    def test_failed_click_release_is_retained_for_shutdown_cleanup(self):
+        backend = MacOSBackend()
+        events = []
+        up_failures = 2
+
+        def post(event_type, button, x, y, click_count=1):
+            nonlocal up_failures
+            events.append(event_type)
+            if event_type == "up" and up_failures:
+                up_failures -= 1
+                raise RuntimeError("injected release failure")
+
+        backend._post_mouse = post
+        with self.assertRaisesRegex(RuntimeError, "injected release failure"):
+            backend._click_pointer("button", "down", "up", "dragged", 1, 2, 1)
+        self.assertIn("button", backend._held_buttons)
+        backend.close()
+        self.assertEqual(events, ["down", "up", "up", "up"])
+        self.assertFalse(backend._held_buttons)
 
     def test_raw_held_button_moves_as_a_drag_and_releases_on_close(self):
         backend = MacOSBackend()
