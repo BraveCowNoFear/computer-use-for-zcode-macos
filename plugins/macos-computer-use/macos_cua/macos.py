@@ -314,7 +314,8 @@ class MacOSBackend:
         )
         permissions = self._permission_status() if native else {"accessibility": False, "screenRecording": False}
         ax_ready = bool(native and permissions["accessibility"])
-        pixel_ready = bool(ax_ready and permissions["screenRecording"])
+        pixel_ready = bool(native and permissions["screenRecording"])
+        full_ready = bool(ax_ready and pixel_ready)
         return {
             "ok": ax_ready,
             "platform": "darwin",
@@ -323,16 +324,22 @@ class MacOSBackend:
             "pyobjcVersions": self.native_versions,
             **permissions,
             "axControlReady": ax_ready,
+            "inputControlReady": ax_ready,
             "pixelObservationReady": pixel_ready,
             "desktopObservationReady": pixel_ready,
+            "fullComputerUseReady": full_ready,
             "localOnly": True,
             "extraConfirmationLayer": False,
             "message": (
                 "Ready for AX and pixel-based live macOS control."
-                if pixel_ready
+                if full_ready
                 else "Ready for AX-only control; grant Screen Recording only when screenshots or pixels are needed."
                 if ax_ready
-                else "Install dependencies and grant Accessibility, then restart ZCode."
+                else "Ready for screenshot-only observation; grant Accessibility for mouse and keyboard input."
+                if pixel_ready
+                else "Native runtime ready; grant Accessibility for input and Screen Recording for pixels."
+                if native
+                else "Install native dependencies, then grant the required macOS permissions."
             ),
         }
 

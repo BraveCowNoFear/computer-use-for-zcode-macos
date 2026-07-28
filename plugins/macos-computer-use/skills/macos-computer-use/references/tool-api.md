@@ -176,6 +176,10 @@ and every desktop-state route. Use
 `request_permissions({accessibility:true,screen_recording:false})` for AX alone,
 or `{accessibility:false,screen_recording:true}` for pixels alone. Then wait for
 the user to grant the Python/ZCode responsible app before restarting ZCode.
+The two readiness paths are independent: Screen Recording alone makes
+`pixelObservationReady`/`desktopObservationReady` true for screenshots, while
+`inputControlReady` stays false; `fullComputerUseReady` becomes true only when
+both permissions are active.
 
 Fallback `type_text` and `desktop_type_text` publish structured
 `code:"type_text_incomplete"`/`effect:"partial"` errors if a later Quartz chunk

@@ -221,6 +221,11 @@ Screen Recording is not, `computer_use_health.axControlReady` remains true and
 `get_window_state({include_screenshot:false,...})` can drive fresh AX indexes;
 coordinate and desktop routes remain unavailable until Screen Recording is
 granted.
+Conversely, Screen Recording alone reports `pixelObservationReady:true` and
+`desktopObservationReady:true` for screenshot-only inspection while
+`inputControlReady` and `fullComputerUseReady` remain false until Accessibility
+is granted. Use the granular fields instead of treating one TCC grant as the
+other.
 Fallback AX lines expose compact `traits=` values such as `selected`,
 `expanded`, `disabled`, `settable`, and the editable value type. Prefer an
 enabled, correctly expanded control and use its advertised `actions=` before

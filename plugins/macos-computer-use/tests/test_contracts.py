@@ -352,9 +352,27 @@ class ContractTests(unittest.TestCase):
         health = backend.tool_computer_use_health({})
         self.assertTrue(health["ok"])
         self.assertTrue(health["axControlReady"])
+        self.assertTrue(health["inputControlReady"])
         self.assertFalse(health["pixelObservationReady"])
         self.assertFalse(health["desktopObservationReady"])
+        self.assertFalse(health["fullComputerUseReady"])
         self.assertIn("AX-only", health["message"])
+
+    def test_health_reports_screen_recording_without_accessibility_independently(self):
+        backend = MacOSBackend()
+        backend.native_error = None
+        backend.AppKit = object()
+        backend.ApplicationServices = object()
+        backend.Quartz = object()
+        backend._permission_status = lambda: {"accessibility": False, "screenRecording": True}
+        health = backend.tool_computer_use_health({})
+        self.assertFalse(health["ok"])
+        self.assertFalse(health["axControlReady"])
+        self.assertFalse(health["inputControlReady"])
+        self.assertTrue(health["pixelObservationReady"])
+        self.assertTrue(health["desktopObservationReady"])
+        self.assertFalse(health["fullComputerUseReady"])
+        self.assertIn("screenshot-only", health["message"])
 
     def test_native_runtime_requires_the_exact_pyobjc_closure(self):
         versions = require_exact_pyobjc_versions(lambda distribution: "12.2.1")
