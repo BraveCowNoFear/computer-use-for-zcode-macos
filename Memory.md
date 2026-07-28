@@ -33,4 +33,6 @@ The core tool names mirror Codex Computer Use: `list_windows`, `get_window`, `li
 - 2026-07-28: official ZCode Skill, Plugin, marketplace, MCP, and Full Access documentation reviewed.
 - 2026-07-28: bundled Codex Computer Use `guidance.md`, `api.md`, and `confirmations.md` reviewed; tool contract frozen.
 - 2026-07-28: existing Hermes `macos-computer-use` Skill and Cua Driver 0.12.6 implementation reviewed; background control adopted as the primary architecture.
-- Implementation and CI verification are in progress.
+- 2026-07-28: independent first-use Agent forward test passed after clarifying desktop/window routing, permission order, shortcut shapes, and stateless fallback behavior.
+- 2026-07-28: local Skill/contract/MCP stdio tests and GitHub Actions on Windows plus macOS 14 passed, including native AppKit/ApplicationServices/Quartz imports and the pinned installer checksum.
+- Remaining hardware gate: run a live background screenshot/action/re-screenshot loop on an unlocked user Mac after granting CuaDriver.app Accessibility and Screen Recording. Hosted GitHub runners cannot receive interactive TCC grants.
