@@ -108,6 +108,9 @@ mixed Retina/non-Retina layouts do not share an incorrect global scale.
 Fallback screenshots are published only after complete capture/encoding inside
 a current-user-owned 0700 temporary directory. Timeouts and failed window or
 desktop captures delete any unpublished partial PNG immediately.
+Window screenshot plus AX text, and all screens in one desktop call, are each
+transactional observations: if any requested channel or display fails, every
+new cache handle and PNG from that failed call is removed.
 Fallback AX observations bound the normal tree and separately cap extra selected
 rows/cells/children at 64; `truncated:true` means re-observe a narrower state
 instead of assuming the omitted selection is actionable.

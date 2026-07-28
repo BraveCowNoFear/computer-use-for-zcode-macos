@@ -966,9 +966,15 @@ class MacOSBackend:
         self._invalidate_window_observations(window)
         include_screenshot = bool(arguments.get("include_screenshot", True))
         include_text = bool(arguments.get("include_text", False))
-        screenshots = [self._capture_window(window)] if include_screenshot else []
-        accessibility = self._accessibility_state(window) if include_text else None
-        return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
+        try:
+            screenshots = [self._capture_window(window)] if include_screenshot else []
+            accessibility = self._accessibility_state(window) if include_text else None
+            return {"window": window, "screenshots": screenshots, "accessibility": accessibility}
+        except Exception:
+            # Never retain a screenshot or AX generation that the caller did
+            # not receive as one complete observation.
+            self._invalidate_window_observations(window)
+            raise
 
     def _desktop_layout(self) -> list[dict[str, Any]]:
         screens = list(self.AppKit.NSScreen.screens() or [])
@@ -1088,13 +1094,19 @@ class MacOSBackend:
         if not status["screenRecording"]:
             raise ToolError("Screen Recording permission is not granted. Run request_permissions, grant it, and restart ZCode.")
         layout = self._desktop_layout()
-        screenshots = [self._capture_desktop_screen(screen, layout) for screen in layout]
-        return {
-            "scope": "desktop",
-            "bounds": self._bounds_for_layout(layout),
-            "displays": layout,
-            "screenshots": screenshots,
-        }
+        try:
+            screenshots = [self._capture_desktop_screen(screen, layout) for screen in layout]
+            return {
+                "scope": "desktop",
+                "bounds": self._bounds_for_layout(layout),
+                "displays": layout,
+                "screenshots": screenshots,
+            }
+        except Exception:
+            # A multi-display state is one observation. Roll back earlier
+            # screens when any later screen cannot be captured or encoded.
+            self._invalidate_all_observations()
+            raise
 
     def _validate_desktop_screenshot(self, screenshot_id: Any) -> dict[str, Any]:
         cached = self._screenshot_cache.get(str(screenshot_id))

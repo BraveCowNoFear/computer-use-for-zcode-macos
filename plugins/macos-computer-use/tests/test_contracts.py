@@ -354,6 +354,64 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(list(backend._screenshot_dir.glob("*.png")), [])
             self.assertEqual(backend._screenshot_cache, {})
 
+    def test_failed_window_observation_rolls_back_a_completed_screenshot(self):
+        backend = MacOSBackend()
+        window = {
+            "id": 9,
+            "app": "com.example.Editor",
+            "pid": 90,
+            "bounds": {"x": 0, "y": 0, "width": 100, "height": 100},
+        }
+        backend._get_window = lambda value: window
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "completed.png"
+            path.write_bytes(b"complete")
+
+            def capture(_window):
+                backend._screenshot_cache["shot"] = {
+                    "windowKey": backend._window_key(window),
+                    "path": str(path),
+                    "created": time.monotonic(),
+                }
+                return {"id": "shot", "path": str(path)}
+
+            backend._capture_window = capture
+            backend._accessibility_state = mock.Mock(side_effect=ToolError("AX failed"))
+            with self.assertRaisesRegex(ToolError, "AX failed"):
+                backend.tool_get_window_state(
+                    {"window": {"id": 9}, "include_screenshot": True, "include_text": True}
+                )
+            self.assertEqual(backend._screenshot_cache, {})
+            self.assertFalse(path.exists())
+
+    def test_failed_multidisplay_observation_rolls_back_earlier_screens(self):
+        backend = MacOSBackend()
+        layout = [
+            {"displayId": 1, "bounds": {"x": 0, "y": 0, "width": 100, "height": 100}},
+            {"displayId": 2, "bounds": {"x": 100, "y": 0, "width": 100, "height": 100}},
+        ]
+        backend._permission_status = lambda: {"screenRecording": True}
+        backend._desktop_layout = lambda: layout
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "first.png"
+            path.write_bytes(b"complete")
+
+            def capture(screen, _layout):
+                if screen["displayId"] == 2:
+                    raise ToolError("second display failed")
+                backend._screenshot_cache["first"] = {
+                    "windowKey": None,
+                    "path": str(path),
+                    "created": time.monotonic(),
+                }
+                return {"id": "first", "path": str(path)}
+
+            backend._capture_desktop_screen = capture
+            with self.assertRaisesRegex(ToolError, "second display failed"):
+                backend.tool_get_desktop_state({})
+            self.assertEqual(backend._screenshot_cache, {})
+            self.assertFalse(path.exists())
+
     def test_screenshot_directory_rejects_a_non_directory_target(self):
         backend = MacOSBackend()
         with tempfile.TemporaryDirectory() as directory:
