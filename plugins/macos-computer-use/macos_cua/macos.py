@@ -1715,7 +1715,6 @@ class MacOSBackend:
                 button,
                 x,
                 y,
-                click_number,
             )
             self._post_mouse_down(button, down, up, dragged, x, y, click_number)
             try:

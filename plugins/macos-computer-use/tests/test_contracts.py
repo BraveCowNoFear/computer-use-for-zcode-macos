@@ -2015,6 +2015,29 @@ class ContractTests(unittest.TestCase):
         )
         self.assertFalse(backend._held_buttons)
 
+    def test_multiclick_count_applies_only_to_down_and_up_events(self):
+        backend = MacOSBackend()
+        events = []
+        backend._post_mouse = lambda event, button, x, y, click_count=1: events.append(
+            (event, click_count)
+        )
+        backend._click_pointer("button", "down", "up", "dragged", 1, 2, 3)
+        self.assertEqual(
+            events,
+            [
+                (getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), 1),
+                ("down", 1),
+                ("up", 1),
+                (getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), 1),
+                ("down", 2),
+                ("up", 2),
+                (getattr(backend.Quartz, "kCGEventMouseMoved", "moved"), 1),
+                ("down", 3),
+                ("up", 3),
+            ],
+        )
+        self.assertFalse(backend._held_buttons)
+
     def test_native_mouse_post_failure_has_an_unknown_delivery_verdict(self):
         backend = MacOSBackend()
         backend.Quartz = types.SimpleNamespace(
