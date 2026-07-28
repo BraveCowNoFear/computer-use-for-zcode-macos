@@ -60,6 +60,7 @@ MODIFIER_KEY_ORDER = ("command", "control", "option", "shift")
 CLICK_EVENT_SETTLE_SECONDS = 0.03
 MULTICLICK_ADDITIONAL_GAP_SECONDS = 0.05
 TEXT_CHUNK_SETTLE_SECONDS = 0.02
+KEY_CHORD_SETTLE_SECONDS = 0.1
 
 
 def require_exact_pyobjc_versions(version_getter: Any | None = None) -> dict[str, str]:
@@ -1948,6 +1949,9 @@ class MacOSBackend:
             raise action_error
         if cleanup_error is not None:
             raise cleanup_error
+        # Return only after the target app has had a chance to consume the
+        # fully released chord. Failed or retained releases never reach here.
+        time.sleep(KEY_CHORD_SETTLE_SECONDS)
 
     def _forget_key_release(self, up: Any) -> None:
         for index, held in enumerate(self._held_key_releases):

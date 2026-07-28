@@ -1241,7 +1241,8 @@ class ContractTests(unittest.TestCase):
             CGEventSetFlags=set_flags,
             CGEventPost=lambda _tap, event: posts.append((event.code, event.down, event.flags)),
         )
-        backend._send_key("Command+Shift+a")
+        with mock.patch("macos_cua.macos.time.sleep") as pause:
+            backend._send_key("Command+Shift+a")
         self.assertEqual(
             posts,
             [
@@ -1253,6 +1254,7 @@ class ContractTests(unittest.TestCase):
                 (55, False, 0),
             ],
         )
+        pause.assert_called_once_with(0.1)
         self.assertEqual(backend._held_key_releases, [])
 
     def test_modifier_only_key_reports_down_then_up_flag_state(self):

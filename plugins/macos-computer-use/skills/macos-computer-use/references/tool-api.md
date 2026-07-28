@@ -109,6 +109,8 @@ the numeric keypad. It also accepts common aliases (`Spacebar`, `Del`,
 variants. Modifier chords post physical modifier down/up events around the
 primary key, retain exact pending releases for shutdown cleanup, and never
 same-call replay a primary release that already exhausted its retry.
+After a completely released chord, fallback waits 100 ms before returning so a
+fresh observation does not race the target app's shortcut handler.
 
 Fallback `launch_app` accepts a bundle ID, display name, or `.app` path. User
 paths such as `~/Applications/Foo.app` are expanded and resolved before both
