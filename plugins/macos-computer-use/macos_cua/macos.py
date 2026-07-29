@@ -263,6 +263,8 @@ class MacOSBackend:
         self._hid_mouse_event_source: Any | None = None
         self._skylight_library: Any | None = None
         self._skylight_load_attempted = False
+        self._skylight_front_target: tuple[int, int, bytes] | None = None
+        self._skylight_last_status = "not-attempted"
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
@@ -1501,8 +1503,10 @@ class MacOSBackend:
 
     def _skylight_set_front_process(self, pid: int, window_id: int) -> bool:
         """Ask WindowServer to front one exact process/window, when available."""
+        self._skylight_front_target = None
         library = self._load_skylight()
         if library is None:
+            self._skylight_last_status = "framework-unavailable"
             return False
         try:
             connection_id = library.CGSMainConnectionID
@@ -1523,23 +1527,63 @@ class MacOSBackend:
             set_front.restype = ctypes.c_int32
 
             owner_connection = ctypes.c_uint32()
-            if get_window_owner(
+            owner_status = get_window_owner(
                 connection_id(), ctypes.c_uint32(window_id), ctypes.byref(owner_connection)
-            ) != 0 or owner_connection.value == 0:
+            )
+            if owner_status != 0 or owner_connection.value == 0:
+                self._skylight_last_status = (
+                    f"window-owner-rejected:{owner_status}:{owner_connection.value}"
+                )
                 return False
             process_serial_number = (ctypes.c_ubyte * 8)()
-            if get_connection_psn(
+            psn_status = get_connection_psn(
                 owner_connection.value, ctypes.cast(process_serial_number, ctypes.c_void_p)
-            ) != 0:
+            )
+            if psn_status != 0:
+                self._skylight_last_status = f"connection-psn-rejected:{psn_status}"
                 return False
             # kCPSNoWindows keeps the request scoped to the supplied window id
             # instead of broadly raising every window owned by the app.
-            return set_front(
+            front_status = set_front(
                 ctypes.cast(process_serial_number, ctypes.c_void_p),
                 ctypes.c_uint32(window_id),
                 ctypes.c_uint32(0x400),
-            ) == 0
-        except (AttributeError, OSError, TypeError, ValueError):
+            )
+            if front_status != 0:
+                self._skylight_last_status = f"set-front-rejected:{front_status}"
+                return False
+            self._skylight_front_target = (
+                int(pid), int(window_id), bytes(process_serial_number)
+            )
+            self._skylight_last_status = "set-front-accepted"
+            return True
+        except (AttributeError, OSError, TypeError, ValueError) as error:
+            self._skylight_last_status = f"spi-unavailable:{type(error).__name__}"
+            return False
+
+    def _skylight_front_process_matches(self, pid: int, window_id: int) -> bool:
+        target = self._skylight_front_target
+        if target is None or target[:2] != (int(pid), int(window_id)):
+            return False
+        library = self._load_skylight()
+        if library is None:
+            return False
+        try:
+            get_front_process = library._SLPSGetFrontProcess
+            get_front_process.argtypes = [ctypes.c_void_p]
+            get_front_process.restype = ctypes.c_int32
+            current = (ctypes.c_ubyte * 8)()
+            status = get_front_process(ctypes.cast(current, ctypes.c_void_p))
+            if status != 0:
+                self._skylight_last_status = f"front-readback-rejected:{status}"
+                return False
+            matches = bytes(current) == target[2]
+            self._skylight_last_status = (
+                "front-readback-matched" if matches else "front-readback-mismatched"
+            )
+            return matches
+        except (AttributeError, OSError, TypeError, ValueError) as error:
+            self._skylight_last_status = f"front-readback-unavailable:{type(error).__name__}"
             return False
 
     def _activate(self, window: dict[str, Any]) -> None:
@@ -1584,10 +1628,23 @@ class MacOSBackend:
                 )
         workspace = self.AppKit.NSWorkspace.sharedWorkspace()
         deadline = time.monotonic() + 2.0
+        last_front_pid = 0
+        last_skylight_front = False
+        last_ax_frontmost: Any = None
+        last_focused_number: Any = None
+        last_focused_matches = False
         while time.monotonic() < deadline:
             frontmost = workspace.frontmostApplication()
             front_pid = int(frontmost.processIdentifier()) if frontmost is not None else 0
-            if front_pid == int(window["pid"]):
+            last_front_pid = front_pid
+            last_skylight_front = self._skylight_front_process_matches(
+                int(window["pid"]), int(window["id"])
+            )
+            last_ax_frontmost = self._ax_copy(
+                app_element,
+                self._ax_attr("kAXFrontmostAttribute", "AXFrontmost"),
+            )
+            if front_pid == int(window["pid"]) or last_skylight_front:
                 focused = self._ax_copy(
                     app_element,
                     self._ax_attr("kAXFocusedWindowAttribute", "AXFocusedWindow"),
@@ -1596,14 +1653,38 @@ class MacOSBackend:
                     focused,
                     self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber"),
                 ) if focused is not None else None
+                last_focused_number = focused_number
                 try:
                     focused_matches = int(focused_number) == int(window["id"])
                 except (TypeError, ValueError):
                     focused_matches = focused is not None and focused == target_ax_window
+                last_focused_matches = focused_matches
                 if focused_matches:
                     return
             time.sleep(0.02)
-        raise ToolError("The target window did not become frontmost; no input was sent")
+        detail = {
+            "ok": False,
+            "code": "activation_not_confirmed",
+            "effect": "unverifiable",
+            "verified": False,
+            "targetPid": int(window["pid"]),
+            "targetWindowId": int(window["id"]),
+            "frontmostPid": last_front_pid,
+            "windowServerFrontmost": last_skylight_front,
+            "axFrontmost": bool(last_ax_frontmost),
+            "focusedWindowId": (
+                int(last_focused_number)
+                if isinstance(last_focused_number, (int, float))
+                else None
+            ),
+            "focusedWindowMatches": last_focused_matches,
+            "skylightStatus": self._skylight_last_status,
+        }
+        summary = ", ".join(f"{key}={value}" for key, value in detail.items() if key != "ok")
+        raise ToolError(
+            f"The target window did not become frontmost; no input was sent ({summary})",
+            detail,
+        )
 
     def _activate_current(self, value: Any) -> dict[str, Any]:
         window = self._get_window(value)

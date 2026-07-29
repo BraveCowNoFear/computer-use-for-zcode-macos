@@ -348,7 +348,8 @@ Exact-window activation first asks WindowServer to front the returned pid and
 window ID through Cua Driver's local SkyLight path, falling back to public
 AppKit activation when that SPI is unavailable. It then performs `AXRaise`; if
 unsupported, it sets the bound window's `AXMain=true` and then `AXFocused=true`.
-Frontmost pid and focused AXWindowNumber must still match before input is sent.
+WindowServer's foreground PSN (or the public frontmost pid) and the focused
+AXWindowNumber must still match before input is sent.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 

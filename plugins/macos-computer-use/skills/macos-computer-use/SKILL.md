@@ -349,8 +349,9 @@ drive a focus-changing activation from the older background screenshot.
 Activation first uses Cua Driver's local exact-window SkyLight path, with public
 AppKit activation as the compatibility fallback. For apps without `AXRaise`, it
 then tries the bound window's `AXMain` and `AXFocused` attributes. Input still
-starts only after frontmost pid and focused window ID read back as the exact
-target; these delivery rungs are not treated as proof by themselves.
+starts only after WindowServer's foreground PSN (or the public frontmost pid)
+and the focused window ID read back as the exact target; these delivery rungs
+are not treated as proof by themselves.
 
 Fallback `launch_app` returns the matched pid/windows. Choose only one
 task-matching candidate and preserve the whole

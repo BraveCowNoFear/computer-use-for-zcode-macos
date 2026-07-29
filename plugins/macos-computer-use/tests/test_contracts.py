@@ -1782,19 +1782,30 @@ class ContractTests(unittest.TestCase):
             calls.append(("front", window_id.value, options.value))
             return 0
 
+        def get_front(_psn_pointer):
+            calls.append(("read-front",))
+            return 0
+
         library = types.SimpleNamespace(
             CGSMainConnectionID=FakeFunction(lambda: 55),
             SLSGetWindowOwner=FakeFunction(get_owner),
             SLSGetConnectionPSN=FakeFunction(get_psn),
             SLPSSetFrontProcessWithOptions=FakeFunction(set_front),
+            _SLPSGetFrontProcess=FakeFunction(get_front),
         )
         backend = MacOSBackend()
         backend._load_skylight = lambda: library
 
         self.assertTrue(backend._skylight_set_front_process(80, 8))
+        self.assertTrue(backend._skylight_front_process_matches(80, 8))
         self.assertEqual(
             calls,
-            [("owner", 55, 8), ("psn", 77), ("front", 8, 0x400)],
+            [
+                ("owner", 55, 8),
+                ("psn", 77),
+                ("front", 8, 0x400),
+                ("read-front",),
+            ],
         )
 
     def test_accessibility_window_prefers_the_exact_cg_window_number(self):

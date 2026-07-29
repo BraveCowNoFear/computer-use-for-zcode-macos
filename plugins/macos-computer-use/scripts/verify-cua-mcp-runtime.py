@@ -273,7 +273,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.9"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.10"},
             },
         )
         expected = {

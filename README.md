@@ -159,7 +159,8 @@ root/data template variables.
   front the exact returned pid/window pair through the same local SkyLight path
   used by Cua Driver, then falls back to public AppKit activation. It raises the
   exact AX window, tries its main/focused attributes when `AXRaise` is absent,
-  and confirms the focused pid/window ID before sending input.
+  and confirms WindowServer's foreground PSN (or the public frontmost pid) plus
+  the focused window ID before sending input.
 - Persistently front one exact returned window only for an explicit frontmost
   outcome or a focus-proxy surface such as remote desktop. The primary live gate
   verifies the returned activation path, the app's fresh `active` readback, and
