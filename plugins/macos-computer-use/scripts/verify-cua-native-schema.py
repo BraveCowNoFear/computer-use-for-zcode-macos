@@ -417,6 +417,23 @@ CONTRACTS: dict[str, dict[str, Any]] = {
             "y2": "number",
         },
     },
+    "list_apps": {
+        "additional_properties": False,
+        "properties": set(),
+        "required": set(),
+    },
+    "list_windows": {
+        "additional_properties": False,
+        "properties": {"pid", "on_screen_only"},
+        "required": set(),
+        "types": {"pid": "integer", "on_screen_only": "boolean"},
+    },
+    "kill_app": {
+        "additional_properties": False,
+        "properties": {"pid"},
+        "required": {"pid"},
+        "types": {"pid": "integer"},
+    },
     "get_config": {
         "additional_properties": False,
         "properties": set(),
