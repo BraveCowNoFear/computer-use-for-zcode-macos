@@ -544,6 +544,7 @@ def close_owned_browser_chain(
     client: Any,
     session: str,
     prepared_pid: int,
+    source_process: subprocess.Popen[bytes],
     source_pid: int,
     source_window_id: int,
 ) -> None:
@@ -569,7 +570,12 @@ def close_owned_browser_chain(
         killed_content,
         f"✅ Sent SIGKILL to pid {source_pid}.",
     )
-    wait_until("source browser process exit", lambda: not process_exists(source_pid))
+    wait_until("source browser process exit", lambda: source_process.poll() is not None)
+    if source_process.returncode != -signal.SIGKILL:
+        fail(
+            "source browser did not exit through the acknowledged SIGKILL: "
+            f"{source_process.returncode}"
+        )
 
 
 def main() -> int:
@@ -642,6 +648,7 @@ def main() -> int:
                 client,
                 browser_session,
                 prepared_pid,
+                source_process,
                 source_pid,
                 source_window_id,
             )
@@ -763,6 +770,7 @@ def main() -> int:
             client,
             browser_session,
             prepared_pid,
+            source_process,
             source_pid,
             source_window_id,
         )
