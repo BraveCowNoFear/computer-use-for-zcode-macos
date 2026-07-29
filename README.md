@@ -95,9 +95,9 @@ root/data template variables.
 - Discover and launch native apps and select exact returned windows.
 - Take a fast content-free inventory of running apps and visible windows before
   binding one returned pid/window to the full screenshot-plus-AX loop.
-- Temporarily opt one named session into uncapped native-size window PNGs for
-  pixel-perfect verification, prove peer sessions retain their own effective
-  setting, and restore without changing the daemon-global persisted default.
+- Temporarily opt one MCP connection into uncapped native-size window PNGs for
+  pixel-perfect verification, prove a peer connection retains its own
+  effective setting, and restore without changing the persisted global default.
 - Hand an existing local file/folder or resource URL to an exact native app
   through `launch_app.urls`, with structured missing-path errors, returned
   pid/window binding, focus-suppression readback, fresh observation, and exact

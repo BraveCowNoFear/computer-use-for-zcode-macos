@@ -94,7 +94,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.12.2"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.13.0"},
             },
         )
         self.notify("notifications/initialized")
@@ -394,14 +394,18 @@ def terminate(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=5)
 
 
-def run_primary(fixture_pid: int) -> dict[str, Any]:
-    client = MCPClient(
+def new_primary_client() -> MCPClient:
+    return MCPClient(
         ["/bin/bash", str(ROOT / "scripts" / "run-cua-driver.sh")],
         extra_env={
             "MACOS_CUA_PLUGIN_ROOT": str(ROOT),
             "MACOS_CUA_DATA_DIR": str(DATA_DIR),
         },
     )
+
+
+def run_primary(fixture_pid: int) -> dict[str, Any]:
+    client = new_primary_client()
     session = new_live_session()
     session_started = False
     original_cursor_motion: dict[str, Any] | None = None
@@ -525,7 +529,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
 
         client.call("start_session", {"session": session, "capture_scope": "auto"})
         session_started = True
-        initial_config, _ = client.call("get_config", {"session": session})
+        initial_config, _ = client.call("get_config", {})
         original_max_dimension = initial_config.get("max_image_dimension")
         advertised_source_sha = initial_config.get("source_sha")
         if (
@@ -540,12 +544,31 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         demo_max_dimension = 0 if original_max_dimension != 0 else 1568
         configured_image, _ = client.call(
             "set_config",
-            {"session": session, "max_image_dimension": demo_max_dimension},
+            {"max_image_dimension": demo_max_dimension},
         )
-        current_config, _ = client.call("get_config", {"session": session})
-        peer_config, _ = client.call(
-            "get_config", {"session": f"config-peer-{uuid.uuid4().hex[:8]}"}
+        current_config, _ = client.call("get_config", {})
+        precision_state, precision_content = client.call(
+            "get_window_state",
+            {
+                "pid": fixture_pid,
+                "window_id": discovered_fixture_window_id,
+            },
         )
+        require_image(precision_content, "primary connection-configured window state")
+        if (
+            precision_state.get("pid") != fixture_pid
+            or precision_state.get("window_id") != discovered_fixture_window_id
+        ):
+            raise RuntimeError(
+                "Primary connection-configured window state lost its exact target: "
+                f"{precision_state}"
+            )
+        peer_client = new_primary_client()
+        try:
+            peer_client.initialize()
+            peer_config, _ = peer_client.call("get_config", {})
+        finally:
+            peer_client.close()
         if (
             configured_image.get("max_image_dimension") != demo_max_dimension
             or current_config.get("max_image_dimension") != demo_max_dimension
@@ -557,9 +580,9 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             )
         restored_image, _ = client.call(
             "set_config",
-            {"session": session, "max_image_dimension": original_max_dimension},
+            {"max_image_dimension": original_max_dimension},
         )
-        restored_config, _ = client.call("get_config", {"session": session})
+        restored_config, _ = client.call("get_config", {})
         if (
             restored_image.get("max_image_dimension") != original_max_dimension
             or restored_config.get("max_image_dimension") != original_max_dimension
@@ -570,7 +593,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             )
         report["maxImageDimension"] = original_max_dimension
         report["cuaSourceSha"] = advertised_source_sha
-        report["steps"].append("primary_session_image_config_isolated_and_restored")
+        report["steps"].append("primary_connection_image_config_isolated_and_restored")
         cursor_disabled, _ = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": False}
         )

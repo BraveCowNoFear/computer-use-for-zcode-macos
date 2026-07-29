@@ -71,6 +71,7 @@ jobs:
           codesign --verify --deep --strict "$app"
           spctl --assess --type execute "$app"
           "$binary" --version | grep -F "0.13.1"
+          python plugins/macos-computer-use/scripts/verify-cua-native-schema.py "$binary"
           python plugins/macos-computer-use/scripts/verify-cua-browser-schema.py "$binary"
           /usr/bin/open -h 2>&1 | grep -F -- "--env"
           data="$RUNNER_TEMP/zcode-primary-first-run"

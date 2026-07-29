@@ -243,14 +243,17 @@ focus, content, selection, dialog, or window changes.
 
 Primary window PNGs default to a 1568-pixel long-side cap while preserving the
 same coordinates for following pixel actions. For an explicit pixel-perfect
-verification flow, read `get_config({session})`, temporarily call
-`set_config({session,max_image_dimension:0})`, verify the same session reads
-back `0`, then restore the original value or end that session. Always include
-the public session: an anonymous CLI/direct `set_config` changes the
-daemon-global value and persists it. A named session is an in-memory override
-and must not affect a fresh peer session. Do not use `set_config` for `capture_mode` or
-`capture_scope`; every window state already returns pixels plus AX, and scope
-belongs to `start_session`.
+verification flow, read `get_config({})`, temporarily call
+`set_config({max_image_dimension:0})`, verify the same MCP connection reads
+back `0`, take the required `get_window_state({pid,window_id})` snapshot without
+a public session on that connection, and immediately restore the original
+value before resuming public-session actions. These pinned config schemas do
+not expose `session`:
+the daemon supplies a private per-connection identity, and another MCP
+connection must retain its own effective value. An anonymous CLI/direct
+`set_config` instead changes the daemon-global value and persists it. Do not
+use `set_config` for `capture_mode` or `capture_scope`; every window state
+already returns pixels plus AX, and scope belongs to `start_session`.
 
 For a small or visually dense primary target, call
 `zoom({pid,window_id,x1,y1,x2,y2})` with a bounded region from the exact fresh

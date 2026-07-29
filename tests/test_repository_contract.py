@@ -244,18 +244,36 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"$ROOT/scripts/run-cua-driver.sh" --grant-permissions', install)
         self.assertNotIn('python3 -m venv "$ROOT/.venv"', install)
 
-    def test_macos_ci_verifies_the_pinned_browser_schema(self):
-        verifier = (
+    def test_macos_ci_verifies_the_pinned_primary_schemas(self):
+        browser_verifier = (
             PLUGIN / "scripts" / "verify-cua-browser-schema.py"
         ).read_text(encoding="utf-8")
+        native_verifier = (
+            PLUGIN / "scripts" / "verify-cua-native-schema.py"
+        ).read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn('EXPECTED_VERSION = "0.13.1"', verifier)
-        self.assertIn('"get_browser_state"', verifier)
-        self.assertIn('"semantic_v2"', verifier)
-        self.assertIn('"browser_pointer"', verifier)
-        self.assertIn('"dom_event"', verifier)
-        self.assertIn('"browser_download"', verifier)
-        self.assertIn('"destination_root"', verifier)
+        self.assertIn('EXPECTED_VERSION = "0.13.1"', browser_verifier)
+        self.assertIn('"get_browser_state"', browser_verifier)
+        self.assertIn('"semantic_v2"', browser_verifier)
+        self.assertIn('"browser_pointer"', browser_verifier)
+        self.assertIn('"dom_event"', browser_verifier)
+        self.assertIn('"browser_download"', browser_verifier)
+        self.assertIn('"destination_root"', browser_verifier)
+        self.assertIn('EXPECTED_VERSION = "0.13.1"', native_verifier)
+        for tool in (
+            "health_report",
+            "check_permissions",
+            "get_accessibility_tree",
+            "get_config",
+            "set_config",
+            "launch_app",
+            "bring_to_front",
+        ):
+            self.assertIn(f'"{tool}"', native_verifier)
+        self.assertIn(
+            'python plugins/macos-computer-use/scripts/verify-cua-native-schema.py "$binary"',
+            workflow,
+        )
         self.assertIn(
             'python plugins/macos-computer-use/scripts/verify-cua-browser-schema.py "$binary"',
             workflow,
@@ -374,10 +392,11 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`launch_app({bundle_id,urls:[target]})`", skill)
         self.assertIn("structured `FILE_NOT_FOUND`", skill)
         self.assertIn("`self_activation_suppressed`", skill)
-        self.assertIn("`get_config({session})`", skill)
-        self.assertIn("`set_config({session,max_image_dimension:0})`", skill)
+        self.assertIn("`get_config({})`", skill)
+        self.assertIn("`set_config({max_image_dimension:0})`", skill)
+        self.assertIn("`get_window_state({pid,window_id})` snapshot without", skill)
         self.assertIn("`get_accessibility_tree` for a fast broad inventory", skill)
-        self.assertIn("an anonymous CLI/direct `set_config` changes the", skill)
+        self.assertIn("An anonymous CLI/direct\n`set_config` instead changes", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
         self.assertIn("`bring_to_front({pid,window_id})` is an explicit persistent activation", skill)
@@ -514,6 +533,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_live_smoke_sources_compile(self):
         for path in (
             PLUGIN / "scripts" / "live-smoke.py",
+            PLUGIN / "scripts" / "verify-cua-native-schema.py",
             PLUGIN / "scripts" / "verify-cua-browser-schema.py",
             PLUGIN / "tests" / "live_fixture.py",
         ):
@@ -583,7 +603,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_exact_window_frontmost_verified"',
             '"primary_background_file_url_launch_verified"',
             '"primary_exact_file_url_window_closed"',
-            '"primary_session_image_config_isolated_and_restored"',
+            '"primary_connection_image_config_isolated_and_restored"',
             '"primary_lightweight_desktop_discovery_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
