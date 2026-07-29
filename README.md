@@ -256,7 +256,9 @@ its owned state. It also cold-launches a stopped Calculator or TextEdit, binds
 the returned new pid/window, kills only that owned pid, and requires it to
 disappear. The public
 MCP `prompt:true` path must fail at the trusted-host
-macOS TCC boundary without opening permission UI. Every mandatory MCP
+macOS TCC boundary without opening permission UI. The stdio gate also rejects
+malformed, duplicate, missing, or unexpected tool names, so ZCode receives
+exactly the audited 47-tool surface. Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.

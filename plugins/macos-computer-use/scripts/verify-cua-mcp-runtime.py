@@ -122,7 +122,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.0"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.1"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -238,14 +238,23 @@ def main() -> int:
         tools = listed.get("tools")
         if not isinstance(tools, list):
             fail("tools/list omitted tools")
-        advertised = {
-            tool.get("name"): tool
+        if not all(
+            isinstance(tool, dict) and isinstance(tool.get("name"), str)
             for tool in tools
-            if isinstance(tool, dict) and isinstance(tool.get("name"), str)
-        }
-        missing = required - set(advertised)
-        if missing:
-            fail(f"tools/list omitted required tools: {sorted(missing)}")
+        ):
+            fail("tools/list returned a malformed tool entry")
+        names = [tool["name"] for tool in tools]
+        if len(names) != len(set(names)):
+            duplicates = sorted({name for name in names if names.count(name) > 1})
+            fail(f"tools/list returned duplicate tool names: {duplicates}")
+        advertised = {tool["name"]: tool for tool in tools}
+        advertised_names = set(advertised)
+        if advertised_names != required:
+            fail(
+                "tools/list surface drifted: "
+                f"missing={sorted(required - advertised_names)}, "
+                f"unexpected={sorted(advertised_names - required)}"
+            )
         for name in sorted(required):
             mcp_schema = advertised[name].get("inputSchema")
             direct_schema = describe(binary, name)
