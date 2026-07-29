@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.16"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.17"},
             },
         )
         expected = {
@@ -407,6 +407,157 @@ def require_recording_manifest(name: str, path: Path) -> dict[str, Any]:
     ):
         fail(f"{name}.cursor contract drifted: {cursor}")
     return manifest
+
+
+APP_ENTRY_FIELDS = {
+    "pid",
+    "name",
+    "bundle_id",
+    "active",
+    "running",
+    "launch_path",
+    "kind",
+    "last_used",
+    "windows",
+}
+
+
+def require_app_inventory(name: str, value: Any) -> dict[str, Any]:
+    inventory = require_object(name, value, {"apps"})
+    apps = inventory["apps"]
+    if not isinstance(apps, list):
+        fail(f"{name}.apps is not an array")
+    for app in apps:
+        if not isinstance(app, dict) or set(app) != APP_ENTRY_FIELDS:
+            fail(f"{name} app fields drifted: {app}")
+        if (
+            type(app["pid"]) is not int
+            or app["pid"] < 0
+            or not isinstance(app["name"], str)
+            or type(app["active"]) is not bool
+            or type(app["running"]) is not bool
+            or app["windows"] != []
+        ):
+            fail(f"{name} returned malformed app state: {app}")
+        for field in ("bundle_id", "launch_path", "kind", "last_used"):
+            if app[field] is not None and not isinstance(app[field], str):
+                fail(f"{name}.{field} is neither a string nor null: {app}")
+        if app["running"] is not (app["pid"] > 0):
+            fail(f"{name} running/pid fields disagreed: {app}")
+        if app["active"] and not app["running"]:
+            fail(f"{name} reported an active stopped app: {app}")
+        if app["kind"] not in {None, "desktop"}:
+            fail(f"{name} returned an unexpected macOS app kind: {app}")
+    return inventory
+
+
+WINDOW_ENTRY_FIELDS = {
+    "window_id",
+    "pid",
+    "app_name",
+    "title",
+    "bounds",
+    "layer",
+    "z_index",
+    "is_on_screen",
+    "on_current_space",
+    "space_ids",
+}
+LAUNCH_WINDOW_FIELDS = {
+    "window_id",
+    "pid",
+    "app_name",
+    "title",
+    "bounds",
+    "is_on_screen",
+}
+
+
+def require_window_bounds(name: str, value: Any) -> dict[str, Any]:
+    bounds = require_object(name, value, {"x", "y", "width", "height"})
+    if any(type(bounds[field]) not in {int, float} for field in bounds):
+        fail(f"{name} contains non-numeric geometry: {bounds}")
+    return bounds
+
+
+def require_window_entry(
+    name: str, value: Any, fields: set[str]
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != fields:
+        fail(f"{name} fields drifted: {value}")
+    if (
+        type(value["window_id"]) is not int
+        or value["window_id"] <= 0
+        or type(value["pid"]) is not int
+        or value["pid"] <= 0
+        or not isinstance(value["app_name"], str)
+        or not isinstance(value["title"], str)
+        or type(value["is_on_screen"]) is not bool
+    ):
+        fail(f"{name} returned malformed identity/state: {value}")
+    require_window_bounds(f"{name}.bounds", value["bounds"])
+    if fields == WINDOW_ENTRY_FIELDS:
+        if (
+            type(value["layer"]) is not int
+            or value["layer"] != 0
+            or type(value["z_index"]) is not int
+            or value["z_index"] < 0
+            or not (
+                value["on_current_space"] is None
+                or type(value["on_current_space"]) is bool
+            )
+            or (
+                value["space_ids"] is not None
+                and (
+                    not isinstance(value["space_ids"], list)
+                    or any(type(space_id) is not int for space_id in value["space_ids"])
+                )
+            )
+        ):
+            fail(f"{name} returned malformed WindowServer metadata: {value}")
+    return value
+
+
+def require_window_inventory(name: str, value: Any) -> dict[str, Any]:
+    inventory = require_object(name, value, {"windows", "current_space_id"})
+    if inventory["current_space_id"] is not None:
+        fail(f"{name}.current_space_id drifted from the pinned null contract")
+    if not isinstance(inventory["windows"], list):
+        fail(f"{name}.windows is not an array")
+    for index, window in enumerate(inventory["windows"]):
+        require_window_entry(
+            f"{name}.windows[{index}]", window, WINDOW_ENTRY_FIELDS
+        )
+    return inventory
+
+
+def require_launch_result(
+    name: str, value: Any, bundle_id: str, app_name: str
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) not in (
+        {"pid", "bundle_id", "name", "windows"},
+        {"pid", "bundle_id", "name", "windows", "self_activation_suppressed"},
+    ):
+        fail(f"{name} fields drifted: {value}")
+    if (
+        type(value["pid"]) is not int
+        or value["pid"] <= 0
+        or value["bundle_id"] != bundle_id
+        or value["name"] != app_name
+        or not isinstance(value["windows"], list)
+    ):
+        fail(f"{name} returned malformed app identity: {value}")
+    if "self_activation_suppressed" in value and type(
+        value["self_activation_suppressed"]
+    ) is not bool:
+        fail(f"{name}.self_activation_suppressed is not boolean")
+    for index, window in enumerate(value["windows"]):
+        require_window_entry(
+            f"{name}.windows[{index}]", window, LAUNCH_WINDOW_FIELDS
+        )
+        if window["pid"] != value["pid"]:
+            fail(f"{name} returned a window owned by another pid: {window}")
+    return value
 
 
 def process_exists(pid: int) -> bool:
@@ -782,9 +933,7 @@ def main() -> int:
             fail("invalid page mutation probe unexpectedly succeeded")
 
         apps, _ = client.call("list_apps")
-        apps = require_object("list_apps", apps, {"apps"})
-        if not isinstance(apps["apps"], list):
-            fail("list_apps.apps is not an array")
+        apps = require_app_inventory("list_apps", apps)
         existing_app_pids = {
             app.get("pid")
             for app in apps["apps"]
@@ -819,7 +968,13 @@ def main() -> int:
             "launch_app",
             {"bundle_id": owned_bundle_id},
         )
-        launched_pid = launched.get("pid") if isinstance(launched, dict) else None
+        launched = require_launch_result(
+            f"launch_app {owned_app_name}",
+            launched,
+            owned_bundle_id,
+            owned_app_name,
+        )
+        launched_pid = launched["pid"]
         if (
             type(launched_pid) is not int
             or launched_pid <= 0
@@ -833,11 +988,9 @@ def main() -> int:
         identity_deadline = time.monotonic() + 5
         while time.monotonic() < identity_deadline:
             app_inventory, _ = client.call("list_apps")
-            app_inventory = require_object(
-                "post-launch list_apps", app_inventory, {"apps"}
+            app_inventory = require_app_inventory(
+                "post-launch list_apps", app_inventory
             )
-            if not isinstance(app_inventory["apps"], list):
-                fail("post-launch list_apps.apps is not an array")
             launched_app = next(
                 (
                     app
@@ -865,37 +1018,32 @@ def main() -> int:
                     f"inventory_app={launched_app}, command={command!r}"
                 )
 
-        launched_windows = launched.get("windows", [])
-        if not isinstance(launched_windows, list):
-            fail(f"launch_app.windows is not an array: {launched}")
-        owned_windows = [
-            window
-            for window in launched_windows
-            if isinstance(window, dict)
-            and window.get("pid") == launched_pid
-            and type(window.get("window_id")) is int
-        ]
+        launched_windows = launched["windows"]
+        owned_windows: list[dict[str, Any]] = []
         window_deadline = time.monotonic() + 5
-        while not owned_windows and time.monotonic() < window_deadline:
+        while time.monotonic() < window_deadline:
             app_windows, _ = client.call("list_windows", {"pid": launched_pid})
-            app_windows = require_object(
-                f"{owned_app_name} list_windows",
-                app_windows,
-                {"windows", "current_space_id"},
+            app_windows = require_window_inventory(
+                f"{owned_app_name} list_windows", app_windows
             )
-            if not isinstance(app_windows["windows"], list):
-                fail(f"{owned_app_name} list_windows.windows is not an array")
             owned_windows = [
                 window
                 for window in app_windows["windows"]
-                if isinstance(window, dict)
-                and window.get("pid") == launched_pid
-                and type(window.get("window_id")) is int
+                if window["pid"] == launched_pid
             ]
-            if not owned_windows:
-                time.sleep(0.05)
+            if owned_windows:
+                break
+            time.sleep(0.05)
         if not owned_windows:
             fail(f"new {owned_app_name} pid {launched_pid} exposed no owned window")
+        fresh_window_ids = {window["window_id"] for window in owned_windows}
+        if any(
+            window["window_id"] not in fresh_window_ids for window in launched_windows
+        ):
+            fail(
+                "launch_app returned a window identity absent from fresh list_windows: "
+                f"launch={launched_windows}, fresh={owned_windows}"
+            )
 
         client.call("kill_app", {"pid": launched_pid})
         exit_deadline = time.monotonic() + 5
@@ -906,11 +1054,9 @@ def main() -> int:
         inventory_exit_deadline = time.monotonic() + 10
         while True:
             apps_after_kill, _ = client.call("list_apps")
-            apps_after_kill = require_object(
-                "post-kill list_apps", apps_after_kill, {"apps"}
+            apps_after_kill = require_app_inventory(
+                "post-kill list_apps", apps_after_kill
             )
-            if not isinstance(apps_after_kill["apps"], list):
-                fail("post-kill list_apps.apps is not an array")
             if not any(
                 isinstance(app, dict) and app.get("pid") == launched_pid
                 for app in apps_after_kill["apps"]
@@ -922,23 +1068,26 @@ def main() -> int:
         owned_app_pid = None
 
         windows, _ = client.call("list_windows")
-        windows = require_object(
-            "list_windows", windows, {"windows", "current_space_id"}
-        )
-        if not isinstance(windows["windows"], list):
-            fail("list_windows.windows is not an array")
+        windows = require_window_inventory("list_windows", windows)
 
         screen, _ = client.call("get_screen_size")
         screen = require_object(
             "get_screen_size", screen, {"width", "height", "scale_factor"}
         )
-        if screen["width"] <= 0 or screen["height"] <= 0 or screen["scale_factor"] <= 0:
+        if (
+            type(screen["width"]) is not int
+            or type(screen["height"]) is not int
+            or type(screen["scale_factor"]) not in {int, float}
+            or screen["width"] <= 0
+            or screen["height"] <= 0
+            or screen["scale_factor"] <= 0
+        ):
             fail("get_screen_size returned non-positive geometry")
 
         cursor, _ = client.call("get_cursor_position")
         cursor = require_object("get_cursor_position", cursor, {"x", "y"})
-        if not all(isinstance(cursor[key], (int, float)) for key in ("x", "y")):
-            fail("get_cursor_position returned non-numeric coordinates")
+        if any(type(cursor[key]) is not int for key in ("x", "y")):
+            fail("get_cursor_position did not return exact integer coordinates")
 
         config_original = require_config("get_config", client.call("get_config")[0])
         peer_original = require_config("peer get_config", peer.call("get_config")[0])

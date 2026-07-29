@@ -388,6 +388,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("health_report")', mcp_runtime)
         self.assertIn('client.call("check_permissions", {"prompt": False})', mcp_runtime)
         self.assertIn('client.call("get_accessibility_tree")', mcp_runtime)
+        self.assertIn("APP_ENTRY_FIELDS = {", mcp_runtime)
+        self.assertIn("WINDOW_ENTRY_FIELDS = {", mcp_runtime)
+        self.assertIn("LAUNCH_WINDOW_FIELDS = {", mcp_runtime)
+        self.assertIn('app["running"] is not (app["pid"] > 0)', mcp_runtime)
+        self.assertIn('inventory["current_space_id"] is not None', mcp_runtime)
+        self.assertIn("require_launch_result(", mcp_runtime)
+        self.assertIn("fresh_window_ids", mcp_runtime)
         self.assertIn('client.call("get_recording_state")', mcp_runtime)
         self.assertIn('"record_video": False', mcp_runtime)
         self.assertIn('client.call("stop_recording")', mcp_runtime)
@@ -412,6 +419,92 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("end_session", {"session": session})', mcp_runtime)
         self.assertIn('"name": "kill_app"', mcp_runtime)
         self.assertIn('["/bin/sleep", "60"]', mcp_runtime)
+
+        skill = (PLUGIN / "skills" / "macos-computer-use" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("installed-but-stopped apps", skill)
+        self.assertIn("per-app `windows` array is deliberately empty", skill)
+        self.assertIn("never treat pid 0 as an action target", skill)
+
+    def test_primary_live_identity_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_identity_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        app = {
+            "pid": 321,
+            "name": "Calculator",
+            "bundle_id": "com.apple.calculator",
+            "active": False,
+            "running": True,
+            "launch_path": "/System/Applications/Calculator.app",
+            "kind": "desktop",
+            "last_used": None,
+            "windows": [],
+        }
+        self.assertEqual(
+            module.require_app_inventory("apps", {"apps": [app]})["apps"][0],
+            app,
+        )
+        stopped = dict(app, pid=0, running=False)
+        module.require_app_inventory("stopped apps", {"apps": [stopped]})
+        with self.assertRaisesRegex(RuntimeError, "running/pid fields disagreed"):
+            module.require_app_inventory(
+                "drifted apps", {"apps": [dict(app, pid=0)]}
+            )
+
+        bounds = {"x": 12.0, "y": 34.0, "width": 640.0, "height": 480.0}
+        window = {
+            "window_id": 456,
+            "pid": 321,
+            "app_name": "Calculator",
+            "title": "Calculator",
+            "bounds": bounds,
+            "layer": 0,
+            "z_index": 3,
+            "is_on_screen": True,
+            "on_current_space": True,
+            "space_ids": [1],
+        }
+        module.require_window_inventory(
+            "windows", {"windows": [window], "current_space_id": None}
+        )
+        with self.assertRaisesRegex(RuntimeError, "current_space_id drifted"):
+            module.require_window_inventory(
+                "drifted windows", {"windows": [window], "current_space_id": 1}
+            )
+
+        launch_window = {
+            key: value
+            for key, value in window.items()
+            if key in module.LAUNCH_WINDOW_FIELDS
+        }
+        launched = {
+            "pid": 321,
+            "bundle_id": "com.apple.calculator",
+            "name": "Calculator",
+            "windows": [launch_window],
+            "self_activation_suppressed": True,
+        }
+        module.require_launch_result(
+            "launch",
+            launched,
+            "com.apple.calculator",
+            "Calculator",
+        )
+        with self.assertRaisesRegex(RuntimeError, "window owned by another pid"):
+            module.require_launch_result(
+                "drifted launch",
+                dict(launched, windows=[dict(launch_window, pid=999)]),
+                "com.apple.calculator",
+                "Calculator",
+            )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(

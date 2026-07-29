@@ -155,6 +155,16 @@ coordinates from a fresh `get_desktop_state` exactly like other desktop input.
 4. Re-list after launch, a long pause, a modal transition, or a disappeared
    window. Treat modals and sheets as their returned target window.
 
+Primary `list_apps` is an application inventory, not a window inventory. It
+includes installed-but-stopped apps with `running:false` and `pid:0`; its
+per-app `windows` array is deliberately empty, so enumerate windows with
+`list_windows({pid})` or use the immediate projection returned by `launch_app`.
+Require `active` to imply `running`, and never treat pid 0 as an action target.
+Primary `list_windows` supplies the exact positive `(pid, window_id)` plus
+`bounds`, `z_index`, `is_on_screen`, per-window Space metadata, and a currently
+null top-level `current_space_id`; bind from the window record, not from that
+placeholder or from `list_apps.windows`.
+
 To hand a local file/folder or non-browser resource URL to a native app, use
 `launch_app({bundle_id,urls:[target]})`; never substitute shell `open`,
 AppleScript activation, or an unbound default-handler launch. The pinned driver

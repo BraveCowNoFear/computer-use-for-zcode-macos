@@ -270,8 +270,11 @@ default-disable guard, plus
 per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
 and one-way `auto` session escalation to desktop scope before restoring/ending
-its owned state. It also cold-launches a stopped Calculator or TextEdit, binds
-the returned new pid/window, kills only that owned pid, and waits for both the
+its owned state. App and window discovery also pins the exact nine-field app
+record, ten-field WindowServer record, integer cursor position, and logical
+display geometry types. It cold-launches a stopped Calculator or TextEdit,
+validates the returned launch-window projection against a fresh full window
+inventory, kills only that owned pid, and waits for both the
 process and the eventually consistent app inventory to drop it. The public
 MCP `prompt:true` path must fail at the trusted-host
 macOS TCC boundary without opening permission UI. The stdio gate also rejects

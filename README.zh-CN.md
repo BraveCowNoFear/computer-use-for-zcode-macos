@@ -221,6 +221,9 @@ Driver `0.13.1` 身份以及 macOS 工作流说明；同一条真实连接还必
 提供完整工具表；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接
 `describe` 契约完全一致，并且严格窗口会话必须能在无 TCC 下创建、读回和干净结束，
 门禁才算通过。
+应用与窗口发现还会锁定九字段 App 记录、十字段 WindowServer 记录、整数光标坐标和
+逻辑屏幕几何类型；冷启动返回的窗口投影必须在随后完整窗口清单中保持同一 pid/window
+身份，避免 Agent 把停止 App 的 pid 0 或 `list_apps` 中故意为空的 `windows` 当成可操作目标。
 普通仓库测试还会从固定的原生/浏览器合同推导同一组 49 个工具，并要求每个准确工具名都能
 在 Skill 文档中被发现，避免诊断用 `get_screen_size` 或显式版本提示
 `check_for_update` 只存在于 schema、却无法被 ZCode Agent 正确路由。

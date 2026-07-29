@@ -14,6 +14,7 @@ Common flow:
 | --- | --- |
 | Stable driver diagnosis | `health_report({})`; require schema v1/darwin/pinned version and inspect named check statuses/hints |
 | Fast app/window inventory | `get_accessibility_tree({})`; discovery only, then bind through exact window state |
+| Installed/running app inventory | `list_apps({})`; stopped apps use `pid:0`, and its per-app `windows` is always empty |
 | Read connection-effective image cap | `get_config({})` |
 | Temporarily request native-size PNGs | `set_config({max_image_dimension:0})`; restore the prior value immediately on the same MCP connection |
 | Permission status | `check_permissions({prompt:false})` |
@@ -70,6 +71,17 @@ For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact
 process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the
 forceful second rung for a still-live exact pid, never a name-wide cleanup.
+
+Pinned `list_apps` entries contain exactly `pid`, `name`, `bundle_id`,
+`active`, `running`, `launch_path`, `kind`, `last_used`, and the deliberately
+empty `windows`. A stopped installed app has pid 0; a running app has a positive
+pid; `active:true` implies running. Pinned `list_windows` entries contain
+`window_id`, `pid`, `app_name`, `title`, `bounds`, `layer`, `z_index`,
+`is_on_screen`, `on_current_space`, and `space_ids`; the top-level
+`current_space_id` is currently null. `launch_app.windows` is the immediate
+six-field projection (`window_id`, `pid`, `app_name`, `title`, `bounds`,
+`is_on_screen`). It is usable as a returned target, while a later state change
+requires fresh exact enumeration.
 
 Pinned macOS `bring_to_front` has the exact schema `{pid, window_id?}` with no
 session field. With a returned window ID it first requests exact WindowServer
