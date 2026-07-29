@@ -220,8 +220,8 @@ def main() -> int:
     required = load_contracts(scripts / "verify-cua-native-schema.py") | load_contracts(
         scripts / "verify-cua-browser-schema.py"
     )
-    if len(required) != 47:
-        fail(f"expected 47 pinned tools, got {len(required)}")
+    if len(required) != 49:
+        fail(f"expected 49 pinned tools, got {len(required)}")
 
     client = MCPClient(binary, socket)
     peer = MCPClient(binary, socket)

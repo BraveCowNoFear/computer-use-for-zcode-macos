@@ -204,8 +204,10 @@ class RepositoryContractTests(unittest.TestCase):
             "stop_recording",
             "get_recording_state",
             "replay_trajectory",
+            "install_ffmpeg",
         ):
             self.assertRegex(launcher, rf"\b{recording_tool}\b")
+        self.assertRegex(launcher, r"\bcheck_for_update\b")
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -323,6 +325,8 @@ class RepositoryContractTests(unittest.TestCase):
             "stop_recording",
             "get_recording_state",
             "replay_trajectory",
+            "install_ffmpeg",
+            "check_for_update",
         ):
             self.assertIn(f'"{tool}"', native_verifier)
         self.assertIn(
@@ -395,7 +399,7 @@ class RepositoryContractTests(unittest.TestCase):
         native, browser = contract_sets
         self.assertTrue(native.isdisjoint(browser))
         self.assertEqual(required, native | browser)
-        self.assertEqual(len(required), 47)
+        self.assertEqual(len(required), 49)
 
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")

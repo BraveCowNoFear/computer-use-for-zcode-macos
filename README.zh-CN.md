@@ -195,12 +195,12 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
 兜底，检查固定发布归档与 Cua AI 签名身份，直接解析该签名二进制的十个浏览器
-（类型化加旧版兼容）和三十七个原生观察/动作/生命周期/配置请求 schema，覆盖
+（类型化加旧版兼容）和三十九个原生/驱动服务请求 schema，覆盖
 全部必需主后端工具，并运行
 真实 Plugin 自有首次安装。实际 unrestricted daemon 还必须完成无需 TCC 的
 应用/窗口/屏幕/光标发现，并通过 ZCode 实际使用的 stdio MCP 代理只终止一个 CI
 自己创建的临时进程；stdio 门禁还会拒绝畸形、重复、缺失或意外出现的工具名，确保
-ZCode 收到的正是已审计的 47 工具面；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接
+ZCode 收到的正是已审计的 49 工具面；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接
 `describe` 契约完全一致，并且严格窗口会话必须能在无 TCC 下创建、读回和干净结束，
 门禁才算通过。
 真实的后台

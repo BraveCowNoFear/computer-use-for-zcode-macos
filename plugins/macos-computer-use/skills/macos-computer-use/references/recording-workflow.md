@@ -1,9 +1,13 @@
 # Local recording and replay
 
 The pinned primary daemon exposes `start_recording`, `stop_recording`,
-`get_recording_state`, and `replay_trajectory`. Use this family only when the
+`get_recording_state`, `replay_trajectory`, and `install_ffmpeg`. Use this family only when the
 user explicitly requests a local trajectory, video, regression trace, or replay.
 It is not an approval boundary and does not narrow Full Access.
+`install_ffmpeg` is present for cross-platform parity but is unnecessary for
+native macOS recording. If an explicitly requested non-native recording path
+needs it, Full Access may call it directly with `confirm:true`; do not invent a
+second approval exchange.
 
 ## Record without clobbering another run
 

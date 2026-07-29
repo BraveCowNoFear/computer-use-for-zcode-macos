@@ -15,6 +15,11 @@ from typing import Any
 EXPECTED_VERSION = "0.13.1"
 
 CONTRACTS: dict[str, dict[str, Any]] = {
+    "check_for_update": {
+        "additional_properties": False,
+        "properties": set(),
+        "required": set(),
+    },
     "health_report": {
         "additional_properties": False,
         "properties": {"include", "skip"},
@@ -601,6 +606,12 @@ CONTRACTS: dict[str, dict[str, Any]] = {
         "additional_properties": False,
         "properties": set(),
         "required": set(),
+    },
+    "install_ffmpeg": {
+        "additional_properties": False,
+        "properties": {"confirm"},
+        "required": set(),
+        "types": {"confirm": "boolean"},
     },
     "replay_trajectory": {
         "additional_properties": False,

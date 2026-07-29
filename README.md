@@ -241,7 +241,7 @@ running and cleans up only a temporary grant daemon it started itself.
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
 AI signer identity plus both executable hashes, parses all ten browser
-(typed plus legacy compatibility) and thirty-seven native
+(typed plus legacy compatibility) and thirty-nine native/driver-service
 observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
@@ -258,7 +258,7 @@ disappear. The public
 MCP `prompt:true` path must fail at the trusted-host
 macOS TCC boundary without opening permission UI. The stdio gate also rejects
 malformed, duplicate, missing, or unexpected tool names, so ZCode receives
-exactly the audited 47-tool surface. Every mandatory MCP
+exactly the audited 49-tool surface. Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.
