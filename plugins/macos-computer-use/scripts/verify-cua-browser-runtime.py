@@ -561,11 +561,13 @@ def close_owned_browser_chain(
     ):
         fail("ending the browser session modified or terminated the source browser")
 
-    _, killed_content = client.call("kill_app", {"pid": source_pid})
+    killed_value, killed_content = client.call("kill_app", {"pid": source_pid})
+    if killed_value is not None:
+        fail(f"source browser kill unexpectedly returned structured content: {killed_value}")
     require_text(
         "source browser kill",
         killed_content,
-        f"Killed app pid {source_pid} (SIGKILL).",
+        f"✅ Sent SIGKILL to pid {source_pid}.",
     )
     wait_until("source browser process exit", lambda: not process_exists(source_pid))
 
