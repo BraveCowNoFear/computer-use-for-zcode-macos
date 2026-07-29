@@ -200,6 +200,18 @@ proves real transport, argument, host-proof, and
 tool dispatch without requiring TCC or touching a person's browser profile;
 it does not substitute for the logged-in Mac live-page gate described above.
 
+The next signed-primary gate is a positive, fully local isolated-profile chain.
+It launches an installed Chrome/Edge binary with a disposable source profile,
+then requires `browser_prepare({allow_launch:true,profile:{mode:"isolated_new"}})`
+to return a different driver-owned pid and exact side-effect/endpoint proof.
+Only the prepared window is bound. It navigates to a loopback fixture, obtains
+fresh `semantic_v2` action refs, applies a DOM-event click and trusted
+replace-type, and re-snapshots after each mutation to prove the counter and
+input value. `end_session` must close the prepared windows while the source
+window remains; the verifier then kills only that owned source pid and removes
+both temporary fixtures. No TCC grant, external page, personal browser profile,
+or physical input is involved.
+
 ## Recovery and support
 
 - `browser_requires_setup`: call `browser_prepare` once with the intended live

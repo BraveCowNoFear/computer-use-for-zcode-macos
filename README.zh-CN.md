@@ -220,7 +220,11 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 显式只读 `check_for_update` 则只校验公开 release 状态与文字且不发送任何自动化捕获内容；
 同一签名 stdio 路由还会真实调用全部九个类型化浏览器工具：`browser_prepare` 必须停在精确的
 不启动 setup 拒绝，其余状态、导航、点击、输入、指针、对话框、上传和下载调用必须针对故意不存在的
-会话 target 统一返回精确结构化 `browser_binding_stale`，并证明本地上传/下载探针没有变化；再通过 ZCode
+会话 target 统一返回精确结构化 `browser_binding_stale`，并证明本地上传/下载探针没有变化；随后只把
+一次性 Chrome/Edge 用户目录当作已证明的 Chromium 可执行文件，让 `browser_prepare` 启动另一个独立的
+driver-owned 隔离浏览器，精确绑定其原生窗口，只导航到回环测试页，从语义快照取得 action ref，完成一次
+DOM-event 点击与一次 trusted 覆盖输入，每次变更后重新快照并证明计数器/输入值；结束会话必须只关闭驱动
+浏览器，源浏览器保持存活直到单独的自有清理；再通过 ZCode
 实际使用的 stdio MCP 代理只终止一个 CI 自己创建的临时进程；冷启动 App 的清理还会
 同时等待进程与最终一致的 App 清单移除该 pid。App 运行摘要、窗口数量摘要、整数光标
 位置文字以及主显示器点/缩放文字都必须由同一份结构化返回精确生成。stdio 门禁还会拒绝畸形、重复、缺失或

@@ -300,6 +300,15 @@ and local upload/download fixtures must remain unchanged. This is a real
 permission-free dispatch contract, not a claim that a live browser page was
 mutated without a logged-in macOS GUI.
 
+A separate signed-primary browser gate does exercise a successful live page
+without using a person's profile. A disposable source Chrome/Edge process
+proves the executable identity; `browser_prepare` must launch a distinct
+driver-owned `isolated_new` process. The verifier binds its native window,
+navigates only to `127.0.0.1`, snapshots semantic click/type refs, mutates and
+freshly re-observes both values, then proves session cleanup closes only the
+prepared browser. This is the positive page counterpart to the nine-route
+refusal contract; neither path relaxes exact target/tab/ref freshness.
+
 `check_permissions({prompt:false})` is the read-only MCP inspection call.
 Pinned 0.13.1 refuses public `prompt:true` calls before platform dispatch in
 every permission mode. This is a macOS TCC boundary, not a plugin action-risk

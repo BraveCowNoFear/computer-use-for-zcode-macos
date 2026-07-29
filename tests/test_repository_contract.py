@@ -349,6 +349,10 @@ class RepositoryContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn('--tcc-status-file "$tcc_status"', workflow)
+        self.assertIn(
+            "python plugins/macos-computer-use/scripts/verify-cua-browser-runtime.py",
+            workflow,
+        )
         self.assertIn('--env "HOME=$unrelated_home"', workflow)
         self.assertIn('test ! -e "$unrelated_home/.cua-driver/config.json"', workflow)
         self.assertIn('value["accessibility"] and value["screen_recording"]', workflow)
@@ -504,6 +508,30 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("end_session", {"session": session})', mcp_runtime)
         self.assertIn('"name": "kill_app"', mcp_runtime)
         self.assertIn('["/bin/sleep", "60"]', mcp_runtime)
+
+        browser_runtime = (
+            PLUGIN / "scripts" / "verify-cua-browser-runtime.py"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            '"profile": {"mode": "isolated_new"}',
+            '"allow_launch": True',
+            '"browser_prepare"',
+            '"get_browser_state"',
+            '"browser_navigate"',
+            '"browser_click"',
+            '"browser_type"',
+            '"snapshot_format": "semantic_v2"',
+            '"input_route": "dom_event"',
+            '"replace": True',
+            "ZCODE_TYPED_BROWSER_MARKER_V1",
+            "127.0.0.1",
+            "driver-owned browser cleanup",
+            "ending the browser session modified or terminated the source browser",
+            'client.call("kill_app", {"pid": source_pid})',
+            "shutil.rmtree(temp_root, ignore_errors=True)",
+        ):
+            self.assertIn(marker, browser_runtime)
+        self.assertNotIn("http://example", browser_runtime)
 
         skill = (PLUGIN / "skills" / "macos-computer-use" / "SKILL.md").read_text(
             encoding="utf-8"
@@ -1634,6 +1662,8 @@ class RepositoryContractTests(unittest.TestCase):
             "do not forge private approval fields",
             "invokes all nine typed tools through the same stdio",
             "local upload/download fixtures must remain\nunchanged",
+            "positive, fully local isolated-profile chain",
+            "fresh `semantic_v2` action refs",
         ):
             self.assertIn(marker, reference)
         for prohibited in (
