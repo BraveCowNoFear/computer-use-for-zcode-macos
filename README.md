@@ -246,8 +246,9 @@ disposable CI-owned process through the same stdio MCP proxy ZCode uses before
 the job passes. That proxy must also prove per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
 and one-way `auto` session escalation to desktop scope before restoring/ending
-its owned state. It also launches an isolated Calculator, binds a returned
-pid/window, kills only that owned pid, and requires it to disappear. The public
+its owned state. It also cold-launches a stopped Calculator or TextEdit, binds
+the returned new pid/window, kills only that owned pid, and requires it to
+disappear. The public
 MCP `prompt:true` path must fail at the trusted-host
 macOS TCC boundary without opening permission UI. Every mandatory MCP
 `inputSchema` must exactly match the same

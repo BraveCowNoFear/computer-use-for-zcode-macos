@@ -199,6 +199,16 @@ def process_exists(pid: int) -> bool:
     return True
 
 
+def process_command(pid: int) -> str:
+    completed = subprocess.run(
+        ["/bin/ps", "-p", str(pid), "-o", "comm="],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else ""
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit(
@@ -318,30 +328,48 @@ def main() -> int:
         apps = require_object("list_apps", apps, {"apps"})
         if not isinstance(apps["apps"], list):
             fail("list_apps.apps is not an array")
-        existing_calculator_pids = {
+        existing_app_pids = {
             app.get("pid")
             for app in apps["apps"]
             if isinstance(app, dict)
-            and app.get("bundle_id") == "com.apple.calculator"
             and type(app.get("pid")) is int
             and app["pid"] > 0
         }
 
+        lifecycle_candidates = (
+            ("com.apple.calculator", "Calculator"),
+            ("com.apple.TextEdit", "TextEdit"),
+        )
+        lifecycle_target: tuple[str, str] | None = None
+        for candidate in lifecycle_candidates:
+            bundle_id, _ = candidate
+            matching_apps = [
+                app
+                for app in apps["apps"]
+                if isinstance(app, dict) and app.get("bundle_id") == bundle_id
+            ]
+            if matching_apps and not any(
+                type(app.get("pid")) is int and app["pid"] > 0
+                for app in matching_apps
+            ):
+                lifecycle_target = candidate
+                break
+        if lifecycle_target is None:
+            fail("no installed, stopped Calculator or TextEdit is safe to own")
+        owned_bundle_id, owned_app_name = lifecycle_target
+
         launched, _ = client.call(
             "launch_app",
-            {
-                "bundle_id": "com.apple.calculator",
-                "creates_new_application_instance": True,
-            },
+            {"bundle_id": owned_bundle_id},
         )
         launched_pid = launched.get("pid") if isinstance(launched, dict) else None
         if (
             type(launched_pid) is not int
             or launched_pid <= 0
-            or launched_pid in existing_calculator_pids
+            or launched_pid in existing_app_pids
             or launched_pid in {os.getpid(), client.process.pid, peer.process.pid}
         ):
-            fail(f"launch_app did not return a new owned Calculator pid: {launched}")
+            fail(f"launch_app did not return a new owned {owned_app_name} pid: {launched}")
         owned_app_pid = launched_pid
 
         launched_app: dict[str, Any] | None = None
@@ -363,18 +391,22 @@ def main() -> int:
             )
             if (
                 launched_app is not None
-                and launched_app.get("bundle_id") == "com.apple.calculator"
+                and launched_app.get("bundle_id") == owned_bundle_id
             ):
                 break
             time.sleep(0.05)
         if (
             launched_app is None
-            or launched_app.get("bundle_id") != "com.apple.calculator"
+            or launched_app.get("bundle_id") != owned_bundle_id
         ):
-            fail(
-                "fresh list_apps did not bind the owned pid to Calculator: "
-                f"launch={launched}, inventory_app={launched_app}"
-            )
+            command = process_command(launched_pid)
+            expected_suffix = f"/{owned_app_name}.app/Contents/MacOS/{owned_app_name}"
+            if not command.endswith(expected_suffix):
+                fail(
+                    "fresh list_apps and the OS process path did not bind the owned pid "
+                    f"to {owned_bundle_id}: launch={launched}, "
+                    f"inventory_app={launched_app}, command={command!r}"
+                )
 
         launched_windows = launched.get("windows", [])
         if not isinstance(launched_windows, list):
@@ -390,10 +422,12 @@ def main() -> int:
         while not owned_windows and time.monotonic() < window_deadline:
             app_windows, _ = client.call("list_windows", {"pid": launched_pid})
             app_windows = require_object(
-                "Calculator list_windows",
+                f"{owned_app_name} list_windows",
                 app_windows,
                 {"windows", "current_space_id"},
             )
+            if not isinstance(app_windows["windows"], list):
+                fail(f"{owned_app_name} list_windows.windows is not an array")
             owned_windows = [
                 window
                 for window in app_windows["windows"]
@@ -404,14 +438,14 @@ def main() -> int:
             if not owned_windows:
                 time.sleep(0.05)
         if not owned_windows:
-            fail(f"new Calculator pid {launched_pid} exposed no owned window")
+            fail(f"new {owned_app_name} pid {launched_pid} exposed no owned window")
 
         client.call("kill_app", {"pid": launched_pid})
         exit_deadline = time.monotonic() + 5
         while process_exists(launched_pid) and time.monotonic() < exit_deadline:
             time.sleep(0.05)
         if process_exists(launched_pid):
-            fail(f"kill_app left owned Calculator pid {launched_pid} alive")
+            fail(f"kill_app left owned {owned_app_name} pid {launched_pid} alive")
         apps_after_kill, _ = client.call("list_apps")
         apps_after_kill = require_object(
             "post-kill list_apps", apps_after_kill, {"apps"}
@@ -420,7 +454,7 @@ def main() -> int:
             isinstance(app, dict) and app.get("pid") == launched_pid
             for app in apps_after_kill["apps"]
         ):
-            fail(f"list_apps retained killed Calculator pid {launched_pid}")
+            fail(f"list_apps retained killed {owned_app_name} pid {launched_pid}")
         owned_app_pid = None
 
         windows, _ = client.call("list_windows")
