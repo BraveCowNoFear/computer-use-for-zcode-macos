@@ -295,6 +295,10 @@ The same signed-primary gate locks ordinary tool-error semantics:
 starting the selected app, successful `kill_app` remains a text-only SIGKILL
 acknowledgement followed by observed process disappearance, and every nullable
 session-state field is present before and after one-way desktop escalation.
+Its schema-v1 health report is now response-pinned as well: all eight macOS
+checks remain in canonical order, every entry obeys the exact status/hint/data
+shape, `overall` agrees with the check statuses, and an include-only probe
+returns the other seven checks as explicit skips without touching TCC.
 The fresh-session semantic cursor is also response-pinned: its complete state,
 embedded `cua.default` theme identity, nine human-like motion values, idle
 or in-flight bounded visual semantics, idempotent theme/motion setters, enabled

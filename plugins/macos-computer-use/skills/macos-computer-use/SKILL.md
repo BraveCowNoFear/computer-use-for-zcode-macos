@@ -41,7 +41,10 @@ Recording is never enabled as a side effect of ordinary Computer Use.
    TCC/AX failure is `degraded`, not an MCP error: use that check's local
    `hint` to distinguish a missing grant from wrong bundle attribution. The
    health call never grants access and its diagnostic hint is not a plugin
-   approval step.
+   approval step. Each check always has `name`, `status`, and a one-line
+   `message`; a `fail` also has a non-empty `hint`, while optional `data`
+   contains only local runtime diagnostics. Derive decisions from these
+   structured fields, never from the decorative text block.
 2. Call `check_permissions({prompt:false})` for the exact read-only grant state.
    Public MCP calls are status-only in the pinned driver: explicit
    `prompt:true` is refused in every permission mode, including unrestricted,

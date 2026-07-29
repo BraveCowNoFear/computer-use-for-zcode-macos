@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.19"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.20"},
             },
         )
         expected = {
@@ -345,6 +345,227 @@ def require_text_content(
     if value != expected:
         fail(f"{name} text content drifted: {value}")
     return value
+
+
+HEALTH_CHECK_NAMES = (
+    "binary_version",
+    "platform_supported",
+    "session_active",
+    "bundle_identity",
+    "tcc_accessibility",
+    "tcc_screen_recording",
+    "ax_capability",
+    "screen_capture_capability",
+)
+HEALTH_DATA_FIELDS = {
+    "bundle_identifier",
+    "executable_path",
+    "os_version",
+    "architecture",
+    "display_count",
+    "error_detail",
+}
+HEALTH_FILTER_SKIP_MESSAGE = "Skipped by include/skip filter."
+HEALTH_CAPTURE_SKIP_MESSAGE = (
+    "Direct ScreenCaptureKit readiness was not probed because health_report is "
+    "read-only; run `cua-driver permissions grant` to request and verify it "
+    "explicitly."
+)
+
+
+def require_health_entry(name: str, value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail(f"{name} returned a non-object health check")
+    required = {"name", "status", "message"}
+    allowed = required | {"hint", "data"}
+    if not required.issubset(value) or not set(value).issubset(allowed):
+        fail(f"{name} health-check fields drifted: {sorted(value)}")
+    if value["status"] not in {"pass", "fail", "skip"}:
+        fail(f"{name} returned an invalid health-check status: {value}")
+    if (
+        not isinstance(value["name"], str)
+        or not value["name"]
+        or not isinstance(value["message"], str)
+        or not value["message"]
+        or "\n" in value["message"]
+    ):
+        fail(f"{name} returned malformed health-check text: {value}")
+    if value["status"] == "fail":
+        if not isinstance(value.get("hint"), str) or not value["hint"]:
+            fail(f"{name} returned a failure without a remediation hint: {value}")
+    elif "hint" in value:
+        fail(f"{name} returned a hint for a non-failure: {value}")
+    if "data" in value:
+        data = value["data"]
+        if (
+            not isinstance(data, dict)
+            or not data
+            or not set(data).issubset(HEALTH_DATA_FIELDS)
+        ):
+            fail(f"{name} returned malformed health-check data: {data}")
+        for field, item in data.items():
+            if field == "display_count":
+                if type(item) is not int or item < 0:
+                    fail(f"{name}.data.display_count is not a non-negative integer")
+            elif not isinstance(item, str) or not item:
+                fail(f"{name}.data.{field} is not a non-empty string")
+    return value
+
+
+def require_health_report(
+    name: str, value: Any, *, binary_only: bool = False
+) -> dict[str, dict[str, Any]]:
+    report = require_object(
+        name,
+        value,
+        {"schema_version", "platform", "driver_version", "overall", "checks"},
+    )
+    if (
+        report["schema_version"] != "1"
+        or report["platform"] != "darwin"
+        or report["driver_version"] != "0.13.1"
+        or not isinstance(report["checks"], list)
+        or len(report["checks"]) != len(HEALTH_CHECK_NAMES)
+    ):
+        fail(f"{name} returned the wrong runtime identity or check count: {report}")
+    checks = [
+        require_health_entry(f"{name}.checks[{index}]", entry)
+        for index, entry in enumerate(report["checks"])
+    ]
+    actual_names = tuple(entry["name"] for entry in checks)
+    if actual_names != HEALTH_CHECK_NAMES:
+        fail(f"{name} check order drifted: {actual_names}")
+    by_name = {entry["name"]: entry for entry in checks}
+
+    expected_binary = {
+        "name": "binary_version",
+        "status": "pass",
+        "message": "cua-driver 0.13.1",
+    }
+    if by_name["binary_version"] != expected_binary:
+        fail(f"{name}.binary_version drifted: {by_name['binary_version']}")
+
+    if binary_only:
+        if report["overall"] != "ok":
+            fail(f"{name} filtered overall drifted: {report['overall']}")
+        for check_name in HEALTH_CHECK_NAMES[1:]:
+            expected = {
+                "name": check_name,
+                "status": "skip",
+                "message": HEALTH_FILTER_SKIP_MESSAGE,
+            }
+            if by_name[check_name] != expected:
+                fail(
+                    f"{name}.{check_name} filtered result drifted: "
+                    f"{by_name[check_name]}"
+                )
+        return by_name
+
+    platform_entry = by_name["platform_supported"]
+    platform_data = platform_entry.get("data")
+    if (
+        set(platform_entry) != {"name", "status", "message", "data"}
+        or platform_entry["status"] != "pass"
+        or not isinstance(platform_data, dict)
+        or set(platform_data) != {"os_version", "architecture"}
+        or platform_data["architecture"] not in {"arm64", "x86_64"}
+        or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", platform_data["os_version"])
+        or platform_entry["message"]
+        != f"macOS {platform_data['os_version']} ({platform_data['architecture']})"
+    ):
+        fail(f"{name}.platform_supported drifted: {platform_entry}")
+
+    expected_session = {
+        "name": "session_active",
+        "status": "pass",
+        "message": "MCP session is active.",
+    }
+    if by_name["session_active"] != expected_session:
+        fail(f"{name}.session_active drifted: {by_name['session_active']}")
+
+    bundle_entry = by_name["bundle_identity"]
+    bundle_data = bundle_entry.get("data")
+    if (
+        set(bundle_entry) != {"name", "status", "message", "data"}
+        or bundle_entry["status"] != "pass"
+        or bundle_entry["message"] != "Bundle is com.trycua.driver."
+        or not isinstance(bundle_data, dict)
+        or set(bundle_data) != {"bundle_identifier", "executable_path"}
+        or bundle_data["bundle_identifier"] != "com.trycua.driver"
+        or not bundle_data["executable_path"].endswith(
+            "/CuaDriver.app/Contents/MacOS/cua-driver"
+        )
+    ):
+        fail(f"{name}.bundle_identity drifted: {bundle_entry}")
+
+    tcc_messages = {
+        "tcc_accessibility": (
+            "Accessibility is granted.",
+            "Accessibility is NOT granted for this process.",
+        ),
+        "tcc_screen_recording": (
+            "Screen Recording is granted.",
+            "Screen Recording is NOT granted for this process.",
+        ),
+    }
+    for check_name, (pass_message, fail_message) in tcc_messages.items():
+        entry = by_name[check_name]
+        expected_fields = {"name", "status", "message", "data"}
+        if entry["status"] == "fail":
+            expected_fields.add("hint")
+        if (
+            entry["status"] not in {"pass", "fail"}
+            or set(entry) != expected_fields
+            or entry["message"]
+            != (pass_message if entry["status"] == "pass" else fail_message)
+            or entry.get("data") != {"bundle_identifier": "com.trycua.driver"}
+        ):
+            fail(f"{name}.{check_name} drifted: {entry}")
+
+    ax_entry = by_name["ax_capability"]
+    accessibility_passed = by_name["tcc_accessibility"]["status"] == "pass"
+    expected_ax = {
+        "name": "ax_capability",
+        "status": "pass" if accessibility_passed else "fail",
+        "message": (
+            "AX is trusted and reachable."
+            if accessibility_passed
+            else "AX is not trusted; UI inspection and event posting will fail."
+        ),
+    }
+    if not accessibility_passed:
+        expected_ax["hint"] = ax_entry.get("hint")
+        if (
+            not isinstance(expected_ax["hint"], str)
+            or "tcc_accessibility" not in expected_ax["hint"]
+        ):
+            fail(f"{name}.ax_capability remediation drifted: {ax_entry}")
+    if ax_entry != expected_ax:
+        fail(f"{name}.ax_capability drifted: {ax_entry}")
+
+    expected_capture = {
+        "name": "screen_capture_capability",
+        "status": "skip",
+        "message": HEALTH_CAPTURE_SKIP_MESSAGE,
+    }
+    if by_name["screen_capture_capability"] != expected_capture:
+        fail(
+            f"{name}.screen_capture_capability drifted: "
+            f"{by_name['screen_capture_capability']}"
+        )
+
+    failed = [entry["name"] for entry in checks if entry["status"] == "fail"]
+    core_failed = any(
+        check_name in {"binary_version", "platform_supported", "session_active"}
+        for check_name in failed
+    )
+    expected_overall = "failed" if core_failed else ("degraded" if failed else "ok")
+    if report["overall"] != expected_overall:
+        fail(
+            f"{name} overall disagreed with check statuses: "
+            f"{report['overall']} != {expected_overall}"
+        )
+    return by_name
 
 
 def require_config(name: str, value: Any) -> int:
@@ -858,47 +1079,15 @@ def main() -> int:
             if advertised[name]["annotations"] != expected:
                 fail(f"tools/list service annotations drifted for {name}")
 
-        health, _ = client.call("health_report")
-        health = require_object(
-            "health_report",
-            health,
-            {"schema_version", "platform", "driver_version", "overall", "checks"},
+        filtered_health, _ = client.call(
+            "health_report", {"include": ["binary_version"]}
         )
-        if (
-            health["schema_version"] != "1"
-            or health["platform"] != "darwin"
-            or health["driver_version"] != "0.13.1"
-            or health["overall"] not in {"ok", "degraded"}
-            or not isinstance(health["checks"], list)
-        ):
-            fail(f"health_report returned the wrong runtime identity: {health}")
-        health_checks = {
-            entry.get("name"): entry
-            for entry in health["checks"]
-            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-        }
-        expected_health_checks = {
-            "binary_version",
-            "platform_supported",
-            "session_active",
-            "bundle_identity",
-            "tcc_accessibility",
-            "tcc_screen_recording",
-            "ax_capability",
-            "screen_capture_capability",
-        }
-        if set(health_checks) != expected_health_checks:
-            fail(f"health_report checks drifted: {sorted(health_checks)}")
-        for name in (
-            "binary_version",
-            "platform_supported",
-            "session_active",
-            "bundle_identity",
-        ):
-            if health_checks[name].get("status") != "pass":
-                fail(f"health_report core check {name} did not pass: {health_checks[name]}")
-        if health_checks["screen_capture_capability"].get("status") != "skip":
-            fail("read-only health_report unexpectedly probed direct screen capture")
+        require_health_report(
+            "filtered health_report", filtered_health, binary_only=True
+        )
+
+        health, _ = client.call("health_report")
+        health_checks = require_health_report("health_report", health)
 
         permissions, _ = client.call("check_permissions", {"prompt": False})
         permissions = require_object(

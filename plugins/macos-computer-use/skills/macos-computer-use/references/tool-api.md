@@ -79,6 +79,12 @@ names. On macOS, `binary_version`, `platform_supported`, `session_active`, and
 `bundle_identity` must pass before control. TCC and capability failures carry
 local remediation hints; `screen_capture_capability` may be `skip` because the
 read-only report deliberately does not trigger ScreenCaptureKit consent.
+Every canonical check remains in order even when `include` or `skip` filters
+it: a filtered entry is exactly `status:"skip"` with the filter message. A
+failed entry has a non-empty remediation `hint`; `data`, when present, is a
+non-empty local diagnostic object. `overall` is computed from statuses:
+`failed` for a core failure, otherwise `degraded` for any failure, otherwise
+`ok` (skips do not degrade it).
 
 For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact

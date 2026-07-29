@@ -386,6 +386,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('mcp_schema = entry["inputSchema"]', mcp_runtime)
         self.assertIn('direct_schema = describe(binary, name)', mcp_runtime)
         self.assertIn('client.call("health_report")', mcp_runtime)
+        self.assertIn('{"include": ["binary_version"]}', mcp_runtime)
+        self.assertIn("require_health_report(", mcp_runtime)
         self.assertIn('client.call("check_permissions", {"prompt": False})', mcp_runtime)
         self.assertIn('client.call("get_accessibility_tree")', mcp_runtime)
         self.assertIn("APP_ENTRY_FIELDS = {", mcp_runtime)
@@ -554,6 +556,108 @@ class RepositoryContractTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(RuntimeError, "tool-error envelope drifted"):
             client.call_error("launch_app", {"bundle_id": "com.example.missing"})
+
+    def test_primary_health_report_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_health_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        checks = [
+            {
+                "name": "binary_version",
+                "status": "pass",
+                "message": "cua-driver 0.13.1",
+            },
+            {
+                "name": "platform_supported",
+                "status": "pass",
+                "message": "macOS 15.5 (arm64)",
+                "data": {"os_version": "15.5", "architecture": "arm64"},
+            },
+            {
+                "name": "session_active",
+                "status": "pass",
+                "message": "MCP session is active.",
+            },
+            {
+                "name": "bundle_identity",
+                "status": "pass",
+                "message": "Bundle is com.trycua.driver.",
+                "data": {
+                    "bundle_identifier": "com.trycua.driver",
+                    "executable_path": "/tmp/CuaDriver.app/Contents/MacOS/cua-driver",
+                },
+            },
+            {
+                "name": "tcc_accessibility",
+                "status": "fail",
+                "message": "Accessibility is NOT granted for this process.",
+                "hint": "Grant Accessibility in System Settings.",
+                "data": {"bundle_identifier": "com.trycua.driver"},
+            },
+            {
+                "name": "tcc_screen_recording",
+                "status": "fail",
+                "message": "Screen Recording is NOT granted for this process.",
+                "hint": "Grant Screen Recording in System Settings.",
+                "data": {"bundle_identifier": "com.trycua.driver"},
+            },
+            {
+                "name": "ax_capability",
+                "status": "fail",
+                "message": "AX is not trusted; UI inspection and event posting will fail.",
+                "hint": "Resolve tcc_accessibility first.",
+            },
+            {
+                "name": "screen_capture_capability",
+                "status": "skip",
+                "message": module.HEALTH_CAPTURE_SKIP_MESSAGE,
+            },
+        ]
+        report = {
+            "schema_version": "1",
+            "platform": "darwin",
+            "driver_version": "0.13.1",
+            "overall": "degraded",
+            "checks": checks,
+        }
+        validated = module.require_health_report("health", report)
+        self.assertEqual(tuple(validated), module.HEALTH_CHECK_NAMES)
+
+        filtered_checks = [checks[0]] + [
+            {
+                "name": check_name,
+                "status": "skip",
+                "message": module.HEALTH_FILTER_SKIP_MESSAGE,
+            }
+            for check_name in module.HEALTH_CHECK_NAMES[1:]
+        ]
+        module.require_health_report(
+            "filtered health",
+            dict(report, overall="ok", checks=filtered_checks),
+            binary_only=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "check order drifted"):
+            module.require_health_report(
+                "reordered health",
+                dict(report, checks=[checks[1], checks[0], *checks[2:]]),
+            )
+        with self.assertRaisesRegex(RuntimeError, "without a remediation hint"):
+            drifted_checks = [dict(entry) for entry in checks]
+            drifted_checks[4].pop("hint")
+            module.require_health_report(
+                "missing hint health", dict(report, checks=drifted_checks)
+            )
+        with self.assertRaisesRegex(RuntimeError, "overall disagreed"):
+            module.require_health_report(
+                "wrong overall health", dict(report, overall="ok")
+            )
 
     def test_primary_cursor_state_validators_reject_drift(self):
         path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
