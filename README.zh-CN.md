@@ -201,7 +201,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 应用/窗口/屏幕/光标发现，并通过 ZCode 实际使用的 stdio MCP 代理只终止一个 CI
 自己创建的临时进程；stdio 门禁还会拒绝畸形、重复、缺失或意外出现的工具名，确保
 ZCode 收到的正是已审计的 49 工具面，并锁定工具表外层、描述、标准 MCP 注解、能力
-标签与风险元数据；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接
+标签与风险元数据；初始化握手也会精确锁定协议 `2025-06-18`、仅 tools 能力、Cua
+Driver `0.13.1` 身份以及 macOS 工作流说明；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接
 `describe` 契约完全一致，并且严格窗口会话必须能在无 TCC 下创建、读回和干净结束，
 门禁才算通过。
 真实的后台

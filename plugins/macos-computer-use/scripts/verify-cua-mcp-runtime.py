@@ -17,6 +17,23 @@ from types import ModuleType
 from typing import Any
 
 
+EXPECTED_MACOS_INSTRUCTIONS = """cua-driver: cross-platform background computer-use automation.
+
+Tools let you interact with any app without stealing keyboard focus or moving the visible cursor. Prefer element_index (AX (Accessibility)) paths over pixel coordinates — they work on backgrounded/hidden windows.
+
+Workflow per turn:
+0. start_session(session) once at the start of a run → declares THIS run's identity (a stable id you choose, e.g. "research-1"). Pass that same `session` on every action below. It owns your agent cursor (a distinct color per id) and follows the run across apps/windows. End with end_session(session) when done. Concurrent runs/subagents each use their OWN `session`. (Omitting `session` still works, just with no cursor.)
+1. launch_app  → idempotent, returns pid + windows array in one call. Pass creates_new_application_instance:true if another run may touch the same app, so you get your own window.
+2. (skip list_windows when launch_app already returned a single window)
+3. get_window_state(pid, window_id) → refresh the AX (Accessibility) snapshot, get element indices
+4. click/type_text/press_key using element_index from step 3 (+ your `session`)
+5. get_window_state(pid, window_id) again → verify the action landed
+
+Agent cursor: a per-SESSION overlay cursor visualises where a run is acting without moving the real pointer. It is shown only for a DECLARED session (pass `session`), is color-coded by the session id, and is removed by end_session or the idle-TTL. The same id over MCP, the CLI, or the raw socket drives the same cursor. set_agent_cursor_* tools hide/show/customise it. Note: a pure accessibility-action (element_index) click snaps the cursor with a brief pulse on its first action rather than a long glide, so it can be easy to miss — issue a pixel click or move_cursor first for a visibly gliding demo/recording.
+
+If a `cua-driver` skill is loaded in your harness (Claude Code / Codex / OpenClaw / OpenCode dirs), prefer its detailed workflow — SKILL.md plus MACOS.md (no-foreground contract, AXMenuBar navigation, SkyLight click dispatch). Install with `cua-driver skills install` if not yet present."""
+
+
 def fail(message: str) -> None:
     raise RuntimeError(f"primary MCP runtime verification failed: {message}")
 
@@ -178,11 +195,17 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.2"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.3"},
             },
         )
-        if not isinstance(result.get("serverInfo"), dict):
-            fail("initialize omitted serverInfo")
+        expected = {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "cua-driver", "version": "0.13.1"},
+            "instructions": EXPECTED_MACOS_INSTRUCTIONS,
+        }
+        if result != expected:
+            fail(f"initialize contract drifted: {result}")
         self.notify("notifications/initialized")
 
     def call(

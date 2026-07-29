@@ -260,6 +260,8 @@ macOS TCC boundary without opening permission UI. The stdio gate also rejects
 malformed, duplicate, missing, or unexpected tool names, so ZCode receives
 exactly the audited 49-tool surface. It also pins the tools-list envelope,
 descriptions, standard MCP annotations, capability labels, and risk metadata.
+The initialize handshake is equally exact: protocol `2025-06-18`, the tools-only
+capability, Cua Driver `0.13.1` identity, and its macOS workflow instructions.
 Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must

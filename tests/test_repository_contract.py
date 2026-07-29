@@ -351,6 +351,10 @@ class RepositoryContractTests(unittest.TestCase):
             PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
         ).read_text(encoding="utf-8")
         self.assertIn('client.request("tools/list")', mcp_runtime)
+        self.assertIn('"protocolVersion": "2025-06-18"', mcp_runtime)
+        self.assertIn('"serverInfo": {"name": "cua-driver", "version": "0.13.1"}', mcp_runtime)
+        self.assertIn('"instructions": EXPECTED_MACOS_INSTRUCTIONS', mcp_runtime)
+        self.assertIn('"initialize contract drifted:', mcp_runtime)
         self.assertIn('dump_docs(binary)', mcp_runtime)
         self.assertIn('"capability_version", "schema_version"', mcp_runtime)
         self.assertIn('"tools/list.description drifted from dump-docs', mcp_runtime)
