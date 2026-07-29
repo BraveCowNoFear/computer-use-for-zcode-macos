@@ -1623,6 +1623,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift", fixture)
         self.assertIn('button.setKeyEquivalent_(" ")', fixture)
         self.assertIn("def publish_state", fixture)
+        self.assertIn("def controlTextDidChange_", fixture)
+        self.assertIn("field.setDelegate_(handler)", fixture)
         self.assertIn('publish_state(field=value, received=value)', fixture)
 
     def test_live_smoke_maps_cocoa_fixture_geometry_into_png_pixels(self):

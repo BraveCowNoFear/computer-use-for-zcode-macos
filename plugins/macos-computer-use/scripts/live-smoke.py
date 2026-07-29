@@ -1607,13 +1607,17 @@ def run_fallback(fixture_state_path: Path) -> dict[str, Any]:
 
         state, content = client.call(
             "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
+            {"window": window, "include_screenshot": True, "include_text": False},
         )
         require_image(content, "fallback window state after typing")
-        accessibility_tree = state.get("accessibility", {}).get("tree")
-        if not isinstance(accessibility_tree, str):
-            raise RuntimeError("Fallback Accessibility re-observation returned no tree")
-        if token not in accessibility_tree:
+        try:
+            wait_for_fixture_state(
+                fixture_state_path,
+                lambda value: value.get("field") == token,
+                "field input after first typing attempt",
+                timeout=1.0,
+            )
+        except RuntimeError:
             field_x, field_y = fixture_screenshot_point(
                 state,
                 FIXTURE_FIELD_CENTER_X,
@@ -1658,15 +1662,15 @@ def run_fallback(fixture_state_path: Path) -> dict[str, Any]:
                 {
                     "window": state["window"],
                     "include_screenshot": True,
-                    "include_text": True,
+                    "include_text": False,
                 },
             )
             require_image(content, "fallback window state after retry typing")
-            accessibility_tree = state.get("accessibility", {}).get("tree")
-            if not isinstance(accessibility_tree, str) or token not in accessibility_tree:
-                raise RuntimeError(
-                    "Fallback desktop typing did not appear in the Accessibility tree after one refocus retry"
-                )
+            wait_for_fixture_state(
+                fixture_state_path,
+                lambda value: value.get("field") == token,
+                "field input after one refocus retry",
+            )
         report["steps"].append("fallback_field_text_verified")
 
         click_x, click_y = fixture_button_screenshot_point(state)

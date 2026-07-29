@@ -43,6 +43,9 @@ class FixtureHandler(NSObject):
         self.label.setStringValue_(f"Received: {value}")
         publish_state(field=value, received=value)
 
+    def controlTextDidChange_(self, notification) -> None:
+        publish_state(field=str(notification.object().stringValue()))
+
     @objc.IBAction
     def sliderChanged_(self, sender) -> None:
         value = int(round(sender.doubleValue()))
@@ -183,6 +186,7 @@ def main() -> int:
     handler = FixtureHandler.alloc().initWithField_label_sliderLabel_menuLabel_(
         field, result, slider_result, menu_result
     )
+    field.setDelegate_(handler)
     button.setTarget_(handler)
     button.setAction_("submit:")
     button.setKeyEquivalent_(" ")
