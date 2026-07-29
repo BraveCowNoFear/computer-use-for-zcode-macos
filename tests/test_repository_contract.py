@@ -526,6 +526,7 @@ class RepositoryContractTests(unittest.TestCase):
             "ZCODE_TYPED_BROWSER_MARKER_V1",
             "127.0.0.1",
             "driver-owned browser cleanup",
+            "exact driver-owned browser binding diagnostics",
             "ending the browser session modified or terminated the source browser",
             'client.call("kill_app", {"pid": source_pid})',
             "shutil.rmtree(temp_root, ignore_errors=True)",

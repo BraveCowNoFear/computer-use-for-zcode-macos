@@ -306,12 +306,28 @@ def require_prepare(value: Any, content: Any, source_pid: int) -> int:
     return prepared_pid
 
 
-def wait_for_binding(client: Any, session: str, pid: int) -> tuple[int, dict[str, Any]]:
+def wait_for_binding(
+    client: Any, session: str, pid: int, product: str
+) -> tuple[int, dict[str, Any]]:
     selected: tuple[int, dict[str, Any]] | None = None
+    diagnostics: dict[str, Any] = {
+        "prepared_pid": pid,
+        "prepared_windows": [],
+        "product_windows": [],
+        "bind_results": [],
+    }
 
     def observe() -> bool:
         nonlocal selected
-        for window in list_windows(client, pid):
+        prepared_windows = list_windows(client, pid)
+        diagnostics["prepared_windows"] = prepared_windows
+        diagnostics["product_windows"] = [
+            window
+            for window in list_windows(client)
+            if app_name_matches(product, window.get("app_name"))
+        ]
+        bind_results = []
+        for window in prepared_windows:
             window_id = window.get("window_id")
             if not isinstance(window_id, int):
                 continue
@@ -319,6 +335,10 @@ def wait_for_binding(client: Any, session: str, pid: int) -> tuple[int, dict[str
                 "get_browser_state",
                 {"session": session, "pid": pid, "window_id": window_id},
             )
+            bind_results.append(
+                {"window_id": window_id, "structured": value, "content": content}
+            )
+            diagnostics["bind_results"] = bind_results
             if not isinstance(value, dict) or value.get("status") != "ok":
                 continue
             tabs = value.get("tabs")
@@ -339,7 +359,13 @@ def wait_for_binding(client: Any, session: str, pid: int) -> tuple[int, dict[str
                 return True
         return False
 
-    wait_until("exact driver-owned browser binding", observe, timeout=25)
+    try:
+        wait_until("exact driver-owned browser binding", observe, timeout=25)
+    except RuntimeError:
+        fail(
+            "exact driver-owned browser binding diagnostics: "
+            + json.dumps(diagnostics, sort_keys=True, separators=(",", ":"))
+        )
     assert selected is not None
     return selected
 
@@ -453,7 +479,7 @@ def main() -> int:
             },
         )
         prepared_pid = require_prepare(prepared_value, prepared_content, source_pid)
-        _, bound = wait_for_binding(client, browser_session, prepared_pid)
+        _, bound = wait_for_binding(client, browser_session, prepared_pid, product)
         target = bound["target_id"]
         tabs = bound["tabs"]
         active = next(tab for tab in tabs if tab["active"] is True)
