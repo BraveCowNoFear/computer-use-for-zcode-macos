@@ -276,6 +276,12 @@ re-applied, and restore it again without TCC or physical input,
 execute `install_ffmpeg` only in its non-running no-confirm preview form, and
 validate the explicit read-only `check_for_update` release state/text without
 sending any captured automation data,
+exercise all nine typed-browser tools through the same signed stdio route:
+`browser_prepare` must stop at its exact no-launch setup refusal, while state,
+navigation, click, type, pointer, dialog, upload, and download calls against a
+deliberately unknown session target must all return the exact structured
+`browser_binding_stale` result without changing the local upload/download
+fixtures,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page
 mutation reaches normal pid/window validation instead of the upstream

@@ -291,6 +291,15 @@ consistency, and exact available/up-to-date/failure summary. A network failure
 is still a well-formed read-only result, not a reason to alter the audited
 runtime. This verifier call sends no captured automation data.
 
+The same signed-primary stdio gate also executes every typed browser route.
+It pins the exact non-running `browser_prepare` setup refusal and the exact
+`browser_binding_stale` result for state/navigation/click/type/pointer/dialog/
+upload/download calls against one deliberately absent session capability. All
+non-target arguments are valid, the MCP host proof is exercised for download,
+and local upload/download fixtures must remain unchanged. This is a real
+permission-free dispatch contract, not a claim that a live browser page was
+mutated without a logged-in macOS GUI.
+
 `check_permissions({prompt:false})` is the read-only MCP inspection call.
 Pinned 0.13.1 refuses public `prompt:true` calls before platform dispatch in
 every permission mode. This is a macOS TCC boundary, not a plugin action-risk

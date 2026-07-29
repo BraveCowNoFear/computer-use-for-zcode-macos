@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.30"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.31"},
             },
         )
         expected = {
@@ -345,6 +345,24 @@ def require_text_content(
     if value != expected:
         fail(f"{name} text content drifted: {value}")
     return value
+
+
+def require_browser_refusal(
+    name: str,
+    value: Any,
+    content: Any,
+    *,
+    code: str,
+    message: str,
+) -> dict[str, Any]:
+    expected = {
+        "status": "refused",
+        "refusal": {"code": code, "message": message},
+    }
+    if value != expected:
+        fail(f"{name} structured refusal drifted: {value}")
+    require_text_content(name, content, f"refused ({code}): {message}")
+    return expected
 
 
 def require_ffmpeg_preview(name: str, value: Any, content: Any) -> dict[str, Any]:
@@ -1475,6 +1493,7 @@ def main() -> int:
     recording_dir: Path | None = None
     recording_dirs: list[Path] = []
     recording_started = False
+    browser_probe_dir: Path | None = None
     try:
         client.initialize()
         peer.initialize()
@@ -2191,6 +2210,130 @@ def main() -> int:
             desktop_unlocked=False,
         )
 
+        prepare_message = (
+            "no owned endpoint is available; pass allow_launch=true with an "
+            "isolated profile and verified approval"
+        )
+        prepare_value, prepare_content = client.call(
+            "browser_prepare", {"session": session, "pid": os.getpid()}
+        )
+        require_browser_refusal(
+            "browser_prepare no-launch route",
+            prepare_value,
+            prepare_content,
+            code="browser_requires_setup",
+            message=prepare_message,
+        )
+
+        browser_probe_dir = Path(
+            tempfile.mkdtemp(
+                prefix="zcode-primary-browser-refusal-",
+                dir=temp_parent if temp_parent else None,
+            )
+        ).resolve()
+        upload_probe = browser_probe_dir / "upload-probe.txt"
+        upload_probe.write_text("local typed-browser route probe\n", encoding="utf-8")
+        download_root = browser_probe_dir / "downloads"
+        download_root.mkdir()
+        missing_target = "bt-zcode-missing"
+        missing_tab = "tab-zcode-missing"
+        stale_message = (
+            f"target {missing_target} is not a live binding in this session — "
+            "re-run get_browser_state with pid + window_id"
+        )
+        typed_browser_refusals = (
+            (
+                "get_browser_state",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "snapshot_format": "semantic_v2",
+                    "include_screenshot": False,
+                },
+            ),
+            (
+                "browser_navigate",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "url": "about:blank",
+                },
+            ),
+            (
+                "browser_click",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "ref": "p1:0",
+                },
+            ),
+            (
+                "browser_type",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "ref": "p1:0",
+                    "text": "zcode-browser-probe",
+                },
+            ),
+            (
+                "browser_pointer",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "action": "hover",
+                    "ref": "p1:0",
+                },
+            ),
+            (
+                "browser_dialog",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "action": "inspect",
+                },
+            ),
+            (
+                "browser_set_input_files",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "ref": "p1:0",
+                    "files": [str(upload_probe)],
+                },
+            ),
+            (
+                "browser_download",
+                {
+                    "session": session,
+                    "target_id": missing_target,
+                    "tab_id": missing_tab,
+                    "ref": "p1:0",
+                    "destination_root": str(download_root),
+                },
+            ),
+        )
+        for tool_name, arguments in typed_browser_refusals:
+            refusal_value, refusal_content = client.call(tool_name, arguments)
+            require_browser_refusal(
+                f"{tool_name} unknown-target route",
+                refusal_value,
+                refusal_content,
+                code="browser_binding_stale",
+                message=stale_message,
+            )
+        if list(download_root.iterdir()) or upload_probe.read_text(encoding="utf-8") != (
+            "local typed-browser route probe\n"
+        ):
+            fail("typed browser refusal routes changed local probe state")
+
         cursor_state, _ = client.call(
             "get_agent_cursor_state", {"session": session}
         )
@@ -2543,11 +2686,13 @@ def main() -> int:
                 pass
         peer.close()
         client.close()
+        if browser_probe_dir is not None:
+            shutil.rmtree(browser_probe_dir, ignore_errors=True)
         for directory in recording_dirs:
             shutil.rmtree(directory, ignore_errors=True)
 
     print(
-        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory, recorder/replay, and non-running service-helper responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, all typed browser stdio routes through exact no-side-effect refusals, permission-free desktop inventory, recorder/replay, and non-running service-helper responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
     )
     return 0
 

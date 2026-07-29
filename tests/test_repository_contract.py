@@ -386,6 +386,24 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("check_for_update")', mcp_runtime)
         self.assertIn("def require_ffmpeg_preview(", mcp_runtime)
         self.assertIn("def require_update_state(", mcp_runtime)
+        self.assertIn("def require_browser_refusal(", mcp_runtime)
+        self.assertIn("typed_browser_refusals = (", mcp_runtime)
+        self.assertIn('"browser_prepare", {"session": session, "pid": os.getpid()}', mcp_runtime)
+        for browser_tool in (
+            "get_browser_state",
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_pointer",
+            "browser_dialog",
+            "browser_set_input_files",
+            "browser_download",
+        ):
+            self.assertIn(f'"{browser_tool}",', mcp_runtime)
+        self.assertIn('code="browser_requires_setup"', mcp_runtime)
+        self.assertIn('code="browser_binding_stale"', mcp_runtime)
+        self.assertIn("list(download_root.iterdir())", mcp_runtime)
+        self.assertIn("typed browser refusal routes changed local probe state", mcp_runtime)
         self.assertIn("if advertised_names != required:", mcp_runtime)
         self.assertIn('"tools/list surface drifted: "', mcp_runtime)
         self.assertIn('"tools/list returned duplicate tool names:', mcp_runtime)
@@ -1614,6 +1632,8 @@ class RepositoryContractTests(unittest.TestCase):
             "adds no approval prompt",
             "adds no second prompt or allowlist",
             "do not forge private approval fields",
+            "invokes all nine typed tools through the same stdio",
+            "local upload/download fixtures must remain\nunchanged",
         ):
             self.assertIn(marker, reference)
         for prohibited in (

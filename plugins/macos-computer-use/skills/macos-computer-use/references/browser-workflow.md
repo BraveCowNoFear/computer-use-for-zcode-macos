@@ -186,6 +186,20 @@ successful dispatch alone as visible completion evidence. If the exact
 pid/window relationship is lost, leave this compatibility route and return to
 native observation rather than guessing.
 
+## Runtime route evidence
+
+The signed-primary CI gate invokes all nine typed tools through the same stdio
+MCP proxy that ZCode uses. A no-launch `browser_prepare` probe must return the
+exact structured `browser_requires_setup` outcome. Each remaining route is
+then called with valid non-target arguments but a deliberately unknown
+session-owned target and must return the same exact
+`browser_binding_stale` capability result before page, input, upload, download,
+or filesystem side effects. The local upload/download fixtures must remain
+unchanged: the upload file is byte-identical and the download root empty. This
+proves real transport, argument, host-proof, and
+tool dispatch without requiring TCC or touching a person's browser profile;
+it does not substitute for the logged-in Mac live-page gate described above.
+
 ## Recovery and support
 
 - `browser_requires_setup`: call `browser_prepare` once with the intended live
