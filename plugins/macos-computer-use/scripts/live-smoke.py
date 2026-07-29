@@ -91,7 +91,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.2"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.3"},
             },
         )
         self.notify("notifications/initialized")
@@ -400,6 +400,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "click",
             "double_click",
             "right_click",
+            "zoom",
         }
         missing = sorted(required - names)
         if missing:
@@ -798,17 +799,58 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             raise RuntimeError("Primary press_key did not submit the fixture value")
         report["steps"].append("primary_background_press_key_verified")
 
-        button = primary_element(state.get("elements", []), "AXButton", "Copy value")
+        zoom_center = primary_screenshot_point(
+            state,
+            FIXTURE_GESTURE_PROBE_CENTER_X,
+            FIXTURE_GESTURE_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        screenshot_width = float(state["screenshot_width"])
+        screenshot_height = float(state["screenshot_height"])
+        zoom_radius = min(
+            30.0,
+            zoom_center[0] - 1.0,
+            screenshot_width - zoom_center[0] - 1.0,
+            zoom_center[1] - 1.0,
+            screenshot_height - zoom_center[1] - 1.0,
+        )
+        if zoom_radius < 8.0:
+            raise RuntimeError(
+                f"Primary zoom target was too close to an image edge: {zoom_center}"
+            )
+        zoomed, zoom_content = client.call(
+            "zoom",
+            {
+                "pid": pid,
+                "window_id": window_id,
+                "x1": zoom_center[0] - zoom_radius,
+                "y1": zoom_center[1] - zoom_radius,
+                "x2": zoom_center[0] + zoom_radius,
+                "y2": zoom_center[1] + zoom_radius,
+            },
+        )
+        require_image(zoom_content, "primary zoom crop")
+        zoom_width = zoomed.get("width")
+        zoom_height = zoomed.get("height")
+        if (
+            not isinstance(zoom_width, (int, float))
+            or not isinstance(zoom_height, (int, float))
+            or zoom_width <= 0
+            or zoom_height <= 0
+            or zoomed.get("mime_type") != "image/jpeg"
+        ):
+            raise RuntimeError(f"Primary zoom returned invalid geometry: {zoomed}")
         clicked, _ = client.call(
             "click",
             {
                 "session": session,
                 "pid": pid,
                 "window_id": window_id,
-                **primary_element_target(button),
+                "x": float(zoom_width) / 2.0,
+                "y": float(zoom_height) / 2.0,
+                "from_zoom": True,
             },
         )
-        require_action_verdict(clicked, "primary click")
+        require_action_verdict(clicked, "primary zoom-bound click")
         cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
         clicked_cursor_position = require_cursor_position(cursor_state, "Primary click")
         if typed_cursor_position is not None and clicked_cursor_position == typed_cursor_position:
@@ -818,7 +860,6 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             )
         report["cursorPosition"] = clicked_cursor_position
         report["steps"].append("primary_session_cursor_animated")
-        report["steps"].append("primary_background_button_clicked")
 
         final_state, final_content = client.call(
             "get_window_state",
@@ -827,6 +868,9 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         require_image(final_content, "primary final window state")
         if expected not in final_state.get("tree_markdown", ""):
             raise RuntimeError(f"Primary final visible/AX result did not contain {expected!r}")
+        if "Gesture: left" not in final_state.get("tree_markdown", ""):
+            raise RuntimeError("Primary zoom-bound click did not reach the gesture probe")
+        report["steps"].append("primary_zoom_bound_click_verified")
         report["steps"].append("primary_visible_result_verified")
 
         escalated, _ = client.call(

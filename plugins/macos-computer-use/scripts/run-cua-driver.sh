@@ -72,7 +72,7 @@ has_required_surface() {
     get_agent_cursor_state set_agent_cursor_enabled set_agent_cursor_motion get_cursor_position get_screen_size \
     move_cursor list_apps list_windows \
     launch_app kill_app get_window_state get_desktop_state click double_click right_click press_key hotkey \
-    type_text scroll set_value drag browser_prepare get_browser_state browser_navigate \
+    type_text scroll set_value drag zoom browser_prepare get_browser_state browser_navigate \
     browser_click browser_type browser_pointer browser_dialog browser_set_input_files browser_download; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1
   done

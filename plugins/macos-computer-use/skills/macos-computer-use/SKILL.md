@@ -189,6 +189,17 @@ coordinates are window-local pixels in the exact returned image: top-left
 origin, x right, y down. Never reuse an old element index or pixel after layout,
 focus, content, selection, dialog, or window changes.
 
+For a small or visually dense primary target, call
+`zoom({pid,window_id,x1,y1,x2,y2})` with a bounded region from the exact fresh
+window PNG and inspect its returned JPEG. The zoom creates one replaceable
+coordinate context per pid. Ground at most one immediate `click` or `type_text`
+in the returned zoom-image pixels by passing the same pid/window and
+`from_zoom:true`, then refresh the full window. Never mix original-window and
+zoom-image coordinates, cross to another window of the same pid, or reuse the
+context after another zoom, layout change, process restart, or MCP restart.
+Zoom enlarges evidence; it does not authorize a target or prove the following
+input landed.
+
 For fallback pixel or raw pointer input, preserve the observed window and
 always pass its fresh
 `screenshotId`; returned image dimensions define the exact Retina coordinate

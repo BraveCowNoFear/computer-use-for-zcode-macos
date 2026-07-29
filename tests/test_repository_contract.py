@@ -166,6 +166,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("move_cursor list_apps", launcher)
         self.assertIn("launch_app kill_app", launcher)
         self.assertIn("click double_click right_click", launcher)
+        self.assertRegex(launcher, r"\bzoom\b")
         for browser_tool in (
             "browser_prepare",
             "get_browser_state",
@@ -344,6 +345,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`set_agent_cursor_motion` with only that session", skill)
         self.assertIn("Motion tuning affects only the semantic overlay", skill)
         self.assertIn("Do not add random target jitter", skill)
+        self.assertIn("`zoom({pid,window_id,x1,y1,x2,y2})`", skill)
+        self.assertIn("one replaceable\ncoordinate context per pid", skill)
+        self.assertIn("`from_zoom:true`", skill)
         self.assertIn('move_cursor({session,x,y,scope:"window"})', skill)
         self.assertIn('`scope:"desktop"` is a different operation', skill)
         self.assertIn("moves the user's\nreal OS pointer", skill)
@@ -481,6 +485,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"hotkey"',
             '"double_click"',
             '"right_click"',
+            '"zoom"',
             "primary_element_target",
             "primary_screenshot_point",
             "require_cursor_action",
@@ -489,6 +494,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_session_cursor_ready"',
             '"primary_human_cursor_motion_verified"',
             '"primary_cursor_motion_restored"',
+            '"primary_zoom_bound_click_verified"',
             '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',
