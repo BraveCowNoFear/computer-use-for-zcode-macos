@@ -209,8 +209,11 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 （类型化加旧版兼容）和三十九个原生/驱动服务请求 schema，覆盖
 全部必需主后端工具，并运行
 真实 Plugin 自有首次安装。实际 unrestricted daemon 还必须完成无需 TCC 的
-应用/窗口/屏幕/光标发现，并通过 ZCode 实际使用的 stdio MCP 代理只终止一个 CI
-自己创建的临时进程；stdio 门禁还会拒绝畸形、重复、缺失或意外出现的工具名，确保
+应用/窗口/屏幕/光标发现，精确返回轻量 Accessibility 清单，在仅写入临时本地
+`session.json` 的前提下完成自有无视频录制的启动、双连接读回与停止，并通过 ZCode
+实际使用的 stdio MCP 代理只终止一个 CI 自己创建的临时进程；冷启动 App 的清理还会
+同时等待进程与最终一致的 App 清单移除该 pid。stdio 门禁还会拒绝畸形、重复、缺失或
+意外出现的工具名，确保
 ZCode 收到的正是已审计的 49 工具面，并锁定工具表外层、描述、标准 MCP 注解、能力
 标签与风险元数据；初始化握手也会精确锁定协议 `2025-06-18`、仅 tools 能力、Cua
 Driver `0.13.1` 身份以及 macOS 工作流说明；同一条真实连接还必须精确返回 JSON-RPC

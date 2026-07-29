@@ -8,9 +8,11 @@ import json
 import os
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from types import ModuleType
@@ -273,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.15"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.16"},
             },
         )
         expected = {
@@ -346,6 +348,67 @@ def require_config(name: str, value: Any) -> int:
     return dimension
 
 
+RECORDING_STATE_FIELDS = {
+    "recording",
+    "enabled",
+    "output_dir",
+    "next_turn",
+    "last_error",
+    "video_active",
+    "last_video_path",
+    "owner",
+}
+
+
+def require_recording_state(name: str, value: Any) -> dict[str, Any]:
+    state = require_object(name, value, RECORDING_STATE_FIELDS)
+    if type(state["recording"]) is not bool or type(state["enabled"]) is not bool:
+        fail(f"{name} omitted recording booleans")
+    if state["recording"] is not state["enabled"]:
+        fail(f"{name}.recording disagreed with enabled")
+    if type(state["next_turn"]) is not int or state["next_turn"] < 1:
+        fail(f"{name}.next_turn is not a positive integer")
+    if type(state["video_active"]) is not bool:
+        fail(f"{name}.video_active is not boolean")
+    for field in ("output_dir", "last_error", "last_video_path", "owner"):
+        if state[field] is not None and not isinstance(state[field], str):
+            fail(f"{name}.{field} is neither a string nor null")
+    return state
+
+
+def require_recording_manifest(name: str, path: Path) -> dict[str, Any]:
+    if not path.is_file() or path.stat().st_size <= 0:
+        fail(f"{name} is missing or empty")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"{name} is invalid JSON: {error}")
+    if not isinstance(manifest, dict) or set(manifest) != {
+        "schema_version",
+        "started_at_monotonic_ms",
+        "video",
+        "cursor",
+    }:
+        fail(f"{name} fields drifted: {manifest}")
+    if (
+        manifest["schema_version"] != 1
+        or type(manifest["started_at_monotonic_ms"]) is not int
+        or manifest["started_at_monotonic_ms"] <= 0
+        or manifest["video"] != {"present": False}
+    ):
+        fail(f"{name} identity/video contract drifted: {manifest}")
+    cursor = manifest["cursor"]
+    if (
+        not isinstance(cursor, dict)
+        or set(cursor) != {"present", "sample_count"}
+        or type(cursor["present"]) is not bool
+        or type(cursor["sample_count"]) is not int
+        or cursor["sample_count"] < 0
+    ):
+        fail(f"{name}.cursor contract drifted: {cursor}")
+    return manifest
+
+
 def process_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -399,6 +462,8 @@ def main() -> int:
     session_started = False
     config_original: int | None = None
     config_changed = False
+    recording_dir: Path | None = None
+    recording_started = False
     try:
         client.initialize()
         peer.initialize()
@@ -596,6 +661,114 @@ def main() -> int:
                 json.dumps(signed_tcc, sort_keys=True) + "\n", encoding="utf-8"
             )
 
+        discovery, _ = client.call("get_accessibility_tree")
+        discovery = require_object(
+            "get_accessibility_tree", discovery, {"apps", "windows"}
+        )
+        discovery_contracts = {
+            "apps": {"pid", "name", "bundle_id"},
+            "windows": {"window_id", "pid", "app_name", "title"},
+        }
+        for collection, fields in discovery_contracts.items():
+            entries = discovery[collection]
+            if not isinstance(entries, list):
+                fail(f"get_accessibility_tree.{collection} is not an array")
+            for entry in entries:
+                if not isinstance(entry, dict) or set(entry) != fields:
+                    fail(
+                        "get_accessibility_tree."
+                        f"{collection} entry fields drifted: {entry}"
+                    )
+                if type(entry["pid"]) is not int or entry["pid"] <= 0:
+                    fail(
+                        f"get_accessibility_tree.{collection} returned an invalid pid"
+                    )
+        for app in discovery["apps"]:
+            if not isinstance(app["name"], str) or (
+                app["bundle_id"] is not None
+                and not isinstance(app["bundle_id"], str)
+            ):
+                fail("get_accessibility_tree returned malformed app identity")
+        for window in discovery["windows"]:
+            if (
+                type(window["window_id"]) is not int
+                or window["window_id"] <= 0
+                or not isinstance(window["app_name"], str)
+                or not isinstance(window["title"], str)
+            ):
+                fail("get_accessibility_tree returned malformed window identity")
+
+        initial_recording = require_recording_state(
+            "initial get_recording_state", client.call("get_recording_state")[0]
+        )
+        expected_disabled_recording = {
+            "recording": False,
+            "enabled": False,
+            "output_dir": None,
+            "next_turn": 1,
+            "last_error": None,
+            "video_active": False,
+            "last_video_path": None,
+            "owner": None,
+        }
+        if initial_recording != expected_disabled_recording:
+            fail(
+                "private daemon began with non-canonical recording state: "
+                f"{initial_recording}"
+            )
+        temp_parent = os.environ.get("RUNNER_TEMP")
+        recording_dir = Path(
+            tempfile.mkdtemp(
+                prefix="zcode-primary-recorder-",
+                dir=temp_parent if temp_parent else None,
+            )
+        ).resolve()
+        started_recording = require_recording_state(
+            "start_recording",
+            client.call(
+                "start_recording",
+                {"output_dir": str(recording_dir), "record_video": False},
+            )[0],
+        )
+        recording_started = True
+        if (
+            started_recording["recording"] is not True
+            or started_recording["output_dir"] != str(recording_dir)
+            or started_recording["next_turn"] != 1
+            or started_recording["last_error"] is not None
+            or started_recording["video_active"] is not False
+            or started_recording["last_video_path"] is not None
+            or not started_recording["owner"]
+        ):
+            fail(f"start_recording returned inconsistent state: {started_recording}")
+        if require_recording_state(
+            "recording owner readback", client.call("get_recording_state")[0]
+        ) != started_recording:
+            fail("get_recording_state did not preserve the recording owner/state")
+        if require_recording_state(
+            "peer recording readback", peer.call("get_recording_state")[0]
+        ) != started_recording:
+            fail("peer MCP connection did not observe daemon-global recording state")
+        session_file = recording_dir / "session.json"
+        started_manifest = require_recording_manifest(
+            "started recording session.json", session_file
+        )
+        if started_manifest["cursor"]["sample_count"] != 0:
+            fail(f"new recording began with cursor samples: {started_manifest}")
+        stopped_recording = require_recording_state(
+            "stop_recording", client.call("stop_recording")[0]
+        )
+        recording_started = False
+        if stopped_recording != expected_disabled_recording:
+            fail(f"stop_recording returned inconsistent state: {stopped_recording}")
+        if require_recording_state(
+            "post-stop recording state", peer.call("get_recording_state")[0]
+        ) != expected_disabled_recording:
+            fail("peer MCP connection retained stopped recording state")
+        require_recording_manifest("final recording session.json", session_file)
+        if (recording_dir / "recording.mp4").exists():
+            fail("record_video:false unexpectedly created recording.mp4")
+
         try:
             client.call("page", {"action": "execute_javascript"})
         except RuntimeError as error:
@@ -730,15 +903,22 @@ def main() -> int:
             time.sleep(0.05)
         if process_exists(launched_pid):
             fail(f"kill_app left owned {owned_app_name} pid {launched_pid} alive")
-        apps_after_kill, _ = client.call("list_apps")
-        apps_after_kill = require_object(
-            "post-kill list_apps", apps_after_kill, {"apps"}
-        )
-        if any(
-            isinstance(app, dict) and app.get("pid") == launched_pid
-            for app in apps_after_kill["apps"]
-        ):
-            fail(f"list_apps retained killed {owned_app_name} pid {launched_pid}")
+        inventory_exit_deadline = time.monotonic() + 10
+        while True:
+            apps_after_kill, _ = client.call("list_apps")
+            apps_after_kill = require_object(
+                "post-kill list_apps", apps_after_kill, {"apps"}
+            )
+            if not isinstance(apps_after_kill["apps"], list):
+                fail("post-kill list_apps.apps is not an array")
+            if not any(
+                isinstance(app, dict) and app.get("pid") == launched_pid
+                for app in apps_after_kill["apps"]
+            ):
+                break
+            if time.monotonic() >= inventory_exit_deadline:
+                fail(f"list_apps retained killed {owned_app_name} pid {launched_pid}")
+            time.sleep(0.05)
         owned_app_pid = None
 
         windows, _ = client.call("list_windows")
@@ -928,11 +1108,26 @@ def main() -> int:
                 )
             except RuntimeError:
                 pass
+        if recording_started and recording_dir is not None:
+            try:
+                current_recording = require_recording_state(
+                    "cleanup recording state", client.call("get_recording_state")[0]
+                )
+                if (
+                    current_recording["enabled"] is True
+                    and current_recording["output_dir"] == str(recording_dir)
+                ):
+                    client.call("stop_recording")
+                    recording_started = False
+            except RuntimeError:
+                pass
         peer.close()
         client.close()
+        if recording_dir is not None:
+            shutil.rmtree(recording_dir, ignore_errors=True)
 
     print(
-        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder responses, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 

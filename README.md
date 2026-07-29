@@ -260,16 +260,19 @@ AI signer identity plus both executable hashes, parses all ten browser
 observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
-permission-free app/window/screen/cursor discovery and terminate only a
-disposable CI-owned process through the same stdio MCP proxy ZCode uses before
-the job passes. That proxy must prove legacy page mutation reaches normal
-pid/window validation instead of the upstream default-disable guard, plus
+permission-free app/window/screen/cursor discovery, return the exact lightweight
+Accessibility inventory shape, run an owned no-video recorder through
+start/read/peer-read/stop while writing only a temporary local `session.json`,
+and terminate only a disposable CI-owned process through the same stdio MCP
+proxy ZCode uses before the job passes. That proxy must prove legacy page
+mutation reaches normal pid/window validation instead of the upstream
+default-disable guard, plus
 per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
 and one-way `auto` session escalation to desktop scope before restoring/ending
 its owned state. It also cold-launches a stopped Calculator or TextEdit, binds
-the returned new pid/window, kills only that owned pid, and requires it to
-disappear. The public
+the returned new pid/window, kills only that owned pid, and waits for both the
+process and the eventually consistent app inventory to drop it. The public
 MCP `prompt:true` path must fail at the trusted-host
 macOS TCC boundary without opening permission UI. The stdio gate also rejects
 malformed, duplicate, missing, or unexpected tool names, so ZCode receives
