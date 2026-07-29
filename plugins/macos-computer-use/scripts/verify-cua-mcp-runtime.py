@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.28"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.29"},
             },
         )
         expected = {
@@ -1061,6 +1061,40 @@ def require_recording_manifest(name: str, path: Path) -> dict[str, Any]:
     ):
         fail(f"{name}.cursor contract drifted: {cursor}")
     return manifest
+
+
+def require_replay_result(
+    name: str,
+    value: Any,
+    content: Any,
+    *,
+    directory: Path,
+    session: str,
+) -> dict[str, Any]:
+    disabled_summary = f"Agent cursor for session '{session}' disabled."
+    expected = {
+        "directory": str(directory),
+        "attempted": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "stop_on_error": True,
+        "turns": [
+            {
+                "turn": "turn-00001",
+                "tool": "set_agent_cursor_enabled",
+                "ok": True,
+                "result_summary": disabled_summary,
+            }
+        ],
+    }
+    if value != expected:
+        fail(f"{name} structured result drifted: {value}")
+    require_text_content(
+        name,
+        content,
+        f"replay {directory.name}: attempted=1 succeeded=1 failed=0",
+    )
+    return value
 
 
 APP_ENTRY_FIELDS = {
@@ -2078,27 +2112,142 @@ def main() -> int:
         if theme_set["session"] != session:
             fail(f"set_agent_cursor_theme returned the wrong session: {theme_set}")
         require_cursor_theme("set_agent_cursor_theme.theme", theme_set["theme"])
-        disabled, _ = client.call(
+        replay_recording_dir = Path(
+            tempfile.mkdtemp(
+                prefix="zcode-primary-replay-",
+                dir=temp_parent if temp_parent else None,
+            )
+        ).resolve()
+        recording_dirs.append(replay_recording_dir)
+        recording_dir = replay_recording_dir
+        replay_start_value, replay_start_content = client.call(
+            "start_recording",
+            {"output_dir": str(replay_recording_dir), "record_video": False},
+        )
+        replay_start = require_recording_state(
+            "replay fixture start_recording", replay_start_value
+        )
+        require_text_content(
+            "replay fixture start_recording",
+            replay_start_content,
+            f"✅ Recording started -> {replay_recording_dir}",
+        )
+        recording_started = True
+        if (
+            replay_start["enabled"] is not True
+            or replay_start["output_dir"] != str(replay_recording_dir)
+            or replay_start["next_turn"] != 1
+            or not replay_start["owner"]
+        ):
+            fail(f"replay fixture recording did not start exactly: {replay_start}")
+
+        disabled, disabled_content = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": False}
         )
         if disabled != {"session": session, "enabled": False}:
             fail(f"set_agent_cursor_enabled did not disable the session cursor: {disabled}")
+        require_text_content(
+            "recorded set_agent_cursor_enabled",
+            disabled_content,
+            f"Agent cursor for session '{session}' disabled.",
+        )
         disabled_state, _ = client.call(
             "get_agent_cursor_state", {"session": session}
         )
         require_cursor_state(
             "disabled get_agent_cursor_state", disabled_state, session, False
         )
-        enabled, _ = client.call(
+
+        replay_live_value, replay_live_content = client.call("get_recording_state")
+        replay_live = require_recording_state(
+            "replay fixture recording state", replay_live_value, replay_live_content
+        )
+        if (
+            replay_live["output_dir"] != str(replay_recording_dir)
+            or replay_live["next_turn"] != 2
+            or replay_live["owner"] != replay_start["owner"]
+        ):
+            fail(f"replay fixture did not record exactly one cursor action: {replay_live}")
+        replay_stop_value, replay_stop_content = client.call("stop_recording")
+        replay_stop = require_recording_state(
+            "replay fixture stop_recording", replay_stop_value
+        )
+        require_text_content(
+            "replay fixture stop_recording",
+            replay_stop_content,
+            "✅ Recording stopped.",
+        )
+        recording_started = False
+        if replay_stop != expected_disabled_recording:
+            fail(f"replay fixture recorder did not stop exactly: {replay_stop}")
+        require_recording_manifest(
+            "replay fixture session.json", replay_recording_dir / "session.json"
+        )
+        replay_action_path = replay_recording_dir / "turn-00001" / "action.json"
+        try:
+            replay_action = json.loads(replay_action_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            fail(f"replay fixture action.json is unavailable: {error}")
+        if (
+            replay_action.get("tool") != "set_agent_cursor_enabled"
+            or replay_action.get("arguments")
+            != {"session": session, "enabled": False}
+        ):
+            fail(f"replay fixture recorded the wrong action: {replay_action}")
+
+        enabled, enabled_content = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": True}
         )
         if enabled != {"session": session, "enabled": True}:
             fail(f"set_agent_cursor_enabled did not restore the session cursor: {enabled}")
+        require_text_content(
+            "set_agent_cursor_enabled before replay",
+            enabled_content,
+            f"Agent cursor for session '{session}' enabled.",
+        )
         restored_cursor, _ = client.call(
             "get_agent_cursor_state", {"session": session}
         )
         require_cursor_state(
             "restored get_agent_cursor_state", restored_cursor, session, True
+        )
+
+        replayed, replayed_content = client.call(
+            "replay_trajectory",
+            {
+                "dir": str(replay_recording_dir),
+                "delay_ms": 0,
+                "stop_on_error": True,
+            },
+        )
+        require_replay_result(
+            "replay_trajectory",
+            replayed,
+            replayed_content,
+            directory=replay_recording_dir,
+            session=session,
+        )
+        replayed_cursor, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        require_cursor_state(
+            "replayed get_agent_cursor_state", replayed_cursor, session, False
+        )
+        final_enabled, final_enabled_content = client.call(
+            "set_agent_cursor_enabled", {"session": session, "enabled": True}
+        )
+        if final_enabled != {"session": session, "enabled": True}:
+            fail(f"set_agent_cursor_enabled did not restore after replay: {final_enabled}")
+        require_text_content(
+            "set_agent_cursor_enabled after replay",
+            final_enabled_content,
+            f"Agent cursor for session '{session}' enabled.",
+        )
+        final_cursor, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        require_cursor_state(
+            "final restored get_agent_cursor_state", final_cursor, session, True
         )
 
         escalated, escalated_content = client.call(
@@ -2290,7 +2439,7 @@ def main() -> int:
             shutil.rmtree(directory, ignore_errors=True)
 
     print(
-        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder/replay responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
     )
     return 0
 

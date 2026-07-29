@@ -446,12 +446,17 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("stop_recording")', mcp_runtime)
         self.assertIn('"zcode-primary-recorder-"', mcp_runtime)
         self.assertIn('"zcode-primary-recorder-takeover-"', mcp_runtime)
+        self.assertIn('"zcode-primary-replay-"', mcp_runtime)
         self.assertIn("did not take over daemon-global ownership", mcp_runtime)
         self.assertIn("manual non-owner stop_recording", mcp_runtime)
         self.assertIn('"✅ Recording stopped."', mcp_runtime)
         self.assertIn('manifest["schema_version"] != 1', mcp_runtime)
         self.assertIn('"final recording session.json"', mcp_runtime)
         self.assertIn('"recording.mp4"', mcp_runtime)
+        self.assertIn('client.call(\n            "replay_trajectory",', mcp_runtime)
+        self.assertIn("def require_replay_result(", mcp_runtime)
+        self.assertIn('"replayed get_agent_cursor_state"', mcp_runtime)
+        self.assertIn('"final restored get_agent_cursor_state"', mcp_runtime)
         self.assertIn('client.call("page", {"action": "execute_javascript"})', mcp_runtime)
         self.assertIn('"legacy page mutations remained constrained', mcp_runtime)
         self.assertIn('"os_permission_prompt_requires_trusted_host"', mcp_runtime)
@@ -1056,6 +1061,53 @@ class RepositoryContractTests(unittest.TestCase):
                 "drifted recording text",
                 enabled,
                 [{"type": "text", "text": "wrong"}],
+            )
+
+        replay_dir = (ROOT / "zcode-replay-contract").resolve()
+        session = "replay-session"
+        replay = {
+            "directory": str(replay_dir),
+            "attempted": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "stop_on_error": True,
+            "turns": [
+                {
+                    "turn": "turn-00001",
+                    "tool": "set_agent_cursor_enabled",
+                    "ok": True,
+                    "result_summary": (
+                        "Agent cursor for session 'replay-session' disabled."
+                    ),
+                }
+            ],
+        }
+        replay_content = [
+            {
+                "type": "text",
+                "text": (
+                    "replay zcode-replay-contract: "
+                    "attempted=1 succeeded=1 failed=0"
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_replay_result(
+                "replay trajectory",
+                replay,
+                replay_content,
+                directory=replay_dir,
+                session=session,
+            ),
+            replay,
+        )
+        with self.assertRaisesRegex(RuntimeError, "structured result drifted"):
+            module.require_replay_result(
+                "drifted replay",
+                dict(replay, succeeded=0),
+                replay_content,
+                directory=replay_dir,
+                session=session,
             )
 
     def test_primary_session_lifecycle_validators_reject_drift(self):

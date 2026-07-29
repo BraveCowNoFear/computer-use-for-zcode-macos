@@ -75,3 +75,11 @@ delay when the user wants to watch. Read its attempted/succeeded/failed counts,
 then re-list the exact window and take a fresh state to verify the visible final
 outcome. Never infer success from the replay count alone, and never replay into
 an active recorder or a restarted/reused pid.
+
+The signed-primary no-TCC gate proves that replay uses the real public dispatch
+path rather than merely parsing files: it records one session-owned semantic
+cursor disable, stops the recorder, restores the cursor, replays the single
+local turn with zero delay, requires the exact one-attempt/one-success response,
+reads the cursor back as disabled, and restores it again. This deterministic
+probe never moves the physical pointer or targets a user window. GUI trajectory
+replay still requires the same fresh target and visible-outcome checks above.

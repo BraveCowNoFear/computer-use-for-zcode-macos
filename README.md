@@ -270,6 +270,9 @@ connections, reject duplicate/invalid app and window identities, run an owned no
 start/read/peer-read/stop while writing only a temporary local `session.json`,
 prove that a second connection takes over the daemon-global owner and that a
 manual stop from the prior connection is unconditional,
+then record one session-cursor toggle, restore it, replay that authentic local
+turn through the public `replay_trajectory` dispatcher, prove the toggle was
+re-applied, and restore it again without TCC or physical input,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page
 mutation reaches normal pid/window validation instead of the upstream
