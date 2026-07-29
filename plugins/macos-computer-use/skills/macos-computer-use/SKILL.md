@@ -147,6 +147,18 @@ coordinates from a fresh `get_desktop_state` exactly like other desktop input.
 4. Re-list after launch, a long pause, a modal transition, or a disappeared
    window. Treat modals and sheets as their returned target window.
 
+To hand a local file/folder or non-browser resource URL to a native app, use
+`launch_app({bundle_id,urls:[target]})`; never substitute shell `open`,
+AppleScript activation, or an unbound default-handler launch. The pinned driver
+preflights local paths/`file://` targets and returns structured `FILE_NOT_FOUND`
+without launching when one is absent. Bind only a returned window that fresh
+state proves represents that exact target. The slow URL/file launch path tries
+to preserve the previous frontmost app and may return
+`self_activation_suppressed`; treat `false` or a missing field as a reason to
+refresh `list_apps`/windows, not as launch failure or permission denial. Use the
+typed `browser_navigate` route instead when navigating an already bound,
+supported browser page target.
+
 `bring_to_front({pid,window_id})` is an explicit persistent activation, not a
 normal input rung. Use it only when the requested outcome requires that exact
 returned window to remain frontmost across calls, or when a focus-proxy surface

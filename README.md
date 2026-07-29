@@ -92,6 +92,10 @@ root/data template variables.
 ## What agents can do
 
 - Discover and launch native apps and select exact returned windows.
+- Hand an existing local file/folder or resource URL to an exact native app
+  through `launch_app.urls`, with structured missing-path errors, returned
+  pid/window binding, focus-suppression readback, fresh observation, and exact
+  test-window cleanup instead of shell `open` or AppleScript activation.
 - Diagnose the pinned driver through its stable schema-v1 health report before
   control, separating core runtime failure, signed bundle attribution, TCC
   grants, AX readiness, and read-only screen-capture status without prompting.

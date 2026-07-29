@@ -21,6 +21,7 @@ Common flow:
 | Move only the visible session cursor | `move_cursor({session, x, y, scope:"window"})` |
 | Unlock desktop for an `auto` session | `escalate_session({session, reason, detail})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
+| Open native file/folder/URL | `launch_app({bundle_id, urls:[target]})`; require an exact returned target window and refresh focus state |
 | Isolated concurrent app | `launch_app({bundle_id, creates_new_application_instance:true})` when advertised |
 | Force exact process exit | `kill_app({pid})` only after verified cooperative quit failure or an explicit force-quit request |
 | List app windows | `list_windows({pid})` |

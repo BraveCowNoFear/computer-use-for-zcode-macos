@@ -368,6 +368,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('`scope:"desktop"` is a different operation', skill)
         self.assertIn("moves the user's\nreal OS pointer", skill)
         self.assertIn("creates_new_application_instance:true", skill)
+        self.assertIn("`launch_app({bundle_id,urls:[target]})`", skill)
+        self.assertIn("structured `FILE_NOT_FOUND`", skill)
+        self.assertIn("`self_activation_suppressed`", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
         self.assertIn("`bring_to_front({pid,window_id})` is an explicit persistent activation", skill)
@@ -568,6 +571,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_real_pointer_restored_and_reobserved"',
             '"primary_isolated_app_lifecycle_verified"',
             '"primary_exact_window_frontmost_verified"',
+            '"primary_background_file_url_launch_verified"',
+            '"primary_exact_file_url_window_closed"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',

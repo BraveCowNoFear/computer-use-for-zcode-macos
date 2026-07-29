@@ -92,7 +92,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.8"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.9"},
             },
         )
         self.notify("notifications/initialized")
@@ -321,6 +321,21 @@ def wait_for_process_exit(pid: int, timeout: float = 4.0) -> bool:
     return not process_is_alive(pid)
 
 
+def wait_for_window_exit(
+    client: MCPClient, pid: int, window_id: int, timeout: float = 4.0
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        listed, _ = client.call("list_windows", {"pid": pid})
+        if not any(
+            window.get("pid") == pid and window.get("window_id") == window_id
+            for window in listed.get("windows", [])
+        ):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
     for element in elements:
         searchable = " ".join(str(element.get(key, "")) for key in ("label", "value"))
@@ -392,6 +407,9 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     original_real_cursor: dict[str, Any] | None = None
     isolated_app_pid: int | None = None
     recording_dir: Path | None = None
+    opened_folder: Path | None = None
+    opened_folder_pid: int | None = None
+    opened_folder_window_id: int | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
@@ -747,6 +765,100 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if "Menu: picked" not in state.get("tree_markdown", ""):
             raise RuntimeError("Primary two-snapshot AX menu command did not reach the fixture")
         report["steps"].append("primary_two_snapshot_native_menu_verified")
+
+        opened_folder = DATA_DIR.resolve() / f"zcode-open-{uuid.uuid4().hex}"
+        opened_folder.mkdir(parents=True, exist_ok=False)
+        launched_folder, _ = client.call(
+            "launch_app",
+            {
+                "session": session,
+                "bundle_id": "com.apple.finder",
+                "urls": [str(opened_folder)],
+            },
+        )
+        finder_pid = launched_folder.get("pid")
+        if (
+            not isinstance(finder_pid, int)
+            or finder_pid <= 0
+            or launched_folder.get("bundle_id") != "com.apple.finder"
+            or launched_folder.get("self_activation_suppressed") is not True
+        ):
+            raise RuntimeError(f"Primary background folder launch was not exact: {launched_folder}")
+        opened_folder_pid = finder_pid
+        folder_title = opened_folder.name
+        folder_windows = [
+            candidate
+            for candidate in launched_folder.get("windows", [])
+            if candidate.get("pid") == finder_pid
+            and candidate.get("title") == folder_title
+            and isinstance(candidate.get("window_id"), int)
+        ]
+        folder_deadline = time.monotonic() + 4.0
+        while len(folder_windows) != 1 and time.monotonic() < folder_deadline:
+            listed_folder_windows, _ = client.call("list_windows", {"pid": finder_pid})
+            folder_windows = [
+                candidate
+                for candidate in listed_folder_windows.get("windows", [])
+                if candidate.get("pid") == finder_pid
+                and candidate.get("title") == folder_title
+                and isinstance(candidate.get("window_id"), int)
+            ]
+            if len(folder_windows) != 1:
+                time.sleep(0.05)
+        if len(folder_windows) != 1:
+            raise RuntimeError(
+                f"Primary folder URL did not produce one exact Finder window: {folder_windows}"
+            )
+        opened_folder_window_id = int(folder_windows[0]["window_id"])
+        apps_after_folder_launch, _ = client.call("list_apps", {})
+        if not any(
+            app.get("pid") == fixture_pid and app.get("active") is True
+            for app in apps_after_folder_launch.get("apps", [])
+        ):
+            raise RuntimeError(
+                "Primary launch_app URL path did not preserve the fixture as frontmost: "
+                f"{apps_after_folder_launch}"
+            )
+        folder_state, folder_content = client.call(
+            "get_window_state",
+            {
+                "session": session,
+                "pid": finder_pid,
+                "window_id": opened_folder_window_id,
+            },
+        )
+        require_image(folder_content, "primary Finder folder URL state")
+        if (
+            folder_state.get("pid") != finder_pid
+            or folder_state.get("window_id") != opened_folder_window_id
+        ):
+            raise RuntimeError(
+                "Primary Finder state was not bound to the returned folder window: "
+                f"{folder_state}"
+            )
+        report["steps"].append("primary_background_file_url_launch_verified")
+        closed_folder, _ = client.call(
+            "hotkey",
+            {
+                "session": session,
+                "pid": finder_pid,
+                "window_id": opened_folder_window_id,
+                "keys": ["cmd", "w"],
+                "delivery_mode": "foreground",
+            },
+        )
+        require_action_verdict(closed_folder, "primary exact Finder window close")
+        if not wait_for_window_exit(client, finder_pid, opened_folder_window_id):
+            raise RuntimeError(
+                f"Primary exact Finder window {opened_folder_window_id} remained open"
+            )
+        opened_folder_window_id = None
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary fixture state after exact Finder cleanup")
+        report["steps"].append("primary_exact_file_url_window_closed")
 
         recording_state, _ = client.call("get_recording_state", {})
         if recording_state.get("enabled") is not False:
@@ -1236,6 +1348,27 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
                 wait_for_process_exit(isolated_app_pid)
             except Exception:
                 pass
+        if (
+            session_started
+            and opened_folder_pid is not None
+            and opened_folder_window_id is not None
+        ):
+            try:
+                client.call(
+                    "hotkey",
+                    {
+                        "session": session,
+                        "pid": opened_folder_pid,
+                        "window_id": opened_folder_window_id,
+                        "keys": ["cmd", "w"],
+                        "delivery_mode": "foreground",
+                    },
+                )
+                wait_for_window_exit(
+                    client, opened_folder_pid, opened_folder_window_id
+                )
+            except Exception:
+                pass
         if session_started:
             if original_cursor_theme is not None:
                 try:
@@ -1263,6 +1396,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         client.close()
         if recording_dir is not None:
             shutil.rmtree(recording_dir, ignore_errors=True)
+        if opened_folder is not None:
+            shutil.rmtree(opened_folder, ignore_errors=True)
 
 
 def run_fallback() -> dict[str, Any]:
