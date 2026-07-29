@@ -16,6 +16,7 @@ Common flow:
 | Begin task | `start_session({session, capture_scope})` |
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |
 | Hide/show session cursor | `set_agent_cursor_enabled({session, enabled})` |
+| Move only the visible session cursor | `move_cursor({session, x, y, scope:"window"})` |
 | Unlock desktop for an `auto` session | `escalate_session({session})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
 | List app windows | `list_windows({pid})` |
@@ -37,6 +38,12 @@ anonymous actions remain cursor-less. Use the state tool to verify any cursor
 configuration change. For concurrent runs on the same app, use distinct
 sessions and `creates_new_application_instance:true` only when that optional
 field is advertised by the live macOS `launch_app` schema.
+
+Window-scoped `move_cursor` takes screen-point coordinates, changes only the
+overlay, and does not deliver input. It is useful to seed a long visible glide
+before a demo action. Desktop-scoped `move_cursor` instead moves the real OS
+pointer and therefore requires an effective desktop session plus coordinates
+from that session's fresh `get_desktop_state`; do not confuse the two spaces.
 
 Primary window coordinates use the screenshot's window-local pixel space. AX
 indexes and opaque `element_token` handles are cached against one

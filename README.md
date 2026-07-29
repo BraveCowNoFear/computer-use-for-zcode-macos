@@ -117,6 +117,9 @@ root/data template variables.
   Click, drag, scroll, text, key, navigation, and app actions animate visibly
   without moving the user's real pointer; the cursor can be hidden and read
   back per session, and `end_session` removes it.
+  A window-scoped `move_cursor` can seed a clearly visible demo glide without
+  touching the real pointer; desktop scope remains an explicit real-pointer
+  operation grounded in fresh full-desktop pixels.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.

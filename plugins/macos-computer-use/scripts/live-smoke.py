@@ -78,7 +78,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.1"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.2"},
             },
         )
         self.notify("notifications/initialized")
@@ -164,6 +164,17 @@ def fixture_screen_point(
     )
 
 
+def demo_cursor_target(width: float, height: float) -> dict[str, float]:
+    """Choose an obvious in-bounds screen point for the session-only cursor glide."""
+
+    def axis_target(size: float) -> float:
+        if size <= 2:
+            raise RuntimeError(f"Primary screen axis was too small for a cursor target: {size}")
+        return round(min(max(24.0, size * 0.25), size - 1.0), 3)
+
+    return {"x": axis_target(float(width)), "y": axis_target(float(height))}
+
+
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
     for element in elements:
         searchable = " ".join(str(element.get(key, "")) for key in ("label", "value"))
@@ -241,6 +252,9 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "end_session",
             "get_agent_cursor_state",
             "set_agent_cursor_enabled",
+            "get_cursor_position",
+            "get_screen_size",
+            "move_cursor",
             "list_windows",
             "get_window_state",
             "type_text",
@@ -286,6 +300,34 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
         report["cursorTheme"] = theme["id"]
         report["steps"].append("primary_session_cursor_ready")
+
+        # Keep these read-only diagnostics anonymous. Tying a desktop-scoped
+        # helper to a window-only session would correctly require escalation.
+        screen_size, _ = client.call("get_screen_size", {})
+        width = screen_size.get("width")
+        height = screen_size.get("height")
+        if not isinstance(width, (int, float)) or not isinstance(height, (int, float)):
+            raise RuntimeError(f"Primary screen size was not numeric: {screen_size}")
+        real_cursor_before, _ = client.call("get_cursor_position", {})
+        virtual_target = demo_cursor_target(width, height)
+        client.call(
+            "move_cursor",
+            {"session": session, "scope": "window", **virtual_target},
+        )
+        cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        moved_cursor_position = require_cursor_position(cursor_state, "Primary move_cursor")
+        if moved_cursor_position != virtual_target:
+            raise RuntimeError(
+                f"Primary virtual cursor reached {moved_cursor_position}, expected {virtual_target}"
+            )
+        real_cursor_after, _ = client.call("get_cursor_position", {})
+        if real_cursor_after != real_cursor_before:
+            raise RuntimeError(
+                "Window-scoped move_cursor changed the user's real pointer: "
+                f"before={real_cursor_before}, after={real_cursor_after}"
+            )
+        report["virtualCursorPosition"] = moved_cursor_position
+        report["steps"].append("primary_virtual_cursor_moved_without_real_pointer")
         windows_state, _ = client.call("list_windows", {"pid": fixture_pid})
         matches = [
             window

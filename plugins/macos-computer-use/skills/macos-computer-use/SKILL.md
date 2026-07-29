@@ -79,6 +79,15 @@ IDs, and always call `end_session` so its cursor disappears. Do not move the
 real desktop pointer merely to make an AX action look human; normal primary
 actions animate the overlay automatically.
 
+The first AX action seeds a new cursor close to its target, so its initial
+glide can be subtle. For a demo or screen recording that explicitly needs a
+clear approach path, call `move_cursor({session,x,y,scope:"window"})` once at a
+known screen-point position before the observed action. This moves only the
+session overlay and delivers no input. Never pass window-screenshot pixels as
+screen points. `scope:"desktop"` is a different operation: it moves the user's
+real OS pointer, is available only in effective desktop scope, and must use
+coordinates from a fresh `get_desktop_state` exactly like other desktop input.
+
 ## Select a real target
 
 1. Use `list_apps` or `launch_app`; prefer an exact bundle ID when known.

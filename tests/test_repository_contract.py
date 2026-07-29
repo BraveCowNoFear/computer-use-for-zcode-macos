@@ -161,6 +161,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("start_session escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
+        self.assertIn("get_cursor_position get_screen_size", launcher)
+        self.assertIn("move_cursor list_apps", launcher)
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -303,6 +305,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("## Keep the session cursor human-visible", skill)
         self.assertIn("set_agent_cursor_enabled({session,enabled:false})", skill)
         self.assertIn("get_agent_cursor_state({session})", skill)
+        self.assertIn('move_cursor({session,x,y,scope:"window"})', skill)
+        self.assertIn('`scope:"desktop"` is a different operation', skill)
+        self.assertIn("moves the user's\nreal OS pointer", skill)
         self.assertIn("creates_new_application_instance:true", skill)
         self.assertIn("without moving the real OS pointer", (
             PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
@@ -382,11 +387,15 @@ class RepositoryContractTests(unittest.TestCase):
             '"end_session"',
             '"get_agent_cursor_state"',
             '"set_agent_cursor_enabled"',
+            '"get_cursor_position"',
+            '"get_screen_size"',
+            '"move_cursor"',
             "primary_element_target",
             "require_cursor_action",
             "require_cursor_position",
             "element_token",
             '"primary_session_cursor_ready"',
+            '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
@@ -422,6 +431,10 @@ class RepositoryContractTests(unittest.TestCase):
             "window": {"bounds": {"x": 100, "y": 50, "width": 640, "height": 322}}
         }
         self.assertEqual(module.fixture_screen_point(screen_state, 252.0, 122.0), (352.0, 250.0))
+        self.assertEqual(module.demo_cursor_target(100.0, 80.0), {"x": 25.0, "y": 24.0})
+        self.assertEqual(module.demo_cursor_target(10.0, 10.0), {"x": 9.0, "y": 9.0})
+        with self.assertRaisesRegex(RuntimeError, "too small"):
+            module.demo_cursor_target(1.0, 80.0)
 
     def test_live_smoke_validates_semantic_cursor_action_and_position(self):
         path = PLUGIN / "scripts" / "live-smoke.py"
