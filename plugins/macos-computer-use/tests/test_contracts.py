@@ -64,6 +64,7 @@ class ContractTests(unittest.TestCase):
             hasattr(backend.ApplicationServices, "AXUIElementIsAttributeSettable")
         )
         self.assertTrue(hasattr(backend.ApplicationServices, "AXIsProcessTrusted"))
+        self.assertTrue(hasattr(backend.CoreFoundation, "CFEqual"))
         self.assertTrue(hasattr(backend.Quartz, "CGEventPost"))
         modifier_event = backend.Quartz.CGEventCreateKeyboardEvent(None, 55, True)
         self.assertIsNotNone(modifier_event)
@@ -1781,6 +1782,31 @@ class ContractTests(unittest.TestCase):
 
         values[(focused, "AXTitle")] = "Other"
         self.assertFalse(backend._focused_ax_window_matches(focused, target, 8)[0])
+
+    def test_focused_ax_window_uses_core_foundation_or_the_only_exposed_window(self):
+        focused, target = object(), object()
+        backend = MacOSBackend()
+        backend.ApplicationServices = types.SimpleNamespace()
+        backend.CoreFoundation = types.SimpleNamespace(
+            CFEqual=lambda left, right: left is focused and right is target
+        )
+        backend._ax_copy = lambda _element, _attribute: None
+
+        self.assertEqual(
+            backend._focused_ax_window_matches(focused, target, 8)[2],
+            "cf-equality",
+        )
+
+        backend.CoreFoundation = None
+        backend._ax_copy = lambda element, attribute: (
+            [target] if (element, attribute) == ("application", "AXWindows") else None
+        )
+        self.assertEqual(
+            backend._focused_ax_window_matches(
+                focused, target, 8, "application"
+            )[2],
+            "sole-exposed-window",
+        )
 
     def test_skylight_foreground_binds_the_exact_window_owner_and_no_windows_option(self):
         calls = []

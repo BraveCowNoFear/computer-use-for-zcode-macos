@@ -240,17 +240,20 @@ class MacOSBackend:
     def __init__(self) -> None:
         self.AppKit: Any | None = None
         self.ApplicationServices: Any | None = None
+        self.CoreFoundation: Any | None = None
         self.Quartz: Any | None = None
         self.native_error: str | None = None
         self.native_versions: dict[str, str] = {}
         try:
             import AppKit  # type: ignore[import-not-found]
             import ApplicationServices  # type: ignore[import-not-found]
+            import CoreFoundation  # type: ignore[import-not-found]
             import Quartz  # type: ignore[import-not-found]
 
             self.native_versions = require_exact_pyobjc_versions()
             self.AppKit = AppKit
             self.ApplicationServices = ApplicationServices
+            self.CoreFoundation = CoreFoundation
             self.Quartz = Quartz
         except Exception as error:
             self.native_error = str(error)
@@ -265,6 +268,7 @@ class MacOSBackend:
         self._skylight_load_attempted = False
         self._skylight_front_target: tuple[int, int, bytes] | None = None
         self._skylight_last_status = "not-attempted"
+        self._last_focused_ax_diagnostic: dict[str, Any] = {}
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
@@ -1591,9 +1595,11 @@ class MacOSBackend:
         focused: Any,
         target_ax_window: Any,
         window_id: int,
+        app_element: Any | None = None,
     ) -> tuple[bool, Any, str]:
         """Compare AX windows without assuming AXWindowNumber is available."""
         if focused is None:
+            self._last_focused_ax_diagnostic = {"focusedExists": False}
             return False, None, "missing"
         number_attr = self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber")
         focused_number = self._ax_copy(focused, number_attr)
@@ -1607,13 +1613,14 @@ class MacOSBackend:
                 return True, focused_number, "element-equality"
         except Exception:
             pass
-        cf_equal = getattr(self.ApplicationServices, "CFEqual", None)
-        if callable(cf_equal):
-            try:
-                if bool(cf_equal(focused, target_ax_window)):
-                    return True, focused_number, "cf-equality"
-            except Exception:
-                pass
+        for module in (self.CoreFoundation, self.ApplicationServices, self.Quartz):
+            cf_equal = getattr(module, "CFEqual", None)
+            if callable(cf_equal):
+                try:
+                    if bool(cf_equal(focused, target_ax_window)):
+                        return True, focused_number, "cf-equality"
+                except Exception:
+                    pass
 
         title_attr = self._ax_attr("kAXTitleAttribute", "AXTitle")
         position_attr = self._ax_attr("kAXPositionAttribute", "AXPosition")
@@ -1637,6 +1644,15 @@ class MacOSBackend:
 
         focused_signature = signature(focused)
         target_signature = signature(target_ax_window)
+        self._last_focused_ax_diagnostic = {
+            "focusedExists": True,
+            "focusedTitle": focused_signature[0],
+            "focusedPosition": focused_signature[1],
+            "focusedSize": focused_signature[2],
+            "targetTitle": target_signature[0],
+            "targetPosition": target_signature[1],
+            "targetSize": target_signature[2],
+        }
         if (
             focused_signature[1] is not None
             and focused_signature[2] is not None
@@ -1654,6 +1670,19 @@ class MacOSBackend:
             # `_ax_window` already rejected a title/geometry tie while binding
             # the fresh CG window, so this signature remains exact.
             return True, focused_number, "unique-signature"
+        if app_element is not None:
+            app_windows = self._ax_copy(
+                app_element,
+                self._ax_attr("kAXWindowsAttribute", "AXWindows"),
+            ) or []
+            if not isinstance(app_windows, (list, tuple)):
+                app_windows = [app_windows]
+            self._last_focused_ax_diagnostic["exposedWindowCount"] = len(app_windows)
+            if len(app_windows) == 1:
+                # `_ax_window` has already bound the fresh target CG window to
+                # this pid's only exposed AX window. A focused AXWindow from the
+                # same application therefore cannot name a second target.
+                return True, focused_number, "sole-exposed-window"
         return False, focused_number, "mismatch"
 
     def _activate(self, window: dict[str, Any]) -> None:
@@ -1725,6 +1754,7 @@ class MacOSBackend:
                         focused,
                         target_ax_window,
                         int(window["id"]),
+                        app_element,
                     )
                 )
                 last_focused_number = focused_number
@@ -1750,6 +1780,7 @@ class MacOSBackend:
             ),
             "focusedWindowMatches": last_focused_matches,
             "focusedWindowMatchPath": last_focused_match_path,
+            "focusedWindowDiagnostic": self._last_focused_ax_diagnostic,
             "skylightStatus": self._skylight_last_status,
         }
         summary = ", ".join(f"{key}={value}" for key, value in detail.items() if key != "ok")

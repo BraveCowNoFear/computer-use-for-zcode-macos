@@ -134,8 +134,8 @@ pid/窗口校验。测试还会从当前未运行的 Calculator/TextEdit 中冷�
   精确返回的 pid/窗口组合：先走与 Cua Driver 相同的本地 SkyLight 精确窗口路径，
   再回退公开 AppKit 激活；随后抬起绑定的 AX 窗口，不支持 `AXRaise` 时依次尝试
   Main/Focused 属性，并在输入前回读确认 WindowServer 前台 PSN（或公开前台 pid）
-  以及焦点窗口的 AXWindowNumber；目标不暴露该编号时，则确认绑定阶段已证明唯一的
-  标题/位置/尺寸签名。
+  以及焦点窗口的 AXWindowNumber/CoreFoundation 身份；目标不暴露这些身份时，则确认
+  绑定阶段已证明唯一的标题/位置/尺寸签名，或该 pid 唯一暴露的 AX 窗口。
 - 仅在结果明确要求窗口持续置前，或远程桌面等焦点代理必须跨多次调用保持激活时，
   才持续置前一个精确返回的窗口。主后端真机门禁会校验激活路径、App 新鲜的
   `active` 回读和重新枚举出的同一窗口；单次前台输入仍使用“置前 -> 动作 -> 恢复”。

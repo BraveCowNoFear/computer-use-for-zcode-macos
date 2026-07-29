@@ -350,8 +350,9 @@ AppKit activation when that SPI is unavailable. It then performs `AXRaise`; if
 unsupported, it sets the bound window's `AXMain=true` and then `AXFocused=true`.
 WindowServer's foreground PSN (or the public frontmost pid) and the focused
 AXWindowNumber must still match before input is sent. When an app omits
-AXWindowNumber, the focused AX window must instead match the unique
-title/position/size signature established by fresh CG-window binding.
+AXWindowNumber, the focused AX window must instead match CoreFoundation
+identity, the unique title/position/size signature established by fresh
+CG-window binding, or the target pid's only exposed AX window.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 
