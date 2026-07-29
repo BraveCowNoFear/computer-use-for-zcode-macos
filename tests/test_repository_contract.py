@@ -159,7 +159,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
-        self.assertIn("health_report check_permissions", launcher)
+        self.assertIn(
+            "health_report get_config set_config get_accessibility_tree check_permissions",
+            launcher,
+        )
         self.assertIn("start_session get_session_state escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("set_agent_cursor_motion", launcher)
@@ -374,7 +377,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`get_config({session})`", skill)
         self.assertIn("`set_config({session,max_image_dimension:0})`", skill)
         self.assertIn("`get_accessibility_tree` for a fast broad inventory", skill)
-        self.assertIn("an anonymous `set_config` changes the daemon-global value", skill)
+        self.assertIn("an anonymous CLI/direct `set_config` changes the", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
         self.assertIn("`bring_to_front({pid,window_id})` is an explicit persistent activation", skill)

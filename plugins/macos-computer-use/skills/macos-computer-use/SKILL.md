@@ -246,9 +246,9 @@ same coordinates for following pixel actions. For an explicit pixel-perfect
 verification flow, read `get_config({session})`, temporarily call
 `set_config({session,max_image_dimension:0})`, verify the same session reads
 back `0`, then restore the original value or end that session. Always include
-the public session: an anonymous `set_config` changes the daemon-global value
-and persists it. A named session is an in-memory override and must not affect a
-fresh peer session. Do not use `set_config` for `capture_mode` or
+the public session: an anonymous CLI/direct `set_config` changes the
+daemon-global value and persists it. A named session is an in-memory override
+and must not affect a fresh peer session. Do not use `set_config` for `capture_mode` or
 `capture_scope`; every window state already returns pixels plus AX, and scope
 belongs to `start_session`.
 
