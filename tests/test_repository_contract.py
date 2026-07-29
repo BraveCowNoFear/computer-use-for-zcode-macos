@@ -164,6 +164,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("set_agent_cursor_motion", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
+        self.assertIn("list_windows bring_to_front", launcher)
         self.assertIn("launch_app kill_app", launcher)
         self.assertIn("click double_click right_click", launcher)
         self.assertRegex(launcher, r"\bzoom\b")
@@ -354,6 +355,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("creates_new_application_instance:true", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
+        self.assertIn("`bring_to_front({pid,window_id})` is an explicit persistent activation", skill)
+        self.assertIn("The call has no `session` field", skill)
+        self.assertIn("same pid to be `active:true` in a fresh `list_apps`", skill)
+        self.assertIn("brief front -> act -> restore route", skill)
         self.assertIn("[browser-workflow.md](references/browser-workflow.md)", skill)
         self.assertIn("without moving the real OS pointer", (
             PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
@@ -478,6 +483,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"get_screen_size"',
             '"get_desktop_state"',
             '"list_apps"',
+            '"bring_to_front"',
             '"launch_app"',
             '"kill_app"',
             '"move_cursor"',
@@ -507,6 +513,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_real_pointer_moved_from_fresh_desktop"',
             '"primary_real_pointer_restored_and_reobserved"',
             '"primary_isolated_app_lifecycle_verified"',
+            '"primary_exact_window_frontmost_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',

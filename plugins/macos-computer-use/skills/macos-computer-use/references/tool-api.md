@@ -22,6 +22,7 @@ Common flow:
 | Isolated concurrent app | `launch_app({bundle_id, creates_new_application_instance:true})` when advertised |
 | Force exact process exit | `kill_app({pid})` only after verified cooperative quit failure or an explicit force-quit request |
 | List app windows | `list_windows({pid})` |
+| Persist exact foreground | `bring_to_front({pid, window_id})` only when the returned window must remain frontmost across calls |
 | Snapshot | `get_window_state({session, pid, window_id})` |
 | Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
 | AX click | `click({session, pid, window_id, element_index})` |
@@ -52,6 +53,16 @@ For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact
 process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the
 forceful second rung for a still-live exact pid, never a name-wide cleanup.
+
+Pinned macOS `bring_to_front` has the exact schema `{pid, window_id?}` with no
+session field. With a returned window ID it first requests exact WindowServer
+activation and may fall back to app-level Cocoa activation; success returns the
+same pid/window, `activated:true`, and `path:"skylight"` or `"cocoa"`. It is a
+persistent focus-proxy tool, chiefly for remote-desktop clients or an explicit
+frontmost-state outcome. Normal `delivery_mode:"foreground"` briefly fronts,
+acts, and restores, so prefer it for one-off delivery. After persistent
+activation, require the pid's `active:true` readback from fresh `list_apps`,
+re-list the exact window, and take a new snapshot before acting.
 
 Declared sessions receive an enabled, colored semantic cursor overlay by
 default. Primary actions animate it without moving the real OS pointer. The

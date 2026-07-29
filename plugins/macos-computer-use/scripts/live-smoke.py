@@ -91,7 +91,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.3"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.4"},
             },
         )
         self.notify("notifications/initialized")
@@ -390,6 +390,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "move_cursor",
             "list_apps",
             "list_windows",
+            "bring_to_front",
             "launch_app",
             "get_window_state",
             "get_desktop_state",
@@ -580,6 +581,42 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         window_id = int(window["window_id"])
         report["window"] = {key: window.get(key) for key in ("window_id", "pid", "app_name", "title")}
         report["steps"].append("primary_window_bound")
+
+        fronted, _ = client.call(
+            "bring_to_front", {"pid": pid, "window_id": window_id}
+        )
+        if (
+            fronted.get("pid") != pid
+            or fronted.get("window_id") != window_id
+            or fronted.get("activated") is not True
+            or fronted.get("path") not in {"skylight", "cocoa"}
+        ):
+            raise RuntimeError(f"Primary exact-window activation was malformed: {fronted}")
+        apps_after_front, _ = client.call("list_apps", {})
+        if not any(
+            app.get("pid") == pid
+            and app.get("running") is True
+            and app.get("active") is True
+            for app in apps_after_front.get("apps", [])
+        ):
+            raise RuntimeError(
+                f"Primary bring_to_front did not make fixture pid {pid} active: {apps_after_front}"
+            )
+        relisted, _ = client.call("list_windows", {"pid": pid})
+        exact_windows = [
+            candidate
+            for candidate in relisted.get("windows", [])
+            if candidate.get("pid") == pid
+            and candidate.get("window_id") == window_id
+            and candidate.get("title") == "ZCode Computer Use Live Smoke"
+        ]
+        if len(exact_windows) != 1:
+            raise RuntimeError(
+                "Primary exact window did not survive persistent activation: "
+                f"pid={pid}, window_id={window_id}, matches={len(exact_windows)}"
+            )
+        report["frontmostPath"] = fronted["path"]
+        report["steps"].append("primary_exact_window_frontmost_verified")
 
         state, content = client.call(
             "get_window_state",

@@ -124,6 +124,19 @@ coordinates from a fresh `get_desktop_state` exactly like other desktop input.
 4. Re-list after launch, a long pause, a modal transition, or a disappeared
    window. Treat modals and sheets as their returned target window.
 
+`bring_to_front({pid,window_id})` is an explicit persistent activation, not a
+normal input rung. Use it only when the requested outcome requires that exact
+returned window to remain frontmost across calls, or when a focus-proxy surface
+such as a remote-desktop client has proven that a one-off
+`delivery_mode:"foreground"` flash cannot keep its input channel armed. Always
+include the fresh `window_id` when an exact returned window exists; omitting it
+falls back to app-level activation and must not be used to guess among windows.
+The call has no `session` field, leaves the app frontmost, and returns
+`activated:true` plus `path:"skylight"` or `"cocoa"`. Immediately require the
+same pid to be `active:true` in a fresh `list_apps`, re-list the exact window,
+and re-observe it before input. Do not use persistent activation merely to make
+the session cursor visible or as a substitute for outcome verification.
+
 For concurrent runs that must control the same app independently, give each
 run a distinct session and, only when the live macOS `launch_app` schema
 advertises it, pass `creates_new_application_instance:true` so each run gets a
@@ -235,7 +248,8 @@ pinned driver's explicit `effect`/`escalation` verdict supplies a real signal:
 3. **Foreground delivery:** repeat the same primary action with
    `delivery_mode:"foreground"` only when the driver recommends foreground,
    background delivery is unavailable, or the refreshed state proves it did
-   not land.
+   not land. This brief front -> act -> restore route is still preferred over
+   persistent `bring_to_front` for a single action.
 4. **Direct fallback:** switch to `macos-computer-use-fallback` after the
    primary path fails twice on fresh state or refuses the required operation.
 

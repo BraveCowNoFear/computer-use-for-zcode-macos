@@ -133,6 +133,11 @@ root/data template variables.
   verified delivery failure. Foreground fallback raises the exact bound AX
   window, then tries its main/focused attributes for apps without `AXRaise`,
   and confirms the focused pid/window ID before sending input.
+- Persistently front one exact returned window only for an explicit frontmost
+  outcome or a focus-proxy surface such as remote desktop. The primary live gate
+  verifies the returned activation path, the app's fresh `active` readback, and
+  the same re-listed window before any further input; one-off foreground input
+  keeps the normal front-act-restore route.
 - Give every declared primary session its own colored semantic cursor overlay.
   Click, drag, scroll, text, key, navigation, and app actions animate visibly
   without moving the user's real pointer; the cursor can be hidden and read
