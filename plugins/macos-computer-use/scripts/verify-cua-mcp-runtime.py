@@ -11,6 +11,7 @@ import select
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -121,7 +122,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.2"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.3"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -188,6 +189,16 @@ def require_config(name: str, value: Any) -> int:
     return dimension
 
 
+def process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit(
@@ -205,6 +216,7 @@ def main() -> int:
     client = MCPClient(binary, socket)
     peer = MCPClient(binary, socket)
     probe: subprocess.Popen[str] | None = None
+    owned_app_pid: int | None = None
     session = f"zcode-ci-mcp-{os.getpid()}"
     session_started = False
     config_original: int | None = None
@@ -306,6 +318,80 @@ def main() -> int:
         apps = require_object("list_apps", apps, {"apps"})
         if not isinstance(apps["apps"], list):
             fail("list_apps.apps is not an array")
+        existing_calculator_pids = {
+            app.get("pid")
+            for app in apps["apps"]
+            if isinstance(app, dict)
+            and app.get("bundle_id") == "com.apple.calculator"
+            and type(app.get("pid")) is int
+            and app["pid"] > 0
+        }
+
+        launched, _ = client.call(
+            "launch_app",
+            {
+                "bundle_id": "com.apple.calculator",
+                "creates_new_application_instance": True,
+            },
+        )
+        launched_pid = launched.get("pid") if isinstance(launched, dict) else None
+        if (
+            type(launched_pid) is not int
+            or launched_pid <= 0
+            or launched_pid in existing_calculator_pids
+            or launched_pid in {os.getpid(), client.process.pid, peer.process.pid}
+        ):
+            fail(f"launch_app did not return a new owned Calculator pid: {launched}")
+        owned_app_pid = launched_pid
+        if launched.get("bundle_id") != "com.apple.calculator":
+            fail(f"launch_app returned the wrong bundle identity: {launched}")
+
+        launched_windows = launched.get("windows", [])
+        if not isinstance(launched_windows, list):
+            fail(f"launch_app.windows is not an array: {launched}")
+        owned_windows = [
+            window
+            for window in launched_windows
+            if isinstance(window, dict)
+            and window.get("pid") == launched_pid
+            and type(window.get("window_id")) is int
+        ]
+        window_deadline = time.monotonic() + 5
+        while not owned_windows and time.monotonic() < window_deadline:
+            app_windows, _ = client.call("list_windows", {"pid": launched_pid})
+            app_windows = require_object(
+                "Calculator list_windows",
+                app_windows,
+                {"windows", "current_space_id"},
+            )
+            owned_windows = [
+                window
+                for window in app_windows["windows"]
+                if isinstance(window, dict)
+                and window.get("pid") == launched_pid
+                and type(window.get("window_id")) is int
+            ]
+            if not owned_windows:
+                time.sleep(0.05)
+        if not owned_windows:
+            fail(f"new Calculator pid {launched_pid} exposed no owned window")
+
+        client.call("kill_app", {"pid": launched_pid})
+        exit_deadline = time.monotonic() + 5
+        while process_exists(launched_pid) and time.monotonic() < exit_deadline:
+            time.sleep(0.05)
+        if process_exists(launched_pid):
+            fail(f"kill_app left owned Calculator pid {launched_pid} alive")
+        apps_after_kill, _ = client.call("list_apps")
+        apps_after_kill = require_object(
+            "post-kill list_apps", apps_after_kill, {"apps"}
+        )
+        if any(
+            isinstance(app, dict) and app.get("pid") == launched_pid
+            for app in apps_after_kill["apps"]
+        ):
+            fail(f"list_apps retained killed Calculator pid {launched_pid}")
+        owned_app_pid = None
 
         windows, _ = client.call("list_windows")
         windows = require_object(
@@ -467,6 +553,14 @@ def main() -> int:
                 f"boundary: {prompt_result}"
             )
     finally:
+        if owned_app_pid is not None and process_exists(owned_app_pid):
+            try:
+                client.call("kill_app", {"pid": owned_app_pid})
+            except RuntimeError:
+                try:
+                    os.kill(owned_app_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
         if probe is not None and probe.poll() is None:
             probe.terminate()
             try:
@@ -490,7 +584,7 @@ def main() -> int:
         client.close()
 
     print(
-        "Verified primary diagnostics, complete schemas, connection isolation, cursor/session lifecycle, and process control over stdio MCP."
+        "Verified primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 
