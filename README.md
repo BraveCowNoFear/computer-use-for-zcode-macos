@@ -351,8 +351,13 @@ held-button sequence, and scroll through the direct fallback. That pixel path
 captures after each state change and verifies the fixture's local, atomically
 published control state instead of assuming a bare Python process exposes a
 complete app-bundle AX tree. Both paths re-observe the visible result. The gate restores the original
-pointer position before closing its fixture, and
-touches no user document:
+pointer position before closing its fixture. To tolerate a real foreground focus
+race without weakening the result gate, the fallback first confirms typed text
+in a fresh Accessibility observation; if absent, it re-observes, refocuses, and
+types once more. If the first physical submit click has no local visible effect,
+it takes another screenshot, recomputes the bound coordinates, and clicks once
+more. A second missing effect still fails the gate.
+It touches no user document:
 
 ```bash
 bash plugins/macos-computer-use/scripts/live-smoke.sh
