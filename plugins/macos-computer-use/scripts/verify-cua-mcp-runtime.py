@@ -121,7 +121,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.15.0"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.1"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -163,6 +163,31 @@ def require_object(name: str, value: Any, fields: set[str]) -> dict[str, Any]:
     return value
 
 
+def require_config(name: str, value: Any) -> int:
+    config = require_object(
+        name,
+        value,
+        {
+            "version",
+            "source_sha",
+            "platform",
+            "max_image_dimension",
+            "agent_cursor",
+            "experimental_pip",
+            "experimental_pip_geometry",
+        },
+    )
+    if config["version"] != "0.13.1" or config["platform"] != "macos":
+        fail(f"{name} returned the wrong runtime identity: {config}")
+    dimension = config["max_image_dimension"]
+    if type(dimension) is not int or dimension < 0:
+        fail(f"{name}.max_image_dimension is not a non-negative integer")
+    cursor = config["agent_cursor"]
+    if not isinstance(cursor, dict) or type(cursor.get("enabled")) is not bool:
+        fail(f"{name}.agent_cursor omitted the enabled boolean")
+    return dimension
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit(
@@ -178,11 +203,15 @@ def main() -> int:
         fail(f"expected 46 pinned tools, got {len(required)}")
 
     client = MCPClient(binary, socket)
+    peer = MCPClient(binary, socket)
     probe: subprocess.Popen[str] | None = None
     session = f"zcode-ci-mcp-{os.getpid()}"
     session_started = False
+    config_original: int | None = None
+    config_changed = False
     try:
         client.initialize()
+        peer.initialize()
         listed = client.request("tools/list")
         tools = listed.get("tools")
         if not isinstance(tools, list):
@@ -225,14 +254,45 @@ def main() -> int:
         if not all(isinstance(cursor[key], (int, float)) for key in ("x", "y")):
             fail("get_cursor_position returned non-numeric coordinates")
 
+        config_original = require_config("get_config", client.call("get_config")[0])
+        peer_original = require_config("peer get_config", peer.call("get_config")[0])
+        if peer_original != config_original:
+            fail("fresh MCP peers began with different image configuration")
+        config_probe = 0 if config_original != 0 else 1024
+        changed, _ = client.call(
+            "set_config", {"max_image_dimension": config_probe}
+        )
+        config_changed = True
+        changed = require_object(
+            "set_config", changed, {"version", "platform", "max_image_dimension"}
+        )
+        if changed.get("max_image_dimension") != config_probe:
+            fail(f"set_config did not return the requested value: {changed}")
+        if require_config("changed get_config", client.call("get_config")[0]) != config_probe:
+            fail("set_config was not visible on the same MCP connection")
+        if require_config("isolated peer get_config", peer.call("get_config")[0]) != config_original:
+            fail("set_config leaked across MCP connection identities")
+        restored, _ = client.call(
+            "set_config", {"max_image_dimension": config_original}
+        )
+        if require_object(
+            "restored set_config",
+            restored,
+            {"version", "platform", "max_image_dimension"},
+        ).get("max_image_dimension") != config_original:
+            fail("set_config did not restore the original image configuration")
+        config_changed = False
+        if require_config("restored get_config", client.call("get_config")[0]) != config_original:
+            fail("restored configuration was not visible on the same connection")
+
         started, _ = client.call(
-            "start_session", {"session": session, "capture_scope": "window"}
+            "start_session", {"session": session, "capture_scope": "auto"}
         )
         session_started = True
         if (
             not isinstance(started, dict)
             or started.get("session") != session
-            or started.get("capture_scope") != "window"
+            or started.get("capture_scope") != "auto"
             or started.get("effective_scope") != "window"
             or started.get("desktop_unlocked") is not False
             or started.get("active") is not True
@@ -242,11 +302,63 @@ def main() -> int:
         if (
             not isinstance(state, dict)
             or state.get("session") != session
-            or state.get("capture_scope") != "window"
+            or state.get("capture_scope") != "auto"
             or state.get("effective_scope") != "window"
             or state.get("desktop_unlocked") is not False
         ):
             fail(f"get_session_state returned inconsistent state: {state}")
+
+        cursor_state, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        if (
+            not isinstance(cursor_state, dict)
+            or cursor_state.get("session") != session
+            or cursor_state.get("enabled") is not True
+            or not isinstance(cursor_state.get("theme"), dict)
+            or not isinstance(cursor_state.get("visual_state"), dict)
+            or not isinstance(cursor_state.get("motion"), dict)
+        ):
+            fail(f"get_agent_cursor_state returned inconsistent state: {cursor_state}")
+        disabled, _ = client.call(
+            "set_agent_cursor_enabled", {"session": session, "enabled": False}
+        )
+        if disabled != {"session": session, "enabled": False}:
+            fail(f"set_agent_cursor_enabled did not disable the session cursor: {disabled}")
+        disabled_state, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        if not isinstance(disabled_state, dict) or disabled_state.get("enabled") is not False:
+            fail("disabled session cursor did not read back as disabled")
+        enabled, _ = client.call(
+            "set_agent_cursor_enabled", {"session": session, "enabled": True}
+        )
+        if enabled != {"session": session, "enabled": True}:
+            fail(f"set_agent_cursor_enabled did not restore the session cursor: {enabled}")
+
+        escalated, _ = client.call(
+            "escalate_session",
+            {
+                "session": session,
+                "reason": "no_window_target",
+                "detail": "ci contract proof",
+            },
+        )
+        if (
+            not isinstance(escalated, dict)
+            or escalated.get("session") != session
+            or escalated.get("capture_scope") != "auto"
+            or escalated.get("effective_scope") != "desktop"
+            or escalated.get("desktop_unlocked") is not True
+            or escalated.get("escalation_reason") != "no_window_target"
+            or escalated.get("escalation_detail") != "ci contract proof"
+        ):
+            fail(f"escalate_session returned inconsistent state: {escalated}")
+        escalated_state, _ = client.call("get_session_state", {"session": session})
+        if escalated_state != escalated:
+            fail(
+                "get_session_state did not preserve the exact one-way desktop escalation"
+            )
 
         probe = subprocess.Popen(["/bin/sleep", "60"], text=True)
         result = client.request(
@@ -279,10 +391,18 @@ def main() -> int:
                 client.call("end_session", {"session": session})
             except RuntimeError:
                 pass
+        if config_changed and config_original is not None:
+            try:
+                client.call(
+                    "set_config", {"max_image_dimension": config_original}
+                )
+            except RuntimeError:
+                pass
+        peer.close()
         client.close()
 
     print(
-        "Verified the complete primary surface, session lifecycle, and process control over stdio MCP."
+        "Verified the complete primary surface, connection isolation, cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 
