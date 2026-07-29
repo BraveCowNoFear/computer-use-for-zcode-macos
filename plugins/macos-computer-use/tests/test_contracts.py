@@ -1684,8 +1684,9 @@ class ContractTests(unittest.TestCase):
             NSApplicationActivateIgnoringOtherApps=2,
             NSApplicationActivateAllWindows=1,
         )
+        backend._skylight_set_front_process = mock.Mock(return_value=False)
         with self.assertRaisesRegex(ToolError, "refused to activate"):
-            backend._activate({"pid": 80})
+            backend._activate({"pid": 80, "id": 8})
 
     def test_activation_falls_back_from_raise_to_main_then_focused(self):
         target = object()
@@ -1707,6 +1708,7 @@ class ContractTests(unittest.TestCase):
         backend._ax_window = lambda _window: target
         backend._ax_perform = mock.Mock(return_value=False)
         backend._ax_set = mock.Mock(side_effect=[True, False, True])
+        backend._skylight_set_front_process = mock.Mock(return_value=False)
         backend._ax_copy = lambda element, attribute: {
             ("application", "AXFocusedWindow"): target,
             (target, "AXWindowNumber"): 8,
@@ -1714,6 +1716,7 @@ class ContractTests(unittest.TestCase):
         window = {"id": 8, "pid": 80}
         backend._activate(window)
         backend._ax_perform.assert_called_once_with(target, "AXRaise")
+        backend._skylight_set_front_process.assert_called_once_with(80, 8)
         self.assertEqual(
             backend._ax_set.call_args_list,
             [
@@ -1721,6 +1724,77 @@ class ContractTests(unittest.TestCase):
                 mock.call(target, "AXMain", True),
                 mock.call(target, "AXFocused", True),
             ],
+        )
+
+    def test_activation_prefers_exact_window_skylight_before_cocoa(self):
+        target = "target-window"
+        running = mock.Mock()
+        backend = MacOSBackend()
+        backend.AppKit = types.SimpleNamespace(
+            NSRunningApplication=types.SimpleNamespace(
+                runningApplicationWithProcessIdentifier_=lambda _pid: running
+            ),
+            NSWorkspace=types.SimpleNamespace(
+                sharedWorkspace=lambda: types.SimpleNamespace(
+                    frontmostApplication=lambda: types.SimpleNamespace(
+                        processIdentifier=lambda: 80
+                    )
+                )
+            ),
+        )
+        backend.ApplicationServices = types.SimpleNamespace(
+            AXUIElementCreateApplication=lambda _pid: "application"
+        )
+        backend._skylight_set_front_process = mock.Mock(return_value=True)
+        backend._ax_window = lambda _window: target
+        backend._ax_perform = mock.Mock(return_value=True)
+        backend._ax_set = mock.Mock(return_value=True)
+        backend._ax_copy = lambda element, attribute: {
+            ("application", "AXFocusedWindow"): target,
+            (target, "AXWindowNumber"): 8,
+        }.get((element, attribute))
+
+        backend._activate({"pid": 80, "id": 8})
+
+        backend._skylight_set_front_process.assert_called_once_with(80, 8)
+        running.activateWithOptions_.assert_not_called()
+
+    def test_skylight_foreground_binds_the_exact_window_owner_and_no_windows_option(self):
+        calls = []
+
+        class FakeFunction:
+            def __init__(self, body):
+                self.body = body
+
+            def __call__(self, *arguments):
+                return self.body(*arguments)
+
+        def get_owner(connection, window_id, owner_pointer):
+            calls.append(("owner", connection, window_id.value))
+            owner_pointer._obj.value = 77
+            return 0
+
+        def get_psn(owner_connection, _psn_pointer):
+            calls.append(("psn", owner_connection))
+            return 0
+
+        def set_front(_psn_pointer, window_id, options):
+            calls.append(("front", window_id.value, options.value))
+            return 0
+
+        library = types.SimpleNamespace(
+            CGSMainConnectionID=FakeFunction(lambda: 55),
+            SLSGetWindowOwner=FakeFunction(get_owner),
+            SLSGetConnectionPSN=FakeFunction(get_psn),
+            SLPSSetFrontProcessWithOptions=FakeFunction(set_front),
+        )
+        backend = MacOSBackend()
+        backend._load_skylight = lambda: library
+
+        self.assertTrue(backend._skylight_set_front_process(80, 8))
+        self.assertEqual(
+            calls,
+            [("owner", 55, 8), ("psn", 77), ("front", 8, 0x400)],
         )
 
     def test_accessibility_window_prefers_the_exact_cg_window_number(self):

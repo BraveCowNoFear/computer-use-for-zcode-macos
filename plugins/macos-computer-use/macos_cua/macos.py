@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 from importlib import metadata
 import json
 import math
@@ -260,6 +261,8 @@ class MacOSBackend:
         self._held_buttons: dict[Any, tuple[Any, Any, float, float]] = {}
         self._held_key_releases: list[Any] = []
         self._hid_mouse_event_source: Any | None = None
+        self._skylight_library: Any | None = None
+        self._skylight_load_attempted = False
         self._cleanup_orphaned_screenshots()
 
     def _cleanup_orphaned_screenshots(self) -> None:
@@ -1482,17 +1485,78 @@ class MacOSBackend:
             float(bounds["y"]) + rel_y * float(bounds["height"]) / height,
         )
 
+    def _load_skylight(self) -> Any | None:
+        """Resolve the exact-window foreground SPI used by Cua Driver."""
+        if self._skylight_load_attempted:
+            return self._skylight_library
+        self._skylight_load_attempted = True
+        try:
+            self._skylight_library = ctypes.CDLL(
+                "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
+                mode=getattr(ctypes, "RTLD_GLOBAL", 0) | getattr(os, "RTLD_LAZY", 1),
+            )
+        except (AttributeError, OSError):
+            self._skylight_library = None
+        return self._skylight_library
+
+    def _skylight_set_front_process(self, pid: int, window_id: int) -> bool:
+        """Ask WindowServer to front one exact process/window, when available."""
+        library = self._load_skylight()
+        if library is None:
+            return False
+        try:
+            connection_id = library.CGSMainConnectionID
+            get_window_owner = library.SLSGetWindowOwner
+            get_connection_psn = library.SLSGetConnectionPSN
+            set_front = library.SLPSSetFrontProcessWithOptions
+            connection_id.argtypes = []
+            connection_id.restype = ctypes.c_uint32
+            get_window_owner.argtypes = [
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint32),
+            ]
+            get_window_owner.restype = ctypes.c_int32
+            get_connection_psn.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+            get_connection_psn.restype = ctypes.c_int32
+            set_front.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
+            set_front.restype = ctypes.c_int32
+
+            owner_connection = ctypes.c_uint32()
+            if get_window_owner(
+                connection_id(), ctypes.c_uint32(window_id), ctypes.byref(owner_connection)
+            ) != 0 or owner_connection.value == 0:
+                return False
+            process_serial_number = (ctypes.c_ubyte * 8)()
+            if get_connection_psn(
+                owner_connection.value, ctypes.cast(process_serial_number, ctypes.c_void_p)
+            ) != 0:
+                return False
+            # kCPSNoWindows keeps the request scoped to the supplied window id
+            # instead of broadly raising every window owned by the app.
+            return set_front(
+                ctypes.cast(process_serial_number, ctypes.c_void_p),
+                ctypes.c_uint32(window_id),
+                ctypes.c_uint32(0x400),
+            ) == 0
+        except (AttributeError, OSError, TypeError, ValueError):
+            return False
+
     def _activate(self, window: dict[str, Any]) -> None:
         A = self.AppKit
         app = A.NSRunningApplication.runningApplicationWithProcessIdentifier_(int(window["pid"]))
         if app is None:
             raise ToolError("The target app is no longer running")
-        options = int(getattr(A, "NSApplicationActivateIgnoringOtherApps", 1 << 1)) | int(
-            getattr(A, "NSApplicationActivateAllWindows", 1 << 0)
+        skylight_activated = self._skylight_set_front_process(
+            int(window["pid"]), int(window["id"])
         )
-        activated = app.activateWithOptions_(options)
-        if activated is False:
-            raise ToolError("macOS refused to activate the target app; re-observe before sending input")
+        if not skylight_activated:
+            options = int(getattr(A, "NSApplicationActivateIgnoringOtherApps", 1 << 1)) | int(
+                getattr(A, "NSApplicationActivateAllWindows", 1 << 0)
+            )
+            activated = app.activateWithOptions_(options)
+            if activated is False:
+                raise ToolError("macOS refused to activate the target app; re-observe before sending input")
         app_element = self.ApplicationServices.AXUIElementCreateApplication(int(window["pid"]))
         # AppKit activation is asynchronous and can be ignored by a process
         # that was launched outside a normal app bundle. A trusted AX client

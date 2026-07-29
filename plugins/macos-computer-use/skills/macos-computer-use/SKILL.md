@@ -346,10 +346,11 @@ Because fallback input is foreground delivery, call `activate_window` before
 its first input (or after a Space/focus change), then capture a new
 `get_window_state` and ground the action in that post-activation state. Do not
 drive a focus-changing activation from the older background screenshot.
-For apps without `AXRaise`, activation tries the bound window's `AXMain` and
-then `AXFocused` attributes. Input still starts only after frontmost pid and
-focused window ID read back as the exact target; these compatibility rungs are
-not treated as proof by themselves.
+Activation first uses Cua Driver's local exact-window SkyLight path, with public
+AppKit activation as the compatibility fallback. For apps without `AXRaise`, it
+then tries the bound window's `AXMain` and `AXFocused` attributes. Input still
+starts only after frontmost pid and focused window ID read back as the exact
+target; these delivery rungs are not treated as proof by themselves.
 
 Fallback `launch_app` returns the matched pid/windows. Choose only one
 task-matching candidate and preserve the whole

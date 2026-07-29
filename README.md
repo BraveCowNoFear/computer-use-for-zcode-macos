@@ -155,10 +155,11 @@ root/data template variables.
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.
 - Keep normal app work in the background; escalate to foreground only after a
-  verified delivery failure. Foreground fallback raises the exact bound AX
-  app and window, then tries the window's main/focused attributes for apps
-  without `AXRaise`, allows a bounded asynchronous activation interval, and
-  confirms the focused pid/window ID before sending input.
+  verified delivery failure. Foreground fallback first asks WindowServer to
+  front the exact returned pid/window pair through the same local SkyLight path
+  used by Cua Driver, then falls back to public AppKit activation. It raises the
+  exact AX window, tries its main/focused attributes when `AXRaise` is absent,
+  and confirms the focused pid/window ID before sending input.
 - Persistently front one exact returned window only for an explicit frontmost
   outcome or a focus-proxy surface such as remote desktop. The primary live gate
   verifies the returned activation path, the app's fresh `active` readback, and
