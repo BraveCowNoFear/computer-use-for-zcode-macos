@@ -56,8 +56,11 @@ SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI T
 签名 Authority。以后每次复用还会核对主驱动与光标辅助程序是否逐字节匹配固定
 发布版的 SHA-256，因此不会把另一个“签名有效且版本号相同”的 Bundle 误当成已测试
 发行物。它会证明仅保存在 Plugin 数据目录内的持久遥测设置已关闭，同时关闭独立更新检查，再以
-`--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
-专用守护进程，并传入 `CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`。只有版本
+`--no-permissions-gate --permission-mode unrestricted --dangerously-bypass-approvals`
+启动本 Plugin 专用守护进程。关闭的是 Cua Driver 自己的首次权限引导，避免后台服务在 MCP
+socket 已建立后重新打开界面或重启；它不会授予或绕过 macOS TCC，系统权限仍需由用户运行一次
+安装/授权命令。守护进程还会传入
+`CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`。只有版本
 和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
 启动器还会用一个无效目标探针证明旧版页面变更已进入正常 pid 校验，而不是被

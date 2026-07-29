@@ -172,6 +172,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertGreaterEqual(workflow.count("04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957"), 2)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
+        self.assertIn("-u CUA_DRIVER_RS_PERMISSIONS_GATE", launcher)
+        self.assertIn("--env CUA_DRIVER_RS_PERMISSIONS_GATE=0", launcher)
+        self.assertIn("--env CUA_DRIVER_RS_PERMISSIONS_GATE=0", workflow)
         self.assertIn(
             "health_report get_config set_config get_accessibility_tree check_permissions",
             launcher,
@@ -225,7 +228,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('chmod 700 "$TELEMETRY_HOME"', launcher)
         self.assertIn('"source"[[:space:]]*:[[:space:]]*"persisted"', launcher)
         self.assertNotIn("telemetry disable >/dev/null 2>&1 || true", launcher)
-        self.assertNotIn("--no-permissions-gate", launcher)
+        self.assertIn("--no-permissions-gate", launcher)
         self.assertIn('SOCKET_DIR="/tmp/zcode-cua-${UID}"', launcher)
         common = (PLUGIN / "scripts" / "runtime-common.sh").read_text(encoding="utf-8")
         self.assertIn('permission mode: unrestricted', common)
@@ -346,7 +349,7 @@ class RepositoryContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn('"$product_app" --args', workflow)
-        self.assertNotIn("--no-permissions-gate", workflow)
+        self.assertIn("--no-permissions-gate", workflow)
         mcp_runtime = (
             PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
         ).read_text(encoding="utf-8")

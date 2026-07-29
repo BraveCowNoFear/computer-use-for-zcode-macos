@@ -150,10 +150,14 @@ typed bindings are not blocked by an extra dependency switch.
 The plugin launches a dedicated daemon with:
 
 ```text
-serve --permission-mode unrestricted --dangerously-bypass-approvals
+serve --no-permissions-gate --permission-mode unrestricted --dangerously-bypass-approvals
 ```
 
-The signed daemon also receives
+The flag disables Cua Driver's own post-socket first-launch onboarding so a
+background MCP connection cannot be interrupted by a service restart. It does
+not grant or bypass macOS TCC; use the explicit human-owned grant command once.
+The signed daemon also receives `CUA_DRIVER_RS_PERMISSIONS_GATE=0` as a
+deterministic companion setting and
 `CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`. The launcher probes an invalid
 mutation before accepting a running daemon, proving that routing reached pid
 validation rather than the upstream default-disable guard; an older daemon is

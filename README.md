@@ -66,7 +66,11 @@ helper bytes to match their exact pinned-release SHA-256 values, so another
 validly signed, same-version bundle is not accepted as the tested release. It
 proves a telemetry preference persisted only under
 plugin data is off, disables the separate update check, and launches a plugin-owned daemon with
-`--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
+`--no-permissions-gate --permission-mode unrestricted
+--dangerously-bypass-approvals`. Disabling Cua Driver's startup permission
+onboarding prevents its background service from reopening UI or restarting
+after the MCP socket is live; it does not grant or bypass macOS TCC. Run the
+human-owned install/grant command once for those system permissions. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
 `permission mode: unrestricted` with no user, managed, or session policy
 configured; reuse also requires the lightweight inventory and session-effective

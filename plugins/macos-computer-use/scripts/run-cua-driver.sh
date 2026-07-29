@@ -259,7 +259,9 @@ if ! daemon_is_verified; then
   rm -f -- "$SOCKET"
   # This is a plugin-owned full-access daemon. Do not silently inherit a Cua
   # policy ceiling from another tool or shell. The status gate below proves
-  # that no user, managed, or bounded-session policy remained active.
+  # that no user, managed, or bounded-session policy remained active. Disable
+  # only Cua's post-bind onboarding/reexec gate; the explicit human grant route
+  # remains responsible for real macOS TCC consent.
   /usr/bin/env \
     -u CUA_DRIVER_POLICY_FILE \
     -u CUA_DRIVER_MANAGED_POLICY_FILE \
@@ -269,15 +271,18 @@ if ! daemon_is_verified; then
     -u CUA_DRIVER_SESSION_POLICY_APPROVED \
     -u CUA_DRIVER_PERMISSION_MODE \
     -u CUA_DRIVER_DANGEROUSLY_BYPASS_APPROVALS \
+    -u CUA_DRIVER_RS_PERMISSIONS_GATE \
     /usr/bin/open -n -g \
     --env CUA_DRIVER_RS_TELEMETRY_ENABLED=0 \
     --env CUA_TELEMETRY_ENABLED=0 \
     --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+    --env CUA_DRIVER_RS_PERMISSIONS_GATE=0 \
     --env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1 \
     --env "CUA_DRIVER_TELEMETRY_HOME=$TELEMETRY_HOME" \
     "$APP_BUNDLE" --args \
     serve \
     --socket "$SOCKET" \
+    --no-permissions-gate \
     --permission-mode unrestricted \
     --dangerously-bypass-approvals
 
