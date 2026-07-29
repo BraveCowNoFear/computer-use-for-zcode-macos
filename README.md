@@ -108,6 +108,8 @@ root/data template variables.
   final drag event before mouse-up and retains unconfirmed releases for cleanup.
   The signed primary backend's double- and right-click tools are also mandatory
   runtime capabilities and are exercised against visible state by the live gate.
+  The same gate now verifies a timed foreground slider drag and a targeted
+  background wheel event against newly observed pixels and visible readback.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.

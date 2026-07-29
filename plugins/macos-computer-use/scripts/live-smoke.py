@@ -80,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.4"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.5"},
             },
         )
         self.notify("notifications/initialized")
@@ -423,6 +423,71 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if "Gesture: double" not in state.get("tree_markdown", ""):
             raise RuntimeError("Primary double_click did not reach the fixture gesture probe")
         report["steps"].append("primary_background_double_click_verified")
+
+        drag_start = primary_screenshot_point(
+            state,
+            FIXTURE_SLIDER_START_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        drag_end = primary_screenshot_point(
+            state,
+            FIXTURE_SLIDER_END_X,
+            FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        dragged, _ = client.call(
+            "drag",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                "from_x": drag_start[0],
+                "from_y": drag_start[1],
+                "to_x": drag_end[0],
+                "to_y": drag_end[1],
+                "duration_ms": 350,
+                "steps": 16,
+                "delivery_mode": "foreground",
+            },
+        )
+        require_action_verdict(dragged, "primary foreground drag")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after drag")
+        slider_match = re.search(r"Slider: (\d+)", state.get("tree_markdown", ""))
+        if slider_match is None or int(slider_match.group(1)) < 80:
+            raise RuntimeError("Primary drag did not move the fixture slider near its end")
+        report["steps"].append("primary_foreground_drag_verified")
+
+        scroll_point = primary_screenshot_point(
+            state,
+            FIXTURE_SCROLL_PROBE_CENTER_X,
+            FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        scrolled, _ = client.call(
+            "scroll",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                "x": scroll_point[0],
+                "y": scroll_point[1],
+                "direction": "down",
+                "by": "line",
+                "amount": 1,
+            },
+        )
+        require_action_verdict(scrolled, "primary background scroll")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after scroll")
+        scroll_match = re.search(r"Scrolled: (\d+)", state.get("tree_markdown", ""))
+        if scroll_match is None or int(scroll_match.group(1)) <= 0:
+            raise RuntimeError("Primary scroll did not reach the fixture scroll probe")
+        report["steps"].append("primary_background_scroll_verified")
 
         field = primary_element(state.get("elements", []), "AXTextField", "Smoke input")
         token = f"zcode-primary-{uuid.uuid4().hex[:10]}"

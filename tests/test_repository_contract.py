@@ -340,6 +340,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertLess(skill.index('effect:"suspected_noop"'), skill.index("Background pixel"))
         self.assertIn("`type_text({session,pid,window_id,x,y,text})`", skill)
         self.assertIn("primary driver also has a mutually exclusive pixel form", skill)
+        self.assertIn('reports `code:"background_unavailable"`', skill)
+        self.assertIn('same fresh drag once with `delivery_mode:"foreground"`', skill)
         self.assertIn("Fallback text can also return an MCP error", skill)
         self.assertIn("never the original full text", skill)
         self.assertIn('`has_screenshot:false`', skill)
@@ -405,6 +407,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',
+            '"primary_foreground_drag_verified"',
+            '"primary_background_scroll_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',

@@ -271,6 +271,10 @@ These direct tools intentionally have no app, window, or target restriction.
   imitating them with unrelated clicks. For their primary pixel forms, bind
   the exact returned pid/window and take x/y from that window's fresh PNG;
   then re-observe because a dispatched gesture is not visible-outcome proof.
+  Pinned macOS Cua Driver reports `code:"background_unavailable"` for a
+  window-scoped drag; after that literal response, re-observe and retry the
+  same fresh drag once with `delivery_mode:"foreground"`. This is a delivery
+  capability boundary, not an approval step.
 - For Chromium page content, use primary typed browser tools after binding the
   exact native window with `get_browser_state`; keep native tools for browser
   chrome, Safari, Firefox, file pickers, downloads, and permission dialogs.

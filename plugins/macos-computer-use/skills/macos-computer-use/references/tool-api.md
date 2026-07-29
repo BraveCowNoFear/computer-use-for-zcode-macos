@@ -26,6 +26,8 @@ Common flow:
 | Pixel click | `click({session, pid, window_id, x, y})` |
 | Double-click | `double_click({session, pid, window_id, element_token})` or fresh x/y |
 | Context click | `right_click({session, pid, window_id, element_token})` or fresh x/y |
+| Drag | `drag({session, pid, window_id, from_x, from_y, to_x, to_y, delivery_mode:"foreground"})` after the macOS background-unavailable response |
+| Targeted scroll | `scroll({session, pid, window_id, x, y, direction, by, amount})` from fresh pixels |
 | Desktop click | `click({session, x, y, scope:"desktop"})` with no pid/window |
 | Enter text | `type_text({session, pid, window_id, element_index, text})` |
 | Shortcut | `hotkey({session,pid,window_id,keys:["cmd","c"]})` |
