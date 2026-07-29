@@ -320,6 +320,8 @@ class RepositoryContractTests(unittest.TestCase):
             PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
         ).read_text(encoding="utf-8")
         self.assertIn('client.request("tools/list")', mcp_runtime)
+        self.assertIn('advertised[name].get("inputSchema")', mcp_runtime)
+        self.assertIn('direct_schema = describe(binary, name)', mcp_runtime)
         self.assertIn('"name": "kill_app"', mcp_runtime)
         self.assertIn('["/bin/sleep", "60"]', mcp_runtime)
 

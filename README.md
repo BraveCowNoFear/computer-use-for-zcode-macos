@@ -240,7 +240,8 @@ binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery and terminate only a
 disposable CI-owned process through the same stdio MCP proxy ZCode uses before
-the job passes.
+the job passes. Every mandatory MCP `inputSchema` must exactly match the same
+signed binary's direct `describe` contract.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

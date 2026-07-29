@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import select
 import signal
 import subprocess
@@ -27,6 +28,34 @@ def load_contracts(path: Path) -> set[str]:
     assert isinstance(module, ModuleType)
     spec.loader.exec_module(module)
     return set(module.CONTRACTS)
+
+
+def describe(binary: Path, name: str) -> dict[str, Any]:
+    env = os.environ.copy()
+    env["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "0"
+    env["CUA_DRIVER_RS_UPDATE_CHECK"] = "false"
+    completed = subprocess.run(
+        [str(binary), "describe", name],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        errors="strict",
+        env=env,
+    )
+    if completed.returncode != 0:
+        fail(f"describe {name} exited {completed.returncode}: {completed.stderr.strip()}")
+    if not re.search(rf"(?m)^name: {re.escape(name)}$", completed.stdout):
+        fail(f"describe {name} named a different tool")
+    marker = "input_schema:"
+    if marker not in completed.stdout:
+        fail(f"describe {name} omitted input_schema")
+    try:
+        schema = json.loads(completed.stdout.split(marker, 1)[1].strip())
+    except json.JSONDecodeError as error:
+        fail(f"describe {name} returned invalid input_schema: {error}")
+    if not isinstance(schema, dict):
+        fail(f"describe {name} returned a non-object schema")
+    return schema
 
 
 class MCPClient:
@@ -153,13 +182,18 @@ def main() -> int:
         if not isinstance(tools, list):
             fail("tools/list omitted tools")
         advertised = {
-            tool.get("name")
+            tool.get("name"): tool
             for tool in tools
             if isinstance(tool, dict) and isinstance(tool.get("name"), str)
         }
-        missing = required - advertised
+        missing = required - set(advertised)
         if missing:
             fail(f"tools/list omitted required tools: {sorted(missing)}")
+        for name in sorted(required):
+            mcp_schema = advertised[name].get("inputSchema")
+            direct_schema = describe(binary, name)
+            if mcp_schema != direct_schema:
+                fail(f"tools/list.inputSchema drifted from describe for {name}")
 
         apps, _ = client.call("list_apps")
         apps = require_object("list_apps", apps, {"apps"})
