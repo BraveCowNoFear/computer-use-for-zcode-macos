@@ -275,8 +275,9 @@ per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
 and one-way `auto` session escalation to desktop scope before restoring/ending
 its owned state. App and window discovery also pins the exact nine-field app
-record, ten-field WindowServer record, integer cursor position, and logical
-display geometry types. It cold-launches a stopped Calculator or TextEdit,
+record and its running-only summary, ten-field WindowServer record and count
+summary, integer cursor position and exact position text, and logical main-display
+geometry plus exact point/scale text. It cold-launches a stopped Calculator or TextEdit,
 validates the returned launch-window projection against a fresh full window
 inventory, kills only that owned pid, and waits for both the
 process and the eventually consistent app inventory to drop it. The public

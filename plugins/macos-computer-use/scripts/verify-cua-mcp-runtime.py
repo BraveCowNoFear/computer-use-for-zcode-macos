@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.23"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.24"},
             },
         )
         expected = {
@@ -943,7 +943,9 @@ APP_ENTRY_FIELDS = {
 }
 
 
-def require_app_inventory(name: str, value: Any) -> dict[str, Any]:
+def require_app_inventory(
+    name: str, value: Any, content: Any | None = None
+) -> dict[str, Any]:
     inventory = require_object(name, value, {"apps"})
     apps = inventory["apps"]
     if not isinstance(apps, list):
@@ -969,6 +971,18 @@ def require_app_inventory(name: str, value: Any) -> dict[str, Any]:
             fail(f"{name} reported an active stopped app: {app}")
         if app["kind"] not in {None, "desktop"}:
             fail(f"{name} returned an unexpected macOS app kind: {app}")
+    if content is not None:
+        running = [app for app in apps if app["running"]]
+        lines = [
+            f"✅ Found {len(apps)} app(s): {len(running)} running, "
+            f"{len(apps) - len(running)} installed-not-running."
+        ]
+        for app in running:
+            bundle = (
+                f" [{app['bundle_id']}]" if app["bundle_id"] is not None else ""
+            )
+            lines.append(f"- {app['name']} (pid {app['pid']}){bundle}")
+        require_text_content(name, content, "\n".join(lines))
     return inventory
 
 
@@ -1039,7 +1053,9 @@ def require_window_entry(
     return value
 
 
-def require_window_inventory(name: str, value: Any) -> dict[str, Any]:
+def require_window_inventory(
+    name: str, value: Any, content: Any | None = None
+) -> dict[str, Any]:
     inventory = require_object(name, value, {"windows", "current_space_id"})
     if inventory["current_space_id"] is not None:
         fail(f"{name}.current_space_id drifted from the pinned null contract")
@@ -1049,7 +1065,46 @@ def require_window_inventory(name: str, value: Any) -> dict[str, Any]:
         require_window_entry(
             f"{name}.windows[{index}]", window, WINDOW_ENTRY_FIELDS
         )
+    if content is not None:
+        require_text_content(
+            name, content, f"Found {len(inventory['windows'])} window(s)."
+        )
     return inventory
+
+
+def require_screen_geometry(
+    name: str, value: Any, content: Any
+) -> dict[str, Any]:
+    screen = require_object(name, value, {"width", "height", "scale_factor"})
+    if (
+        type(screen["width"]) is not int
+        or type(screen["height"]) is not int
+        or type(screen["scale_factor"]) is not float
+        or screen["width"] <= 0
+        or screen["height"] <= 0
+        or screen["scale_factor"] <= 0
+        or screen["scale_factor"] * 2 != round(screen["scale_factor"] * 2)
+    ):
+        fail(f"{name} returned invalid main-display geometry: {screen}")
+    scale = format(screen["scale_factor"], "g")
+    require_text_content(
+        name,
+        content,
+        f"✅ Main display: {screen['width']}x{screen['height']} points @ {scale}x",
+    )
+    return screen
+
+
+def require_cursor_position(
+    name: str, value: Any, content: Any
+) -> dict[str, Any]:
+    cursor = require_object(name, value, {"x", "y"})
+    if any(type(cursor[key]) is not int for key in ("x", "y")):
+        fail(f"{name} did not return exact integer screen-point coordinates")
+    require_text_content(
+        name, content, f"✅ Cursor at ({cursor['x']}, {cursor['y']})"
+    )
+    return cursor
 
 
 def require_launch_result(
@@ -1402,8 +1457,8 @@ def main() -> int:
         else:
             fail("invalid page mutation probe unexpectedly succeeded")
 
-        apps, _ = client.call("list_apps")
-        apps = require_app_inventory("list_apps", apps)
+        apps_value, apps_content = client.call("list_apps")
+        apps = require_app_inventory("list_apps", apps_value, apps_content)
         existing_app_pids = {
             app.get("pid")
             for app in apps["apps"]
@@ -1588,27 +1643,20 @@ def main() -> int:
             time.sleep(0.05)
         owned_app_pid = None
 
-        windows, _ = client.call("list_windows")
-        windows = require_window_inventory("list_windows", windows)
-
-        screen, _ = client.call("get_screen_size")
-        screen = require_object(
-            "get_screen_size", screen, {"width", "height", "scale_factor"}
+        windows_value, windows_content = client.call("list_windows")
+        windows = require_window_inventory(
+            "list_windows", windows_value, windows_content
         )
-        if (
-            type(screen["width"]) is not int
-            or type(screen["height"]) is not int
-            or type(screen["scale_factor"]) not in {int, float}
-            or screen["width"] <= 0
-            or screen["height"] <= 0
-            or screen["scale_factor"] <= 0
-        ):
-            fail("get_screen_size returned non-positive geometry")
 
-        cursor, _ = client.call("get_cursor_position")
-        cursor = require_object("get_cursor_position", cursor, {"x", "y"})
-        if any(type(cursor[key]) is not int for key in ("x", "y")):
-            fail("get_cursor_position did not return exact integer coordinates")
+        screen_value, screen_content = client.call("get_screen_size")
+        screen = require_screen_geometry(
+            "get_screen_size", screen_value, screen_content
+        )
+
+        cursor_value, cursor_content = client.call("get_cursor_position")
+        cursor = require_cursor_position(
+            "get_cursor_position", cursor_value, cursor_content
+        )
 
         config_value, config_content = client.call("get_config")
         require_text_content(

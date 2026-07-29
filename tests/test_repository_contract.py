@@ -419,6 +419,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("APP_ENTRY_FIELDS = {", mcp_runtime)
         self.assertIn("WINDOW_ENTRY_FIELDS = {", mcp_runtime)
         self.assertIn("LAUNCH_WINDOW_FIELDS = {", mcp_runtime)
+        self.assertIn("def require_screen_geometry(", mcp_runtime)
+        self.assertIn("def require_cursor_position(", mcp_runtime)
+        self.assertIn("installed-not-running.", mcp_runtime)
+        self.assertIn('f"Found {len(inventory[\'windows\'])} window(s)."', mcp_runtime)
+        self.assertIn("✅ Main display:", mcp_runtime)
+        self.assertIn("✅ Cursor at", mcp_runtime)
         self.assertIn('app["running"] is not (app["pid"] > 0)', mcp_runtime)
         self.assertIn('inventory["current_space_id"] is not None', mcp_runtime)
         self.assertIn("require_launch_result(", mcp_runtime)
@@ -492,7 +498,19 @@ class RepositoryContractTests(unittest.TestCase):
             "windows": [],
         }
         self.assertEqual(
-            module.require_app_inventory("apps", {"apps": [app]})["apps"][0],
+            module.require_app_inventory(
+                "apps",
+                {"apps": [app]},
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "✅ Found 1 app(s): 1 running, 0 installed-not-running.\n"
+                            "- Calculator (pid 321) [com.apple.calculator]"
+                        ),
+                    }
+                ],
+            )["apps"][0],
             app,
         )
         stopped = dict(app, pid=0, running=False)
@@ -516,7 +534,9 @@ class RepositoryContractTests(unittest.TestCase):
             "space_ids": [1],
         }
         module.require_window_inventory(
-            "windows", {"windows": [window], "current_space_id": None}
+            "windows",
+            {"windows": [window], "current_space_id": None},
+            [{"type": "text", "text": "Found 1 window(s)."}],
         )
         with self.assertRaisesRegex(RuntimeError, "current_space_id drifted"):
             module.require_window_inventory(
@@ -547,6 +567,42 @@ class RepositoryContractTests(unittest.TestCase):
                 dict(launched, windows=[dict(launch_window, pid=999)]),
                 "com.apple.calculator",
                 "Calculator",
+            )
+
+        screen = {"width": 1512, "height": 982, "scale_factor": 2.0}
+        self.assertEqual(
+            module.require_screen_geometry(
+                "screen",
+                screen,
+                [
+                    {
+                        "type": "text",
+                        "text": "✅ Main display: 1512x982 points @ 2x",
+                    }
+                ],
+            ),
+            screen,
+        )
+        cursor = {"x": -120, "y": 45}
+        self.assertEqual(
+            module.require_cursor_position(
+                "cursor",
+                cursor,
+                [{"type": "text", "text": "✅ Cursor at (-120, 45)"}],
+            ),
+            cursor,
+        )
+        with self.assertRaisesRegex(RuntimeError, "main-display geometry"):
+            module.require_screen_geometry(
+                "drifted screen",
+                dict(screen, scale_factor=2),
+                [],
+            )
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_cursor_position(
+                "drifted cursor",
+                cursor,
+                [{"type": "text", "text": "wrong"}],
             )
 
     def test_primary_tool_errors_preserve_mcp_business_payload(self):

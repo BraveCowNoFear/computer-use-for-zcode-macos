@@ -179,7 +179,11 @@ diagnostics; its optional session identifies the caller but does not turn the
 numbers into a fresh observation. Never derive a window action from this global
 geometry or use it in place of `get_desktop_state`. Desktop pixels still come
 only from the newest desktop image, and window pixels from the newest exact
-window image.
+window image. The pinned primary repeats logical main-display geometry and the
+current integer screen-point cursor position in exact human-readable text; the
+structured records remain authoritative, including when a cursor coordinate is
+negative on a multi-display layout. `list_apps` similarly summarizes only its
+structured running subset, and `list_windows` only repeats its structured count.
 
 For `set_value`, prefer the current element token and check both layers: the
 pinned driver should return `effect:"confirmed"` with `verified:true`, then a

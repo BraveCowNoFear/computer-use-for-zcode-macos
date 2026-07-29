@@ -186,7 +186,11 @@ Require `active` to imply `running`, and never treat pid 0 as an action target.
 Primary `list_windows` supplies the exact positive `(pid, window_id)` plus
 `bounds`, `z_index`, `is_on_screen`, per-window Space metadata, and a currently
 null top-level `current_space_id`; bind from the window record, not from that
-placeholder or from `list_apps.windows`.
+placeholder or from `list_apps.windows`. Their prose content is only the pinned
+running-app/count summary of those structured records; do not parse it as a
+second inventory. `get_screen_size` and `get_cursor_position` likewise return
+exact diagnostic text plus structured logical screen-point values, but neither
+is fresh pixel grounding for a window or desktop action.
 
 To hand a local file/folder or non-browser resource URL to a native app, use
 `launch_app({bundle_id,urls:[target]})`; never substitute shell `open`,
