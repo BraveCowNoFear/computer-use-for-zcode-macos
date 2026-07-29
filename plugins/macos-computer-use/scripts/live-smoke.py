@@ -18,6 +18,8 @@ from typing import Any, TextIO
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "live_fixture.py"
 DATA_DIR = Path(os.environ.get("MACOS_CUA_DATA_DIR", str(ROOT / ".local-data")))
+EXPECTED_CUA_VERSION = "0.13.1"
+EXPECTED_CUA_SOURCE_SHA = "d8c1efac808333bbecfcb2a9ff6705b5b1e6195a"
 FIXTURE_BUTTON_CENTER_X = 115.0
 FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
 FIXTURE_SLIDER_START_X = 252.0
@@ -92,7 +94,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.9"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.12.0"},
             },
         )
         self.notify("notifications/initialized")
@@ -417,6 +419,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         names = {tool.get("name") for tool in advertised}
         required = {
             "health_report",
+            "get_config",
+            "set_config",
             "check_permissions",
             "start_session",
             "get_session_state",
@@ -477,7 +481,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if (
             health.get("schema_version") != "1"
             or health.get("platform") != "darwin"
-            or health.get("driver_version") != "0.13.1"
+            or health.get("driver_version") != EXPECTED_CUA_VERSION
             or health.get("overall") != "ok"
             or failed_health_checks
             or health_checks.get("screen_capture_capability", {}).get("status") != "skip"
@@ -502,6 +506,52 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
 
         client.call("start_session", {"session": session, "capture_scope": "auto"})
         session_started = True
+        initial_config, _ = client.call("get_config", {"session": session})
+        original_max_dimension = initial_config.get("max_image_dimension")
+        advertised_source_sha = initial_config.get("source_sha")
+        if (
+            initial_config.get("version") != EXPECTED_CUA_VERSION
+            or advertised_source_sha not in {None, EXPECTED_CUA_SOURCE_SHA}
+            or initial_config.get("platform") != "macos"
+            or not isinstance(original_max_dimension, int)
+            or isinstance(original_max_dimension, bool)
+            or original_max_dimension < 0
+        ):
+            raise RuntimeError(f"Primary config identity was not exact: {initial_config}")
+        demo_max_dimension = 0 if original_max_dimension != 0 else 1568
+        configured_image, _ = client.call(
+            "set_config",
+            {"session": session, "max_image_dimension": demo_max_dimension},
+        )
+        current_config, _ = client.call("get_config", {"session": session})
+        peer_config, _ = client.call(
+            "get_config", {"session": f"config-peer-{uuid.uuid4().hex[:8]}"}
+        )
+        if (
+            configured_image.get("max_image_dimension") != demo_max_dimension
+            or current_config.get("max_image_dimension") != demo_max_dimension
+            or peer_config.get("max_image_dimension") != original_max_dimension
+        ):
+            raise RuntimeError(
+                "Primary max-image configuration was not session isolated: "
+                f"set={configured_image}, current={current_config}, peer={peer_config}"
+            )
+        restored_image, _ = client.call(
+            "set_config",
+            {"session": session, "max_image_dimension": original_max_dimension},
+        )
+        restored_config, _ = client.call("get_config", {"session": session})
+        if (
+            restored_image.get("max_image_dimension") != original_max_dimension
+            or restored_config.get("max_image_dimension") != original_max_dimension
+        ):
+            raise RuntimeError(
+                "Primary max-image configuration did not restore in-session: "
+                f"set={restored_image}, current={restored_config}"
+            )
+        report["maxImageDimension"] = original_max_dimension
+        report["cuaSourceSha"] = advertised_source_sha
+        report["steps"].append("primary_session_image_config_isolated_and_restored")
         cursor_disabled, _ = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": False}
         )

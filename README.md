@@ -92,6 +92,9 @@ root/data template variables.
 ## What agents can do
 
 - Discover and launch native apps and select exact returned windows.
+- Temporarily opt one named session into uncapped native-size window PNGs for
+  pixel-perfect verification, prove peer sessions retain their own effective
+  setting, and restore without changing the daemon-global persisted default.
 - Hand an existing local file/folder or resource URL to an exact native app
   through `launch_app.urls`, with structured missing-path errors, returned
   pid/window binding, focus-suppression readback, fresh observation, and exact

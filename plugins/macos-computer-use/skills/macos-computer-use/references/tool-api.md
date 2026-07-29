@@ -13,6 +13,8 @@ Common flow:
 | Intent | Tool and key fields |
 | --- | --- |
 | Stable driver diagnosis | `health_report({})`; require schema v1/darwin/pinned version and inspect named check statuses/hints |
+| Read session-effective image cap | `get_config({session})` |
+| Temporarily request native-size PNGs | `set_config({session, max_image_dimension:0})`; restore the prior value or end the session |
 | Permission status | `check_permissions({prompt:false})` |
 | Begin task | `start_session({session, capture_scope})` |
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |

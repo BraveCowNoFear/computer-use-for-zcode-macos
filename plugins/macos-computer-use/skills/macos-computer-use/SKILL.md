@@ -237,6 +237,17 @@ coordinates are window-local pixels in the exact returned image: top-left
 origin, x right, y down. Never reuse an old element index or pixel after layout,
 focus, content, selection, dialog, or window changes.
 
+Primary window PNGs default to a 1568-pixel long-side cap while preserving the
+same coordinates for following pixel actions. For an explicit pixel-perfect
+verification flow, read `get_config({session})`, temporarily call
+`set_config({session,max_image_dimension:0})`, verify the same session reads
+back `0`, then restore the original value or end that session. Always include
+the public session: an anonymous `set_config` changes the daemon-global value
+and persists it. A named session is an in-memory override and must not affect a
+fresh peer session. Do not use `set_config` for `capture_mode` or
+`capture_scope`; every window state already returns pixels plus AX, and scope
+belongs to `start_session`.
+
 For a small or visually dense primary target, call
 `zoom({pid,window_id,x1,y1,x2,y2})` with a bounded region from the exact fresh
 window PNG and inspect its returned JPEG. The zoom creates one replaceable

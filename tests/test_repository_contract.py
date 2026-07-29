@@ -371,6 +371,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`launch_app({bundle_id,urls:[target]})`", skill)
         self.assertIn("structured `FILE_NOT_FOUND`", skill)
         self.assertIn("`self_activation_suppressed`", skill)
+        self.assertIn("`get_config({session})`", skill)
+        self.assertIn("`set_config({session,max_image_dimension:0})`", skill)
+        self.assertIn("an anonymous `set_config` changes the daemon-global value", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
         self.assertIn("`bring_to_front({pid,window_id})` is an explicit persistent activation", skill)
@@ -516,6 +519,8 @@ class RepositoryContractTests(unittest.TestCase):
             "run-cua-driver.sh",
             'check_permissions", {"prompt": False}',
             '"health_report"',
+            '"get_config"',
+            '"set_config"',
             '"driver-daemon"',
             '"start_session"',
             '"get_session_state"',
@@ -573,6 +578,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_exact_window_frontmost_verified"',
             '"primary_background_file_url_launch_verified"',
             '"primary_exact_file_url_window_closed"',
+            '"primary_session_image_config_isolated_and_restored"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
