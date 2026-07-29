@@ -527,6 +527,7 @@ class RepositoryContractTests(unittest.TestCase):
             "127.0.0.1",
             "driver-owned browser cleanup",
             "exact driver-owned browser binding diagnostics",
+            'tabs[0].get("active") in {True, False, None}',
             "ending the browser session modified or terminated the source browser",
             'client.call("kill_app", {"pid": source_pid})',
             "shutil.rmtree(temp_root, ignore_errors=True)",
@@ -1665,6 +1666,7 @@ class RepositoryContractTests(unittest.TestCase):
             "local upload/download fixtures must remain\nunchanged",
             "positive, fully local isolated-profile chain",
             "fresh `semantic_v2` action refs",
+            "tri-state `active` may remain `null`",
         ):
             self.assertIn(marker, reference)
         for prohibited in (

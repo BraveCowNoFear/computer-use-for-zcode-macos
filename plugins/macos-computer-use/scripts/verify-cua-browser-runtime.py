@@ -347,7 +347,8 @@ def wait_for_binding(
                 and value.get("binding_route") == "native_cdp_window"
                 and value.get("mutation_allowed") is True
                 and isinstance(tabs, list)
-                and sum(tab.get("active") is True for tab in tabs) == 1
+                and len(tabs) == 1
+                and tabs[0].get("active") in {True, False, None}
             ):
                 target = value.get("target_id")
                 require_text(
@@ -482,8 +483,7 @@ def main() -> int:
         _, bound = wait_for_binding(client, browser_session, prepared_pid, product)
         target = bound["target_id"]
         tabs = bound["tabs"]
-        active = next(tab for tab in tabs if tab["active"] is True)
-        tab = active["tab_id"]
+        tab = tabs[0]["tab_id"]
 
         navigated, navigated_content = client.call(
             "browser_navigate",

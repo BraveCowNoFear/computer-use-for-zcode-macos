@@ -207,7 +207,9 @@ to return a different driver-owned pid and exact side-effect/endpoint proof.
 Only the prepared window is bound. It navigates to a loopback fixture, obtains
 fresh `semantic_v2` action refs, applies a DOM-event click and trusted
 replace-type, and re-snapshots after each mutation to prove the counter and
-input value. `end_session` must close the prepared windows while the source
+input value. The disposable browser has exactly one returned tab; its
+tri-state `active` may remain `null` because the gate never activates or
+foregrounds the window. `end_session` must close the prepared windows while the source
 window remains; the verifier then kills only that owned source pid and removes
 both temporary fixtures. No TCC grant, external page, personal browser profile,
 or physical input is involved.
