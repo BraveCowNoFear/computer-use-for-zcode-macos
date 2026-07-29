@@ -59,6 +59,62 @@ def describe(binary: Path, name: str) -> dict[str, Any]:
     return schema
 
 
+def dump_docs(binary: Path) -> dict[str, dict[str, Any]]:
+    env = os.environ.copy()
+    env["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "0"
+    env["CUA_DRIVER_RS_UPDATE_CHECK"] = "false"
+    completed = subprocess.run(
+        [str(binary), "dump-docs", "--type", "mcp"],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        errors="strict",
+        env=env,
+    )
+    if completed.returncode != 0:
+        fail(
+            "dump-docs --type mcp exited "
+            f"{completed.returncode}: {completed.stderr.strip()}"
+        )
+    try:
+        document = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        fail(f"dump-docs --type mcp returned invalid JSON: {error}")
+    if not isinstance(document, dict) or document.get("version") != "0.13.1":
+        fail(f"dump-docs returned the wrong runtime identity: {document}")
+    tools = document.get("tools")
+    if not isinstance(tools, list):
+        fail("dump-docs omitted tools")
+    expected_fields = {
+        "name",
+        "description",
+        "input_schema",
+        "read_only",
+        "destructive",
+        "idempotent",
+    }
+    docs: dict[str, dict[str, Any]] = {}
+    for tool in tools:
+        if not isinstance(tool, dict) or set(tool) != expected_fields:
+            fail(f"dump-docs returned a malformed tool entry: {tool}")
+        name = tool.get("name")
+        if not isinstance(name, str) or not name:
+            fail(f"dump-docs returned an invalid tool name: {name!r}")
+        if name in docs:
+            fail(f"dump-docs returned duplicate tool name: {name}")
+        if (
+            not isinstance(tool["description"], str)
+            or not isinstance(tool["input_schema"], dict)
+            or any(
+                type(tool[field]) is not bool
+                for field in ("read_only", "destructive", "idempotent")
+            )
+        ):
+            fail(f"dump-docs metadata types drifted for {name}")
+        docs[name] = tool
+    return docs
+
+
 class MCPClient:
     def __init__(self, binary: Path, socket: str) -> None:
         env = os.environ.copy()
@@ -122,7 +178,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.1"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.2"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -222,6 +278,13 @@ def main() -> int:
     )
     if len(required) != 49:
         fail(f"expected 49 pinned tools, got {len(required)}")
+    direct_docs = dump_docs(binary)
+    if set(direct_docs) != required:
+        fail(
+            "dump-docs surface drifted: "
+            f"missing={sorted(required - set(direct_docs))}, "
+            f"unexpected={sorted(set(direct_docs) - required)}"
+        )
 
     client = MCPClient(binary, socket)
     peer = MCPClient(binary, socket)
@@ -235,6 +298,10 @@ def main() -> int:
         client.initialize()
         peer.initialize()
         listed = client.request("tools/list")
+        if set(listed) != {"tools", "capability_version", "schema_version"}:
+            fail(f"tools/list envelope drifted: {sorted(listed)}")
+        if listed["capability_version"] != "1" or listed["schema_version"] != "1":
+            fail(f"tools/list contract versions drifted: {listed}")
         tools = listed.get("tools")
         if not isinstance(tools, list):
             fail("tools/list omitted tools")
@@ -256,10 +323,85 @@ def main() -> int:
                 f"unexpected={sorted(advertised_names - required)}"
             )
         for name in sorted(required):
-            mcp_schema = advertised[name].get("inputSchema")
+            entry = advertised[name]
+            expected_entry_fields = {
+                "name",
+                "description",
+                "inputSchema",
+                "annotations",
+                "capabilities",
+                "risk",
+            }
+            if set(entry) != expected_entry_fields:
+                fail(f"tools/list entry fields drifted for {name}: {sorted(entry)}")
+            direct_doc = direct_docs[name]
+            if entry["description"] != direct_doc["description"]:
+                fail(f"tools/list.description drifted from dump-docs for {name}")
+            mcp_schema = entry["inputSchema"]
+            if mcp_schema != direct_doc["input_schema"]:
+                fail(f"tools/list.inputSchema drifted from dump-docs for {name}")
             direct_schema = describe(binary, name)
             if mcp_schema != direct_schema:
                 fail(f"tools/list.inputSchema drifted from describe for {name}")
+            annotations = entry["annotations"]
+            annotation_fields = {
+                "readOnlyHint",
+                "destructiveHint",
+                "idempotentHint",
+                "openWorldHint",
+            }
+            if not isinstance(annotations, dict) or set(annotations) != annotation_fields:
+                fail(f"tools/list.annotations drifted for {name}: {annotations}")
+            expected_annotations = {
+                "readOnlyHint": direct_doc["read_only"],
+                "destructiveHint": direct_doc["destructive"],
+                "idempotentHint": direct_doc["idempotent"],
+            }
+            if any(
+                annotations[field] is not value
+                for field, value in expected_annotations.items()
+            ):
+                fail(f"tools/list annotation values drifted from dump-docs for {name}")
+            if type(annotations["openWorldHint"]) is not bool:
+                fail(f"tools/list.openWorldHint is not boolean for {name}")
+            capabilities = entry["capabilities"]
+            if (
+                not isinstance(capabilities, list)
+                or not all(
+                    isinstance(capability, str) and capability
+                    for capability in capabilities
+                )
+                or len(capabilities) != len(set(capabilities))
+            ):
+                fail(f"tools/list.capabilities drifted for {name}: {capabilities}")
+            risk = entry["risk"]
+            if (
+                not isinstance(risk, dict)
+                or set(risk) != {"class", "enforcement", "operation_sensitive", "version"}
+                or risk["class"] not in {"r0", "r1", "r2", "r3", "r4", "unclassified"}
+                or risk["enforcement"] not in {"active", "metadata_only", "not_exposed"}
+                or type(risk["operation_sensitive"]) is not bool
+                or risk["version"] != "1"
+            ):
+                fail(f"tools/list.risk drifted for {name}: {risk}")
+
+        service_annotations = {
+            "check_for_update": {
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+            "install_ffmpeg": {
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
+        }
+        for name, expected in service_annotations.items():
+            if advertised[name]["annotations"] != expected:
+                fail(f"tools/list service annotations drifted for {name}")
 
         health, _ = client.call("health_report")
         health = require_object(

@@ -258,7 +258,9 @@ disappear. The public
 MCP `prompt:true` path must fail at the trusted-host
 macOS TCC boundary without opening permission UI. The stdio gate also rejects
 malformed, duplicate, missing, or unexpected tool names, so ZCode receives
-exactly the audited 49-tool surface. Every mandatory MCP
+exactly the audited 49-tool surface. It also pins the tools-list envelope,
+descriptions, standard MCP annotations, capability labels, and risk metadata.
+Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.
