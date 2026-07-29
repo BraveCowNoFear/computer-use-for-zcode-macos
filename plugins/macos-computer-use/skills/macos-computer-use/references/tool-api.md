@@ -59,6 +59,12 @@ windowless `scope:"desktop"` shortcut or key deliberately targets the current
 foreground app and therefore starts from a fresh desktop observation. Both
 paths still require a new state read before any follow-up action.
 
+For `set_value`, prefer the current element token and check both layers: the
+pinned driver should return `effect:"confirmed"` with `verified:true`, then a
+new snapshot must expose the requested non-text control value. This is the AX
+equivalent of action plus visible-state verification, not a license to reuse
+the now-stale token.
+
 Primary window coordinates use the screenshot's window-local pixel space. AX
 indexes and opaque `element_token` handles are cached against one
 `(app, pid, window_id)` observation and go stale on the next snapshot. Prefer

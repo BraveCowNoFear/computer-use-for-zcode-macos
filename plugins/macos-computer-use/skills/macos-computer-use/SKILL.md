@@ -269,7 +269,10 @@ These direct tools intentionally have no app, window, or target restriction.
   expanded state before choosing an item or typing. Never send selection keys
   from the pre-open observation: if opening failed, they can land in the old
   focused field.
-- Use `set_value` for non-text controls whose AX value can be replaced.
+- Use `set_value` for non-text controls whose AX value can be replaced. Prefer
+  the fresh `element_token`, require its `effect:"confirmed"`/`verified:true`
+  readback, then refresh and compare the control's actual value; the action
+  response alone is still not completion evidence.
 - Use `scroll`, `drag`, `double_click`, or `right_click` primitives rather than
   imitating them with unrelated clicks. For their primary pixel forms, bind
   the exact returned pid/window and take x/y from that window's fresh PNG;

@@ -80,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.6"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.7"},
             },
         )
         self.notify("notifications/initialized")
@@ -461,6 +461,34 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if slider_match is None or int(slider_match.group(1)) < 80:
             raise RuntimeError("Primary drag did not move the fixture slider near its end")
         report["steps"].append("primary_foreground_drag_verified")
+
+        slider = primary_element(state.get("elements", []), "AXSlider", "Smoke slider")
+        set_result, _ = client.call(
+            "set_value",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                **primary_element_target(slider),
+                "value": 25,
+            },
+        )
+        require_action_verdict(set_result, "primary set_value")
+        if set_result.get("effect") != "confirmed" or set_result.get("verified") is not True:
+            raise RuntimeError(f"Primary set_value was not confirmed: {set_result}")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after set_value")
+        slider = primary_element(state.get("elements", []), "AXSlider", "Smoke slider")
+        try:
+            slider_value = float(slider.get("value"))
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(f"Primary slider returned no numeric value: {slider}") from error
+        if abs(slider_value - 25.0) > 0.5:
+            raise RuntimeError(f"Primary set_value left the slider at {slider_value}, expected 25")
+        report["steps"].append("primary_set_value_verified")
 
         scroll_point = primary_screenshot_point(
             state,

@@ -112,6 +112,8 @@ root/data template variables.
   background wheel event against newly observed pixels and visible readback.
 - Verify primary literal text, a pid-bound Command-Shift-K focused-field shortcut,
   and an element-bound Space key independently before the final mouse click.
+- Require a snapshot-bound `set_value` to return confirmed AX readback and a
+  fresh slider element to expose the requested value independently of dragging.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.

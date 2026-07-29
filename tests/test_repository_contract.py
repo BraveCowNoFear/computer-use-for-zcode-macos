@@ -344,6 +344,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('same fresh drag once with `delivery_mode:"foreground"`', skill)
         self.assertIn("Keep window-scoped shortcuts bound to the returned pid/window", skill)
         self.assertIn("Re-observe after a shortcut or single key", skill)
+        self.assertIn('require its `effect:"confirmed"`/`verified:true`', skill)
         self.assertIn("Fallback text can also return an MCP error", skill)
         self.assertIn("never the original full text", skill)
         self.assertIn('`has_screenshot:false`', skill)
@@ -412,6 +413,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',
             '"primary_foreground_drag_verified"',
+            '"primary_set_value_verified"',
             '"primary_background_scroll_verified"',
             '"primary_background_hotkey_verified"',
             '"primary_background_press_key_verified"',
