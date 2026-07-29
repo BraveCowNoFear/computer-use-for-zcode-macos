@@ -234,7 +234,8 @@ Driver `0.13.1` 身份以及 macOS 工作流说明；同一条真实连接还必
 同一个签名主后端门禁还会锁定普通工具错误语义：`APP_NOT_INSTALLED` 与
 `FILE_NOT_FOUND` 必须作为结构化 MCP 错误返回且不得启动所选 App；成功的
 `kill_app` 仍是纯文本 SIGKILL 确认，随后必须观察到进程消失；会话在幂等启动、scope
-冲突、单向升级、结束与显式复活过程中的全部 nullable 字段、精确摘要和结构化错误也必须稳定。
+冲突、单向升级、结束、公开 daemon 的结束后防复活拦截与生命周期豁免的显式复活过程
+中的全部 nullable 字段、精确摘要和结构化错误也必须稳定。
 schema-v1 健康报告的响应也已锁定：八个 macOS 检查保持规范顺序，每项严格遵守
 status/hint/data 形状，`overall` 与各项状态一致；只 include 二进制版本时，其余七项
 必须显式 skip，且整个探针不触碰 TCC。

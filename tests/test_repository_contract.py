@@ -437,7 +437,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("def require_session_state(", mcp_runtime)
         self.assertIn('"code": "session_policy_conflict"', mcp_runtime)
         self.assertIn('"code": "desktop_already_active"', mcp_runtime)
-        self.assertIn('"code": "session_not_started"', mcp_runtime)
+        self.assertIn("def require_ended_session_guard(", mcp_runtime)
+        self.assertIn('result != {"exit_code": 1}', mcp_runtime)
         self.assertIn("def require_ended_session(", mcp_runtime)
         self.assertIn("revived=True", mcp_runtime)
         self.assertIn('client.call("get_recording_state")', mcp_runtime)
@@ -1108,6 +1109,28 @@ class RepositoryContractTests(unittest.TestCase):
             ),
             {"session": session, "active": False},
         )
+        guard = {"exit_code": 1}
+        guard_content = [
+            {
+                "type": "text",
+                "text": (
+                    f"session '{session}' has ended; tool call "
+                    "'get_session_state' was rejected. Call start_session with "
+                    "this id to revive it before issuing further actions, or "
+                    "use a new session id."
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_ended_session_guard(
+                "ended guard",
+                guard,
+                guard_content,
+                session=session,
+                tool_name="get_session_state",
+            ),
+            guard,
+        )
         with self.assertRaisesRegex(RuntimeError, "session state drifted"):
             module.require_session_state(
                 "drifted session",
@@ -1128,6 +1151,14 @@ class RepositoryContractTests(unittest.TestCase):
                 effective_scope="window",
                 desktop_unlocked=False,
                 revived=False,
+            )
+        with self.assertRaisesRegex(RuntimeError, "ended-session guard drifted"):
+            module.require_ended_session_guard(
+                "drifted ended guard",
+                {"exit_code": 2},
+                guard_content,
+                session=session,
+                tool_name="get_session_state",
             )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):

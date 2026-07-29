@@ -147,8 +147,10 @@ returns exactly `{session,active:false}`. Starting an active ID again with
 the same scope is an idempotent TTL refresh and keeps `revived:false`.
 Requesting another live scope returns `session_policy_conflict`, including
 the existing and requested scopes, without mutation. After `end_session`,
-`get_session_state` returns `session_not_started`; an explicit new
-`start_session` may bind a fresh scope and returns `revived:true`. A second
+the public daemon resurrection guard rejects ordinary calls such as
+`get_session_state` with `{exit_code:1}` and tells the caller to start that
+ID again or use a new one; an explicit lifecycle-exempt `start_session` may
+bind a fresh scope and returns `revived:true`. A second
 desktop escalation returns `desktop_already_active`, also without mutation.
 These are the driver's lifecycle semantics, not plugin approval decisions.
 

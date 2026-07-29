@@ -306,7 +306,8 @@ The same signed-primary gate locks ordinary tool-error semantics:
 starting the selected app, successful `kill_app` remains a text-only SIGKILL
 acknowledgement followed by observed process disappearance, and every nullable
 session-state field plus each exact lifecycle summary/error remains stable
-through idempotency, conflict, one-way escalation, end, and explicit revival.
+through idempotency, conflict, one-way escalation, end, the public daemon's
+post-end resurrection guard, and explicit lifecycle-exempt revival.
 Its schema-v1 health report is now response-pinned as well: all eight macOS
 checks remain in canonical order, every entry obeys the exact status/hint/data
 shape, `overall` agrees with the check statuses, and an include-only probe

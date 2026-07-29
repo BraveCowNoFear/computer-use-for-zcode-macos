@@ -983,6 +983,27 @@ def require_ended_session(
     return state
 
 
+def require_ended_session_guard(
+    name: str,
+    value: Any,
+    content: Any,
+    *,
+    session: str,
+    tool_name: str,
+) -> dict[str, Any]:
+    result = require_object(name, value, {"exit_code"})
+    if result != {"exit_code": 1}:
+        fail(f"{name} ended-session guard drifted: {result}")
+    require_text_content(
+        name,
+        content,
+        f"session '{session}' has ended; tool call '{tool_name}' was rejected. "
+        "Call start_session with this id to revive it before issuing further "
+        "actions, or use a new session id.",
+    )
+    return result
+
+
 def require_recording_state(
     name: str, value: Any, content: Any | None = None
 ) -> dict[str, Any]:
@@ -2144,12 +2165,12 @@ def main() -> int:
         ended_state, ended_state_content = client.call_error(
             "get_session_state", {"session": session}
         )
-        if ended_state != {"code": "session_not_started", "session": session}:
-            fail(f"ended get_session_state response drifted: {ended_state}")
-        require_text_content(
+        require_ended_session_guard(
             "ended get_session_state",
+            ended_state,
             ended_state_content,
-            f"session '{session}' is not active",
+            session=session,
+            tool_name="get_session_state",
         )
         revived, revived_content = client.call(
             "start_session", {"session": session, "capture_scope": "desktop"}
