@@ -163,6 +163,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("start_session get_session_state escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("set_agent_cursor_motion", launcher)
+        self.assertIn("set_agent_cursor_theme", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
         self.assertIn("list_windows bring_to_front", launcher)
@@ -350,6 +351,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`set_agent_cursor_motion` with only that session", skill)
         self.assertIn("Motion tuning affects only the semantic overlay", skill)
         self.assertIn("Do not add random target jitter", skill)
+        self.assertIn("`set_agent_cursor_theme({session,theme_id,reduced_motion})`", skill)
+        self.assertIn('`reduced_motion` is `"auto"`, `"on"`, or\n`"off"`', skill)
+        self.assertIn("Never\npass a file path, URL, source artwork, or inline animation", skill)
         self.assertIn("`zoom({pid,window_id,x1,y1,x2,y2})`", skill)
         self.assertIn("one replaceable\ncoordinate context per pid", skill)
         self.assertIn("`from_zoom:true`", skill)
@@ -484,6 +488,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"get_agent_cursor_state"',
             '"set_agent_cursor_enabled"',
             '"set_agent_cursor_motion"',
+            '"set_agent_cursor_theme"',
             '"get_cursor_position"',
             '"get_screen_size"',
             '"get_desktop_state"',
@@ -505,6 +510,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_session_cursor_ready"',
             '"primary_stable_health_report_verified"',
             '"primary_human_cursor_motion_verified"',
+            '"primary_cursor_theme_verified"',
+            '"primary_cursor_theme_restored"',
             '"primary_cursor_motion_restored"',
             '"primary_zoom_bound_click_verified"',
             '"primary_virtual_cursor_moved_without_real_pointer"',

@@ -96,6 +96,16 @@ recordings. If the user explicitly asks for silent background operation, call
 `get_agent_cursor_state({session})` to verify a hide, restore, selected theme,
 or motion change rather than assuming the overlay accepted it.
 
+The embedded `cua.default` theme is sufficient for ordinary work. Use
+`set_agent_cursor_theme({session,theme_id,reduced_motion})` only for an explicit
+visual-theme or reduced-motion request, and select only an ID already installed
+in the local Cua Driver theme store. `reduced_motion` is `"auto"`, `"on"`, or
+`"off"`. Read the current theme first, read it back after the change, and restore
+both its ID and reduced-motion value when a temporary demo setting ends. Never
+pass a file path, URL, source artwork, or inline animation through the Agent
+tool; trusted local theme authoring/installation is a separate human-run CLI
+workflow, not a plugin approval prompt.
+
 The cursor belongs to the session, not the target window. Reuse the same
 session ID across that run's apps and windows, give concurrent runs different
 IDs, and always call `end_session` so its cursor disappears. Do not move the

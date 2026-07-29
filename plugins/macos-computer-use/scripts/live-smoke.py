@@ -91,7 +91,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.5"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.6"},
             },
         )
         self.notify("notifications/initialized")
@@ -159,6 +159,24 @@ def require_cursor_motion(
             raise RuntimeError(
                 f"{step} did not retain {field}={expected_value}: {actual}"
             )
+
+
+def restorable_cursor_theme(theme: dict[str, Any]) -> dict[str, str]:
+    theme_id = theme.get("id")
+    reduced_motion = theme.get("reduced_motion")
+    if not isinstance(theme_id, str) or not theme_id:
+        raise RuntimeError(f"Primary cursor returned no restorable theme id: {theme}")
+    if reduced_motion not in {"auto", "on", "off"}:
+        raise RuntimeError(f"Primary cursor returned invalid reduced-motion state: {theme}")
+    return {"theme_id": theme_id, "reduced_motion": reduced_motion}
+
+
+def require_cursor_theme(actual: dict[str, Any], expected: dict[str, str], step: str) -> None:
+    if (
+        actual.get("id") != expected["theme_id"]
+        or actual.get("reduced_motion") != expected["reduced_motion"]
+    ):
+        raise RuntimeError(f"{step} did not retain the requested theme: {actual}")
 
 
 def fixture_screenshot_point(
@@ -369,6 +387,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     session = new_live_session()
     session_started = False
     original_cursor_motion: dict[str, Any] | None = None
+    original_cursor_theme: dict[str, str] | None = None
     original_real_cursor: dict[str, Any] | None = None
     isolated_app_pid: int | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
@@ -386,6 +405,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "get_agent_cursor_state",
             "set_agent_cursor_enabled",
             "set_agent_cursor_motion",
+            "set_agent_cursor_theme",
             "get_cursor_position",
             "get_screen_size",
             "move_cursor",
@@ -480,8 +500,28 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         ):
             raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
         original_cursor_motion = dict(initial_motion)
+        original_cursor_theme = restorable_cursor_theme(theme)
         report["cursorTheme"] = theme["id"]
         report["steps"].append("primary_session_cursor_ready")
+
+        demo_theme = {
+            "theme_id": original_cursor_theme["theme_id"],
+            "reduced_motion": (
+                "on" if original_cursor_theme["reduced_motion"] == "off" else "off"
+            ),
+        }
+        configured_theme, _ = client.call(
+            "set_agent_cursor_theme", {"session": session, **demo_theme}
+        )
+        require_cursor_theme(
+            configured_theme.get("theme", {}), demo_theme, "Primary cursor theme response"
+        )
+        cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        require_cursor_theme(
+            cursor_state.get("theme", {}), demo_theme, "Primary cursor theme state"
+        )
+        report["cursorReducedMotion"] = demo_theme["reduced_motion"]
+        report["steps"].append("primary_cursor_theme_verified")
 
         human_motion = {
             "start_handle": 0.34,
@@ -1048,6 +1088,20 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         )
         original_cursor_motion = None
         report["steps"].append("primary_cursor_motion_restored")
+
+        client.call(
+            "set_agent_cursor_theme", {"session": session, **original_cursor_theme}
+        )
+        restored_cursor_state, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        require_cursor_theme(
+            restored_cursor_state.get("theme", {}),
+            original_cursor_theme,
+            "Primary cursor theme restoration",
+        )
+        original_cursor_theme = None
+        report["steps"].append("primary_cursor_theme_restored")
         return report
     finally:
         if original_real_cursor is not None:
@@ -1062,6 +1116,14 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             except Exception:
                 pass
         if session_started:
+            if original_cursor_theme is not None:
+                try:
+                    client.call(
+                        "set_agent_cursor_theme",
+                        {"session": session, **original_cursor_theme},
+                    )
+                except Exception:
+                    pass
             if original_cursor_motion is not None:
                 try:
                     client.call(

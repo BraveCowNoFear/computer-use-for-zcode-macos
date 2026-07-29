@@ -17,6 +17,7 @@ Common flow:
 | Begin task | `start_session({session, capture_scope})` |
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |
 | Hide/show session cursor | `set_agent_cursor_enabled({session, enabled})` |
+| Select installed cursor artwork | `set_agent_cursor_theme({session, theme_id, reduced_motion})` |
 | Move only the visible session cursor | `move_cursor({session, x, y, scope:"window"})` |
 | Unlock desktop for an `auto` session | `escalate_session({session, reason, detail})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |

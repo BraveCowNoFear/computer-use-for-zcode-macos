@@ -150,6 +150,9 @@ root/data template variables.
   Its per-session Bezier path, arc, spring, speed/timing, and idle visibility
   can be tuned for a human-readable demo, read back, and restored without
   changing the real input target or physical-pointer semantics.
+  Its installed artwork and reduced-motion mode can likewise be selected,
+  independently read back, and restored per session; Agent calls cannot inject
+  paths, URLs, source artwork, or inline animations.
   A window-scoped `move_cursor` can seed a clearly visible demo glide without
   touching the real pointer; desktop scope remains an explicit real-pointer
   operation grounded in fresh full-desktop pixels.
