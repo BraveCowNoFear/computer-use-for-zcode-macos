@@ -73,8 +73,9 @@ Cua daemon。任何 Plugin 都不能伪造或绕过 macOS TCC 授权。仅依赖
 Use 增加 App 白名单、动作风险分类或逐动作批准。
 
 双架构 macOS CI 还会通过 ZCode 使用的真实 stdio MCP 证明连接级图像配置互不
-污染、语义光标显隐可回读，以及 `auto` session 只能显式单向升级到 desktop；测试
-随后恢复配置并结束自己创建的 session。
+污染、只读健康/TCC 状态归属于 driver daemon、语义光标显隐可回读，以及 `auto`
+session 只能显式单向升级到 desktop。公开 MCP 的 `prompt:true` 必须在受信任主机
+TCC 边界失败且不弹权限框；测试随后恢复配置并结束自己创建的 session。
 
 本项目结构遵循 ZCode 当前的
 [Plugin 与 Marketplace 规范](https://zcode.z.ai/cn/docs/plugin)，包括

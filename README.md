@@ -244,8 +244,10 @@ first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery and terminate only a
 disposable CI-owned process through the same stdio MCP proxy ZCode uses before
 the job passes. That proxy must also prove per-connection image-configuration
-isolation, cursor visibility readback, and one-way `auto` session escalation to
-desktop scope before restoring/ending its owned state. Every mandatory MCP
+isolation, stable read-only health/TCC attribution, cursor visibility readback,
+and one-way `auto` session escalation to desktop scope before restoring/ending
+its owned state. The public MCP `prompt:true` path must fail at the trusted-host
+macOS TCC boundary without opening permission UI. Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.

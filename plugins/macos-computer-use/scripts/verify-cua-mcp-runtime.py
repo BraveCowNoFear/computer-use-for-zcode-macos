@@ -121,7 +121,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.1"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.2"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -229,6 +229,87 @@ def main() -> int:
             direct_schema = describe(binary, name)
             if mcp_schema != direct_schema:
                 fail(f"tools/list.inputSchema drifted from describe for {name}")
+
+        health, _ = client.call("health_report")
+        health = require_object(
+            "health_report",
+            health,
+            {"schema_version", "platform", "driver_version", "overall", "checks"},
+        )
+        if (
+            health["schema_version"] != "1"
+            or health["platform"] != "darwin"
+            or health["driver_version"] != "0.13.1"
+            or health["overall"] not in {"ok", "degraded"}
+            or not isinstance(health["checks"], list)
+        ):
+            fail(f"health_report returned the wrong runtime identity: {health}")
+        health_checks = {
+            entry.get("name"): entry
+            for entry in health["checks"]
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        }
+        expected_health_checks = {
+            "binary_version",
+            "platform_supported",
+            "session_active",
+            "bundle_identity",
+            "tcc_accessibility",
+            "tcc_screen_recording",
+            "ax_capability",
+            "screen_capture_capability",
+        }
+        if set(health_checks) != expected_health_checks:
+            fail(f"health_report checks drifted: {sorted(health_checks)}")
+        for name in (
+            "binary_version",
+            "platform_supported",
+            "session_active",
+            "bundle_identity",
+        ):
+            if health_checks[name].get("status") != "pass":
+                fail(f"health_report core check {name} did not pass: {health_checks[name]}")
+        if health_checks["screen_capture_capability"].get("status") != "skip":
+            fail("read-only health_report unexpectedly probed direct screen capture")
+
+        permissions, _ = client.call("check_permissions", {"prompt": False})
+        permissions = require_object(
+            "check_permissions",
+            permissions,
+            {
+                "accessibility",
+                "screen_recording",
+                "screen_recording_capturable",
+                "direct_capture_status",
+                "source",
+            },
+        )
+        if (
+            type(permissions["accessibility"]) is not bool
+            or type(permissions["screen_recording"]) is not bool
+            or permissions["screen_recording_capturable"] is not None
+            or permissions["direct_capture_status"] != "not_checked"
+            or not isinstance(permissions["source"], dict)
+            or permissions["source"].get("attribution") != "driver-daemon"
+            or permissions["source"].get("bundle_id") != "com.trycua.driver"
+        ):
+            fail(f"check_permissions did not return read-only daemon state: {permissions}")
+        if (
+            health_checks["tcc_accessibility"].get("status") == "pass"
+        ) != permissions["accessibility"]:
+            fail("health_report and check_permissions disagreed on Accessibility")
+        if (
+            health_checks["tcc_screen_recording"].get("status") == "pass"
+        ) != permissions["screen_recording"]:
+            fail("health_report and check_permissions disagreed on Screen Recording")
+        prompt_result = client.request(
+            "tools/call",
+            {"name": "check_permissions", "arguments": {"prompt": True}},
+        )
+        if not prompt_result.get("isError") or "os_permission_prompt_requires_trusted_host" not in json.dumps(
+            prompt_result, ensure_ascii=False
+        ):
+            fail(f"public MCP prompt=true did not fail at the trusted-host TCC boundary: {prompt_result}")
 
         apps, _ = client.call("list_apps")
         apps = require_object("list_apps", apps, {"apps"})
@@ -402,7 +483,7 @@ def main() -> int:
         client.close()
 
     print(
-        "Verified the complete primary surface, connection isolation, cursor/session lifecycle, and process control over stdio MCP."
+        "Verified primary diagnostics, complete schemas, connection isolation, cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 
