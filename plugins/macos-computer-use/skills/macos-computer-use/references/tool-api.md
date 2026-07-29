@@ -54,6 +54,11 @@ before a demo action. Desktop-scoped `move_cursor` instead moves the real OS
 pointer and therefore requires an effective desktop session plus coordinates
 from that session's fresh `get_desktop_state`; do not confuse the two spaces.
 
+Keep primary keyboard actions pid/window-bound for background app work. A
+windowless `scope:"desktop"` shortcut or key deliberately targets the current
+foreground app and therefore starts from a fresh desktop observation. Both
+paths still require a new state read before any follow-up action.
+
 Primary window coordinates use the screenshot's window-local pixel space. AX
 indexes and opaque `element_token` handles are cached against one
 `(app, pid, window_id)` observation and go stale on the next snapshot. Prefer

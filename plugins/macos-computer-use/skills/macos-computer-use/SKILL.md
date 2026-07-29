@@ -261,6 +261,9 @@ These direct tools intentionally have no app, window, or target restriction.
   `KP_*` navigation aliases, and posts real modifier down/up transitions. If a
   release is partial, do not replay the shortcut; cleanup retains and releases
   the exact pending native event.
+  Keep window-scoped shortcuts bound to the returned pid/window; omit them only
+  for an intentional foreground desktop shortcut after fresh desktop state.
+  Re-observe after a shortcut or single key just as after pointer input.
 - Focus or select the intended text field from fresh state before typing.
 - For a closed pop-up, combo box, or menu, open it first and re-observe the
   expanded state before choosing an item or typing. Never send selection keys

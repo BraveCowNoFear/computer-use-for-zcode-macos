@@ -110,6 +110,8 @@ root/data template variables.
   runtime capabilities and are exercised against visible state by the live gate.
   The same gate now verifies a timed foreground slider drag and a targeted
   background wheel event against newly observed pixels and visible readback.
+- Verify primary literal text, a pid-bound Command-Shift-K focused-field shortcut,
+  and an element-bound Space key independently before the final mouse click.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.

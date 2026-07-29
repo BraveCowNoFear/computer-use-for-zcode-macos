@@ -80,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.5"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.6"},
             },
         )
         self.notify("notifications/initialized")
@@ -282,6 +282,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "list_windows",
             "get_window_state",
             "type_text",
+            "press_key",
+            "hotkey",
             "click",
             "double_click",
             "right_click",
@@ -515,6 +517,49 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         require_image(content, "primary window state after typing")
         if token not in state.get("tree_markdown", ""):
             raise RuntimeError("Fresh primary state did not contain the text sent through type_text")
+
+        hotkeyed, _ = client.call(
+            "hotkey",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                "keys": ["cmd", "shift", "k"],
+            },
+        )
+        require_action_verdict(hotkeyed, "primary hotkey")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after hotkey")
+        if "Hotkey: received" not in state.get("tree_markdown", ""):
+            raise RuntimeError("Primary hotkey did not reach the focused fixture field")
+        report["steps"].append("primary_background_hotkey_verified")
+
+        button = primary_element(state.get("elements", []), "AXButton", "Copy value")
+        key_pressed, _ = client.call(
+            "press_key",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                **primary_element_target(button),
+                "key": "space",
+                "modifiers": [],
+            },
+        )
+        require_action_verdict(key_pressed, "primary press_key")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after press_key")
+        expected = f"Received: {token}"
+        if expected not in state.get("tree_markdown", ""):
+            raise RuntimeError("Primary press_key did not submit the fixture value")
+        report["steps"].append("primary_background_press_key_verified")
+
         button = primary_element(state.get("elements", []), "AXButton", "Copy value")
         clicked, _ = client.call(
             "click",
@@ -542,7 +587,6 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             {"session": session, "pid": pid, "window_id": window_id},
         )
         require_image(final_content, "primary final window state")
-        expected = f"Received: {token}"
         if expected not in final_state.get("tree_markdown", ""):
             raise RuntimeError(f"Primary final visible/AX result did not contain {expected!r}")
         report["steps"].append("primary_visible_result_verified")

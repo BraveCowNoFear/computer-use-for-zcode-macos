@@ -342,6 +342,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("primary driver also has a mutually exclusive pixel form", skill)
         self.assertIn('reports `code:"background_unavailable"`', skill)
         self.assertIn('same fresh drag once with `delivery_mode:"foreground"`', skill)
+        self.assertIn("Keep window-scoped shortcuts bound to the returned pid/window", skill)
+        self.assertIn("Re-observe after a shortcut or single key", skill)
         self.assertIn("Fallback text can also return an MCP error", skill)
         self.assertIn("never the original full text", skill)
         self.assertIn('`has_screenshot:false`', skill)
@@ -396,6 +398,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"get_cursor_position"',
             '"get_screen_size"',
             '"move_cursor"',
+            '"press_key"',
+            '"hotkey"',
             '"double_click"',
             '"right_click"',
             "primary_element_target",
@@ -409,6 +413,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_background_double_click_verified"',
             '"primary_foreground_drag_verified"',
             '"primary_background_scroll_verified"',
+            '"primary_background_hotkey_verified"',
+            '"primary_background_press_key_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
@@ -425,6 +431,10 @@ class RepositoryContractTests(unittest.TestCase):
             "self.process.kill()",
         ):
             self.assertIn(marker, smoke)
+        fixture = (PLUGIN / "tests" / "live_fixture.py").read_text(encoding="utf-8")
+        self.assertIn("class HotkeyTextField", fixture)
+        self.assertIn("NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift", fixture)
+        self.assertIn('button.setKeyEquivalent_(" ")', fixture)
 
     def test_live_smoke_maps_cocoa_fixture_geometry_into_png_pixels(self):
         path = PLUGIN / "scripts" / "live-smoke.py"

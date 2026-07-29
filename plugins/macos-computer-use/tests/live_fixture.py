@@ -31,7 +31,6 @@ class FixtureHandler(NSObject):
     def sliderChanged_(self, sender) -> None:
         self.slider_label.setStringValue_(f"Slider: {int(round(sender.doubleValue()))}")
 
-
 class ScrollProbeView(AppKit.NSView):
     def initWithFrame_statusLabel_(self, frame, status_label):
         self = objc.super(ScrollProbeView, self).initWithFrame_(frame)
@@ -72,6 +71,24 @@ class GestureProbeView(AppKit.NSView):
         self.status_label.setStringValue_("Gesture: right")
 
 
+class HotkeyTextField(AppKit.NSTextField):
+    def initWithFrame_statusLabel_(self, frame, status_label):
+        self = objc.super(HotkeyTextField, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self.status_label = status_label
+        return self
+
+    def keyDown_(self, event) -> None:
+        flags = event.modifierFlags()
+        key = (event.charactersIgnoringModifiers() or "").lower()
+        required = AppKit.NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift
+        if key == "k" and flags & required == required:
+            self.status_label.setStringValue_("Hotkey: received")
+            return
+        objc.super(HotkeyTextField, self).keyDown_(event)
+
+
 def label(frame, value: str):
     control = AppKit.NSTextField.alloc().initWithFrame_(frame)
     control.setStringValue_(value)
@@ -101,7 +118,12 @@ def main() -> int:
 
     content = window.contentView()
     prompt = label(AppKit.NSMakeRect(40, 230, 560, 24), "Type into the field, then press Copy value")
-    field = AppKit.NSTextField.alloc().initWithFrame_(AppKit.NSMakeRect(40, 170, 560, 32))
+    hotkey_result = label(AppKit.NSMakeRect(40, 10, 190, 24), "Hotkey: waiting")
+    hotkey_result.setAccessibilityLabel_("Smoke hotkey result")
+    field = HotkeyTextField.alloc().initWithFrame_statusLabel_(
+        AppKit.NSMakeRect(40, 170, 560, 32),
+        hotkey_result,
+    )
     field.setAccessibilityLabel_("Smoke input")
     button = AppKit.NSButton.alloc().initWithFrame_(AppKit.NSMakeRect(40, 105, 150, 34))
     button.setTitle_("Copy value")
@@ -132,6 +154,7 @@ def main() -> int:
     handler = FixtureHandler.alloc().initWithField_label_sliderLabel_(field, result, slider_result)
     button.setTarget_(handler)
     button.setAction_("submit:")
+    button.setKeyEquivalent_(" ")
     slider.setTarget_(handler)
     slider.setAction_("sliderChanged:")
     for control in (
@@ -143,6 +166,7 @@ def main() -> int:
         result,
         scroll_result,
         scroll_probe,
+        hotkey_result,
         gesture_result,
         gesture_probe,
     ):
