@@ -1706,7 +1706,7 @@ class ContractTests(unittest.TestCase):
         )
         backend._ax_window = lambda _window: target
         backend._ax_perform = mock.Mock(return_value=False)
-        backend._ax_set = mock.Mock(side_effect=[False, True])
+        backend._ax_set = mock.Mock(side_effect=[True, False, True])
         backend._ax_copy = lambda element, attribute: {
             ("application", "AXFocusedWindow"): target,
             (target, "AXWindowNumber"): 8,
@@ -1716,7 +1716,11 @@ class ContractTests(unittest.TestCase):
         backend._ax_perform.assert_called_once_with(target, "AXRaise")
         self.assertEqual(
             backend._ax_set.call_args_list,
-            [mock.call(target, "AXMain", True), mock.call(target, "AXFocused", True)],
+            [
+                mock.call("application", "AXFrontmost", True),
+                mock.call(target, "AXMain", True),
+                mock.call(target, "AXFocused", True),
+            ],
         )
 
     def test_accessibility_window_prefers_the_exact_cg_window_number(self):

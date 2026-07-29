@@ -156,8 +156,9 @@ root/data template variables.
   Accessibility values.
 - Keep normal app work in the background; escalate to foreground only after a
   verified delivery failure. Foreground fallback raises the exact bound AX
-  window, then tries its main/focused attributes for apps without `AXRaise`,
-  and confirms the focused pid/window ID before sending input.
+  app and window, then tries the window's main/focused attributes for apps
+  without `AXRaise`, allows a bounded asynchronous activation interval, and
+  confirms the focused pid/window ID before sending input.
 - Persistently front one exact returned window only for an explicit frontmost
   outcome or a focus-proxy surface such as remote desktop. The primary live gate
   verifies the returned activation path, the app's fresh `active` readback, and

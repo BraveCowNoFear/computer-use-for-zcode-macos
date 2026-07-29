@@ -1493,6 +1493,15 @@ class MacOSBackend:
         activated = app.activateWithOptions_(options)
         if activated is False:
             raise ToolError("macOS refused to activate the target app; re-observe before sending input")
+        app_element = self.ApplicationServices.AXUIElementCreateApplication(int(window["pid"]))
+        # AppKit activation is asynchronous and can be ignored by a process
+        # that was launched outside a normal app bundle. A trusted AX client
+        # can independently request the same exact pid to become frontmost.
+        self._ax_set(
+            app_element,
+            self._ax_attr("kAXFrontmostAttribute", "AXFrontmost"),
+            True,
+        )
         target_ax_window = self._ax_window(window)
         raised = self._ax_perform(
             target_ax_window, self._ax_attr("kAXRaiseAction", "AXRaise")
@@ -1510,12 +1519,11 @@ class MacOSBackend:
                     True,
                 )
         workspace = self.AppKit.NSWorkspace.sharedWorkspace()
-        deadline = time.monotonic() + 0.6
+        deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             frontmost = workspace.frontmostApplication()
             front_pid = int(frontmost.processIdentifier()) if frontmost is not None else 0
             if front_pid == int(window["pid"]):
-                app_element = self.ApplicationServices.AXUIElementCreateApplication(int(window["pid"]))
                 focused = self._ax_copy(
                     app_element,
                     self._ax_attr("kAXFocusedWindowAttribute", "AXFocusedWindow"),
