@@ -60,8 +60,11 @@ reduced_motion:"auto",fallback:null}`. Default motion has all nine numeric
 fields: `start_handle:0.3`, `end_handle:0.3`, `arc_size:0.25`, `arc_flow:0`,
 `spring:0.72`, speed-based `glide_duration_ms:0`, `dwell_after_click_ms:80`,
 `idle_hide_ms:20000`, and `turn_radius:80`. `visual_state` always carries both
-semantic actions, modifiers, phase, frame, and preemption count. Preserve the
-whole returned object when temporarily changing/restoring theme or motion.
+semantic actions, up to one delivery plus one target modifier, phase, frame,
+and preemption count. This telemetry is asynchronous: immediately after a
+session/cursor control it may legitimately be `system` + `desktop` +
+`one_shot` instead of idle. Preserve the whole returned object when
+temporarily changing/restoring theme or motion.
 
 `escalate_session` requires a truthful `reason`: `ax_tree_pixel_mismatch`,
 `background_delivery_failed`, `foreground_ineffective`, `no_window_target`, or

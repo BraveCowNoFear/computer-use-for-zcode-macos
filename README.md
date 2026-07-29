@@ -297,8 +297,9 @@ acknowledgement followed by observed process disappearance, and every nullable
 session-state field is present before and after one-way desktop escalation.
 The fresh-session semantic cursor is also response-pinned: its complete state,
 embedded `cua.default` theme identity, nine human-like motion values, idle
-visual semantics, idempotent theme/motion setters, enabled toggle, and restored
-readback must agree without moving the real pointer or requiring TCC.
+or in-flight bounded visual semantics, idempotent theme/motion setters, enabled
+toggle, and restored readback must agree without moving the real pointer or
+requiring TCC.
 The ordinary repository suite derives that same 49-tool union from the pinned
 native/browser contracts and requires every exact tool name to be discoverable
 through the Skill documentation. This keeps service helpers such as the

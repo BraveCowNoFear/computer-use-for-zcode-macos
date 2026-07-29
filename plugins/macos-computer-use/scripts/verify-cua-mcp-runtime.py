@@ -412,6 +412,21 @@ DEFAULT_CURSOR_THEME = {
     "reduced_motion": "auto",
     "fallback": None,
 }
+CURSOR_ACTIONS = {
+    "idle",
+    "observe",
+    "click",
+    "drag",
+    "scroll",
+    "text",
+    "key",
+    "navigate",
+    "app",
+    "transfer",
+    "record",
+    "system",
+}
+CURSOR_MODIFIERS = {"background", "foreground", "ax", "pixel", "browser", "desktop"}
 
 
 def require_cursor_motion(name: str, value: Any) -> dict[str, Any]:
@@ -459,17 +474,21 @@ def require_cursor_state(
             "preempted_count",
         },
     )
+    modifiers = visual["modifiers"]
     if (
-        visual["requested_action"] != "idle"
-        or visual["resolved_action"] != "idle"
-        or visual["modifiers"] != []
-        or visual["phase"] != "loop"
+        visual["requested_action"] not in CURSOR_ACTIONS
+        or visual["resolved_action"] not in CURSOR_ACTIONS
+        or not isinstance(modifiers, list)
+        or len(modifiers) > 2
+        or len(set(modifiers)) != len(modifiers)
+        or any(modifier not in CURSOR_MODIFIERS for modifier in modifiers)
+        or visual["phase"] not in {"loop", "sustain", "one_shot"}
         or type(visual["frame"]) is not int
         or visual["frame"] < 0
         or type(visual["preempted_count"]) is not int
-        or visual["preempted_count"] != 0
+        or visual["preempted_count"] < 0
     ):
-        fail(f"{name} returned a non-idle fresh-session visual state: {visual}")
+        fail(f"{name} returned malformed dynamic visual state: {visual}")
     require_cursor_motion(f"{name}.motion", state["motion"])
     return state
 

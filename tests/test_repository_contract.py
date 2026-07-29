@@ -593,6 +593,18 @@ class RepositoryContractTests(unittest.TestCase):
                 "cursor-contract",
                 True,
             )
+        with self.assertRaisesRegex(RuntimeError, "dynamic visual state"):
+            module.require_cursor_state(
+                "drifted visual",
+                dict(
+                    state,
+                    visual_state=dict(
+                        state["visual_state"], requested_action="invented"
+                    ),
+                ),
+                "cursor-contract",
+                True,
+            )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(

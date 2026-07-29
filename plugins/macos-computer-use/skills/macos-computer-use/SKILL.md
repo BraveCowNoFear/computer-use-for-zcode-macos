@@ -104,7 +104,11 @@ recordings. If the user explicitly asks for silent background operation, call
 or motion change rather than assuming the overlay accepted it. Its primary
 state is complete rather than sparse: require `session`, `enabled`, nullable
 `position`, `theme`, `visual_state`, and `motion`; keep explicit nulls and
-fresh numeric animation fields instead of filling missing values locally.
+fresh numeric animation fields instead of filling missing values locally. The
+visual state is asynchronous: a read immediately after session/cursor control
+may still report a bounded `system` one-shot with a `desktop` modifier rather
+than `idle`; consume the returned action/phase instead of waiting or polling
+merely to make the telemetry idle.
 
 The embedded `cua.default` theme is sufficient for ordinary work. Use
 `set_agent_cursor_theme({session,theme_id,reduced_motion})` only for an explicit
