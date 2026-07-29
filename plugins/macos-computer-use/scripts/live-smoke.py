@@ -94,7 +94,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.17.6"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.17.7"},
             },
         )
         self.notify("notifications/initialized")
@@ -1734,9 +1734,23 @@ def run_fallback() -> dict[str, Any]:
         client.close()
 
 
+def requested_backend(arguments: list[str]) -> str:
+    if not arguments:
+        return "all"
+    if len(arguments) == 2 and arguments[0] == "--backend" and arguments[1] in {
+        "all",
+        "primary",
+        "fallback",
+    }:
+        return arguments[1]
+    raise RuntimeError("usage: live-smoke.py [--backend all|primary|fallback]")
+
+
 def main() -> int:
     if sys.platform != "darwin":
         raise RuntimeError("The live GUI smoke test must run in a logged-in macOS desktop session")
+
+    backend = requested_backend(sys.argv[1:])
 
     fixture = subprocess.Popen(
         [sys.executable, str(FIXTURE)],
@@ -1744,17 +1758,19 @@ def main() -> int:
         stderr=subprocess.PIPE,
         text=True,
     )
-    report: dict[str, Any] = {"ok": False, "steps": []}
+    report: dict[str, Any] = {"ok": False, "backend": backend, "steps": []}
     try:
         assert fixture.stdout is not None
         ready = read_line(fixture.stdout, 20, "AppKit fixture")
         if not ready.startswith("READY "):
             raise RuntimeError(f"Fixture failed to become ready: {ready}")
         report["steps"].append("fixture_ready")
-        report["primary"] = run_primary(fixture.pid)
-        report["steps"].append("primary_complete")
-        report["fallback"] = run_fallback()
-        report["steps"].append("fallback_complete")
+        if backend in {"all", "primary"}:
+            report["primary"] = run_primary(fixture.pid)
+            report["steps"].append("primary_complete")
+        if backend in {"all", "fallback"}:
+            report["fallback"] = run_fallback()
+            report["steps"].append("fallback_complete")
         report["ok"] = True
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0

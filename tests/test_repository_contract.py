@@ -351,6 +351,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('--tcc-status-file "$tcc_status"', workflow)
         self.assertIn('value["accessibility"] and value["screen_recording"]', workflow)
         self.assertIn('plugins/macos-computer-use/scripts/live-smoke.sh', workflow)
+        self.assertIn('--backend fallback || fallback_live_result=$?', workflow)
+        self.assertIn('--backend primary || primary_live_result=$?', workflow)
         self.assertIn('stop --socket "/tmp/zcode-cua-${UID}/v0.13.1.sock"', workflow)
         self.assertIn('"$product_app" --args', workflow)
         self.assertIn("--no-permissions-gate", workflow)
@@ -433,6 +435,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', smoke)
         self.assertIn('"$ROOT/scripts/run-mcp.sh" --self-test', smoke)
         self.assertIn('macos_cua_native_runtime_ready "$DATA_PYTHON" "$ROOT"', smoke)
+        self.assertIn('"$ROOT/scripts/live-smoke.py" "$@"', smoke)
         self.assertNotIn("source-checkout runtime is not installed", smoke)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "requires a Unix bash runtime")
@@ -780,6 +783,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"fallback_raw_mouse_sequence_verified"',
             '"fallback_cursor_restored"',
             "fixture_button_screenshot_point",
+            "requested_backend",
             "desktop_screenshot_point",
             "restore_pointer_direct",
             "wait_for_process_exit",
@@ -836,6 +840,11 @@ class RepositoryContractTests(unittest.TestCase):
         session = module.new_live_session()
         self.assertRegex(session, r"^zcode-smoke-[0-9a-f]{8}$")
         self.assertLessEqual(len(session), 28)
+        self.assertEqual(module.requested_backend([]), "all")
+        self.assertEqual(module.requested_backend(["--backend", "primary"]), "primary")
+        self.assertEqual(module.requested_backend(["--backend", "fallback"]), "fallback")
+        with self.assertRaisesRegex(RuntimeError, "usage"):
+            module.requested_backend(["--backend", "unknown"])
 
     def test_live_smoke_validates_semantic_cursor_action_and_position(self):
         path = PLUGIN / "scripts" / "live-smoke.py"

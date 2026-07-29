@@ -135,11 +135,16 @@ jobs:
           grep -F "os_permission_prompt_requires_trusted_host" <<<"$prompt_refusal"
           cleanup_policy_proof
           trap - EXIT
+          fallback_live_result=0
+          MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/live-smoke.sh \
+            --backend fallback || fallback_live_result=$?
+          test "$fallback_live_result" = 0
           if python -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if value["accessibility"] and value["screen_recording"] else 1)' "$tcc_status"; then
-            live_result=0
-            MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/live-smoke.sh || live_result=$?
+            primary_live_result=0
+            MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/live-smoke.sh \
+              --backend primary || primary_live_result=$?
             "$product_binary" stop --socket "/tmp/zcode-cua-${UID}/v0.13.1.sock" >/dev/null 2>&1 || true
-            test "$live_result" = 0
+            test "$primary_live_result" = 0
           else
             echo "Signed CuaDriver TCC grants are unavailable on this hosted runner; full GUI smoke remains a logged-in-Mac gate."
           fi

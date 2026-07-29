@@ -24,4 +24,4 @@ fi
 
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export MACOS_CUA_DATA_DIR="$DATA_DIR"
-exec "$PYTHON" "$ROOT/scripts/live-smoke.py"
+exec "$PYTHON" "$ROOT/scripts/live-smoke.py" "$@"
