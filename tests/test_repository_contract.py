@@ -390,7 +390,17 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.call("health_report")', mcp_runtime)
         self.assertIn('{"include": ["binary_version"]}', mcp_runtime)
         self.assertIn("require_health_report(", mcp_runtime)
-        self.assertIn('client.call("check_permissions", {"prompt": False})', mcp_runtime)
+        self.assertIn(
+            'permissions_value, permissions_content = client.call(', mcp_runtime
+        )
+        self.assertIn('"check_permissions", {"prompt": False}', mcp_runtime)
+        self.assertIn(
+            'default_permissions_value, default_permissions_content = peer.call(',
+            mcp_runtime,
+        )
+        self.assertIn("PERMISSION_SOURCE_NOTE = (", mcp_runtime)
+        self.assertIn('"status": "refused"', mcp_runtime)
+        self.assertIn('"message": prompt_message', mcp_runtime)
         self.assertIn('{"key": "capture_scope", "value": "desktop"}', mcp_runtime)
         self.assertIn(
             '{"key": "max_image_dimension", "value": config_original}',
@@ -665,6 +675,58 @@ class RepositoryContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "overall disagreed"):
             module.require_health_report(
                 "wrong overall health", dict(report, overall="ok")
+            )
+
+    def test_primary_permission_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_permission_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        permissions = {
+            "accessibility": False,
+            "screen_recording": False,
+            "screen_recording_capturable": None,
+            "direct_capture_status": "not_checked",
+            "source": {
+                "attribution": "driver-daemon",
+                "pid": 777,
+                "responsible_ppid": 1,
+                "executable": "/tmp/CuaDriver.app/Contents/MacOS/cua-driver",
+                "disclaim_env": False,
+                "bundle_id": "com.trycua.driver",
+                "note": module.PERMISSION_SOURCE_NOTE,
+            },
+        }
+        content = [
+            {
+                "type": "text",
+                "text": (
+                    "❌ Accessibility: NOT granted.\n"
+                    "❌ Screen Recording: NOT granted.\n"
+                    f"{module.PERMISSION_READ_ONLY_NOTE}"
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_permissions("permissions", permissions, content),
+            permissions,
+        )
+        with self.assertRaisesRegex(RuntimeError, "source.*fields drifted"):
+            drifted_source = dict(permissions["source"])
+            drifted_source.pop("note")
+            module.require_permissions(
+                "drifted permissions",
+                dict(permissions, source=drifted_source),
+                content,
+            )
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_permissions(
+                "drifted text", permissions, [{"type": "text", "text": "wrong"}]
             )
 
     def test_primary_config_validators_reject_drift(self):

@@ -53,8 +53,16 @@ Recording is never enabled as a side effect of ordinary Computer Use.
    CuaDriver.app setup panel. If no panel appears, have them run
    `bash plugins/macos-computer-use/scripts/install.sh` once from this checkout;
    its trusted `permissions grant` route launches the signed app through
-   LaunchServices and verifies the grant under the correct TCC identity. If
-   Accessibility is granted but Screen Recording is not, continue with AX-only state using
+   LaunchServices and verifies the grant under the correct TCC identity. The
+   healthy read-only response's five fields include null
+   `screen_recording_capturable`, `direct_capture_status:"not_checked"`, and a
+   seven-field `source` attributed to the live `com.trycua.driver` daemon; an
+   empty argument object is exactly the same read-only operation. A public
+   `prompt:true` response is the structured
+   `os_permission_prompt_requires_trusted_host` TCC refusal. This is the one
+   macOS-owned authorization boundary, not an agent approval to request or
+   bypass. If Accessibility is granted but Screen Recording is not, continue
+   with AX-only state using
    `get_window_state({include_screenshot:false,...})` when the task can be
    completed and verified from the tree. Request Screen Recording only when the
    task needs pixels, a screenshot, desktop state, or visual verification.

@@ -303,6 +303,10 @@ Configuration responses are pinned end to end too: the seven-field read shape,
 release identity/default PiP fields, both accepted image-cap setter shapes,
 exact session-scoped acknowledgement, peer-connection isolation, restoration,
 and the no-mutation structured error for retired `capture_scope` are verified.
+The permission preflight is fully response-pinned as well: empty and explicit
+read-only calls must agree, source identity must bind to the live signed daemon
+pid/path/bundle, the human-readable summary must match the booleans, and
+`prompt:true` must remain the exact trusted-host TCC refusal.
 The fresh-session semantic cursor is also response-pinned: its complete state,
 embedded `cua.default` theme identity, nine human-like motion values, idle
 or in-flight bounded visual semantics, idempotent theme/motion setters, enabled

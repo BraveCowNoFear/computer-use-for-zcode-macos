@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.21"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.22"},
             },
         )
         expected = {
@@ -566,6 +566,81 @@ def require_health_report(
             f"{report['overall']} != {expected_overall}"
         )
     return by_name
+
+
+PERMISSION_SOURCE_NOTE = (
+    "These booleans reflect the CuaDriver daemon's own TCC identity "
+    "(com.trycua.driver) because this process is its own responsible process."
+)
+PERMISSION_READ_ONLY_NOTE = (
+    "ℹ️  Direct ScreenCaptureKit readiness was not probed because this is a "
+    "staged or read-only check. Run `cua-driver permissions grant` to request "
+    "and verify direct capture explicitly."
+)
+
+
+def require_permissions(
+    name: str, value: Any, content: Any
+) -> dict[str, Any]:
+    permissions = require_object(
+        name,
+        value,
+        {
+            "accessibility",
+            "screen_recording",
+            "screen_recording_capturable",
+            "direct_capture_status",
+            "source",
+        },
+    )
+    if (
+        type(permissions["accessibility"]) is not bool
+        or type(permissions["screen_recording"]) is not bool
+        or permissions["screen_recording_capturable"] is not None
+        or permissions["direct_capture_status"] != "not_checked"
+    ):
+        fail(f"{name} did not return read-only TCC state: {permissions}")
+    source = require_object(
+        f"{name}.source",
+        permissions["source"],
+        {
+            "attribution",
+            "pid",
+            "responsible_ppid",
+            "executable",
+            "disclaim_env",
+            "bundle_id",
+            "note",
+        },
+    )
+    if (
+        source["attribution"] != "driver-daemon"
+        or type(source["pid"]) is not int
+        or source["pid"] <= 0
+        or type(source["responsible_ppid"]) is not int
+        or source["responsible_ppid"] <= 0
+        or not isinstance(source["executable"], str)
+        or not source["executable"].endswith(
+            "/CuaDriver.app/Contents/MacOS/cua-driver"
+        )
+        or type(source["disclaim_env"]) is not bool
+        or source["bundle_id"] != "com.trycua.driver"
+        or source["note"] != PERMISSION_SOURCE_NOTE
+    ):
+        fail(f"{name} source identity drifted: {source}")
+    ax_state = "granted" if permissions["accessibility"] else "NOT granted"
+    sr_state = (
+        "granted" if permissions["screen_recording"] else "NOT granted"
+    )
+    expected_text = (
+        f"{'✅' if permissions['accessibility'] else '❌'} "
+        f"Accessibility: {ax_state}.\n"
+        f"{'✅' if permissions['screen_recording'] else '❌'} "
+        f"Screen Recording: {sr_state}.\n"
+        f"{PERMISSION_READ_ONLY_NOTE}"
+    )
+    require_text_content(name, content, expected_text)
+    return permissions
 
 
 def require_config(name: str, value: Any) -> dict[str, Any]:
@@ -1109,28 +1184,33 @@ def main() -> int:
         health, _ = client.call("health_report")
         health_checks = require_health_report("health_report", health)
 
-        permissions, _ = client.call("check_permissions", {"prompt": False})
-        permissions = require_object(
-            "check_permissions",
-            permissions,
-            {
-                "accessibility",
-                "screen_recording",
-                "screen_recording_capturable",
-                "direct_capture_status",
-                "source",
-            },
+        permissions_value, permissions_content = client.call(
+            "check_permissions", {"prompt": False}
         )
-        if (
-            type(permissions["accessibility"]) is not bool
-            or type(permissions["screen_recording"]) is not bool
-            or permissions["screen_recording_capturable"] is not None
-            or permissions["direct_capture_status"] != "not_checked"
-            or not isinstance(permissions["source"], dict)
-            or permissions["source"].get("attribution") != "driver-daemon"
-            or permissions["source"].get("bundle_id") != "com.trycua.driver"
-        ):
-            fail(f"check_permissions did not return read-only daemon state: {permissions}")
+        permissions = require_permissions(
+            "check_permissions", permissions_value, permissions_content
+        )
+        if permissions["source"]["pid"] in {
+            os.getpid(),
+            client.process.pid,
+            peer.process.pid,
+        }:
+            fail("check_permissions attributed TCC to a verifier/proxy process")
+        try:
+            os.kill(permissions["source"]["pid"], 0)
+        except OSError as error:
+            fail(f"check_permissions returned a dead daemon pid: {error}")
+
+        default_permissions_value, default_permissions_content = peer.call(
+            "check_permissions"
+        )
+        default_permissions = require_permissions(
+            "default check_permissions",
+            default_permissions_value,
+            default_permissions_content,
+        )
+        if default_permissions != permissions:
+            fail("empty-input check_permissions differed from explicit prompt:false")
         if (
             health_checks["tcc_accessibility"].get("status") == "pass"
         ) != permissions["accessibility"]:
@@ -1695,19 +1775,26 @@ def main() -> int:
         # The intentional trusted-host refusal may close that MCP proxy on
         # some Intel macOS hosts. Exercise it last on the otherwise idle peer
         # so an expected refusal cannot contaminate normal ZCode calls.
-        prompt_result = peer.request(
-            "tools/call",
-            {"name": "check_permissions", "arguments": {"prompt": True}},
+        prompt_refusal, prompt_content = peer.call_error(
+            "check_permissions", {"prompt": True}
         )
-        if not prompt_result.get(
-            "isError"
-        ) or "os_permission_prompt_requires_trusted_host" not in json.dumps(
-            prompt_result, ensure_ascii=False
-        ):
-            fail(
-                "public MCP prompt=true did not fail at the trusted-host TCC "
-                f"boundary: {prompt_result}"
-            )
+        prompt_message = (
+            "operating-system permission prompts must be initiated by a trusted "
+            "host outside the agent tool path; call check_permissions with "
+            "prompt=false to inspect state"
+        )
+        expected_prompt_refusal = {
+            "status": "refused",
+            "refusal": {
+                "code": "os_permission_prompt_requires_trusted_host",
+                "message": prompt_message,
+            },
+        }
+        if prompt_refusal != expected_prompt_refusal:
+            fail(f"public MCP prompt=true refusal drifted: {prompt_refusal}")
+        require_text_content(
+            "check_permissions prompt=true", prompt_content, prompt_message
+        )
     finally:
         if owned_app_pid is not None and process_exists(owned_app_pid):
             try:

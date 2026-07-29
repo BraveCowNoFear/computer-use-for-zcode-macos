@@ -96,6 +96,17 @@ private to that connection and do not change the persisted default. The
 `config_key_retired` with replacement `start_session.capture_scope` and must
 leave configuration unchanged.
 
+Pinned read-only `check_permissions({})` and
+`check_permissions({prompt:false})` are identical. Their exact five-field
+structured result has TCC booleans, null `screen_recording_capturable`,
+`direct_capture_status:"not_checked"`, and a seven-field `source` whose live
+pid/path/bundle/note attribute the answer to the signed CuaDriver daemon. The
+two-line granted/not-granted summary plus the no-direct-probe note is
+decorative; use structured fields. Public `prompt:true` is an exact
+`status:"refused"` tool error with code
+`os_permission_prompt_requires_trusted_host`; only the human-run trusted setup
+route can invoke macOS permission UI.
+
 For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact
 process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the
