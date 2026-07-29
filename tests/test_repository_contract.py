@@ -309,6 +309,32 @@ class RepositoryContractTests(unittest.TestCase):
             workflow,
         )
 
+    def test_every_required_primary_tool_has_one_pinned_schema(self):
+        launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(r"for required in \\\n(?P<body>.*?)\; do", launcher, re.DOTALL)
+        self.assertIsNotNone(match)
+        required = set(re.findall(r"[a-z][a-z0-9_]+", match.group("body")))
+
+        contract_sets = []
+        for filename in (
+            "verify-cua-native-schema.py",
+            "verify-cua-browser-schema.py",
+        ):
+            path = PLUGIN / "scripts" / filename
+            spec = importlib.util.spec_from_file_location(filename, path)
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            contract_sets.append(set(module.CONTRACTS))
+
+        native, browser = contract_sets
+        self.assertTrue(native.isdisjoint(browser))
+        self.assertEqual(required, native | browser)
+        self.assertEqual(len(required), 46)
+
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
         self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', smoke)
