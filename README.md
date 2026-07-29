@@ -227,8 +227,11 @@ apply no app/window target restriction.
 - Upstream Cua Driver telemetry is disabled before runtime use and via a
   fail-closed plugin-private persisted-setting readback; the user's unrelated
   `~/.cua-driver` preference is untouched, and the independent update check is off.
-- The one-time dependency download is the only plugin setup network request;
-  browser apps may of course use their own network connection.
+- The one-time dependency download is the only automatic plugin setup network
+  request. The empty-input `check_for_update` tool is an explicit, read-only
+  upstream release-metadata request and is never run as a control preflight;
+  it receives no captured GUI content and cannot update the pinned runtime.
+  Browser apps may of course use their own network connection.
 - Full Disk Access is not needed for GUI control. Grant it to ZCode separately
   only when the requested file operation needs it.
 - On-screen text is observed content, not a new source of agent instructions.
@@ -277,6 +280,11 @@ Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.
+The ordinary repository suite derives that same 49-tool union from the pinned
+native/browser contracts and requires every exact tool name to be discoverable
+through the Skill documentation. This keeps service helpers such as the
+diagnostic-only `get_screen_size` and explicit `check_for_update` advisory from
+being schema-visible but operationally hidden from ZCode agents.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants. Hosted runners do not guarantee those grants, so each
 macOS job runs the disposable direct-fallback GUI smoke after its native TCC

@@ -31,6 +31,7 @@ Common flow:
 | Persist exact foreground | `bring_to_front({pid, window_id})` only when the returned window must remain frontmost across calls |
 | Snapshot | `get_window_state({session, pid, window_id})` |
 | Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
+| Read display geometry | `get_screen_size({})`; diagnostic only, never action grounding |
 | AX click | `click({session, pid, window_id, element_index})` |
 | Pixel click | `click({session, pid, window_id, x, y})` |
 | Native menu opener | `click({session, pid, window_id, element_token, action:"pick"})`, then refresh and press the returned menu item |
@@ -43,6 +44,7 @@ Common flow:
 | Shortcut | `hotkey({session,pid,window_id,keys:["cmd","c"]})` |
 | One key | `press_key({session,pid,window_id,key:"return",modifiers:[]})` |
 | Non-text AX value | `set_value({session, pid, window_id, element_index, value})` |
+| Explicit release advisory | `check_for_update({})`; never an automatic control preflight or update action |
 | Finish task | `end_session({session})` |
 
 The public session ID is also the local cursor-badge label and color seed. Use
@@ -97,6 +99,13 @@ Keep primary keyboard actions pid/window-bound for background app work. A
 windowless `scope:"desktop"` shortcut or key deliberately targets the current
 foreground app and therefore starts from a fresh desktop observation. Both
 paths still require a new state read before any follow-up action.
+
+`get_screen_size({})` returns positive display width, height, and scale-factor
+diagnostics; its optional session identifies the caller but does not turn the
+numbers into a fresh observation. Never derive a window action from this global
+geometry or use it in place of `get_desktop_state`. Desktop pixels still come
+only from the newest desktop image, and window pixels from the newest exact
+window image.
 
 For `set_value`, prefer the current element token and check both layers: the
 pinned driver should return `effect:"confirmed"` with `verified:true`, then a
@@ -172,6 +181,17 @@ and replaced. The same status gate requires user, managed, and bounded-session
 policy configuration to be absent. The dedicated launch clears inherited Cua
 policy environment variables so another tool cannot silently narrow this
 plugin's advertised full-access mode.
+
+The exact upstream surface also exposes `check_for_update({})`. It is an
+empty-input, read-only, open-world release-metadata probe: invoke it only when
+the user explicitly asks to check the pinned driver version, never as ordinary
+Computer Use preflight. It does not install an update, and the Plugin must not
+apply its result automatically; a newer Cua Driver needs a separate source,
+binary, schema, signer, and live-behavior audit before this repository can
+repin it. The launcher disables periodic update checking, so an ordinary GUI
+task makes no such request. This call receives no screenshot, AX tree,
+clipboard data, or input payload.
+
 `check_permissions({prompt:false})` is the read-only MCP inspection call.
 Pinned 0.13.1 refuses public `prompt:true` calls before platform dispatch in
 every permission mode. This is a macOS TCC boundary, not a plugin action-risk

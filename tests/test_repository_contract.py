@@ -430,6 +430,33 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(required, native | browser)
         self.assertEqual(len(required), 49)
 
+    def test_skill_docs_route_every_required_primary_tool(self):
+        required = set()
+        for filename in (
+            "verify-cua-native-schema.py",
+            "verify-cua-browser-schema.py",
+        ):
+            path = PLUGIN / "scripts" / filename
+            spec = importlib.util.spec_from_file_location(filename, path)
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            required.update(module.CONTRACTS)
+
+        skill_root = PLUGIN / "skills" / "macos-computer-use"
+        docs = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(skill_root.rglob("*.md"))
+        )
+        missing = sorted(
+            name
+            for name in required
+            if re.search(rf"`{re.escape(name)}(?:`|\()", docs) is None
+        )
+        self.assertEqual(missing, [], f"primary tools missing from Skill docs: {missing}")
+        self.assertEqual(len(required), 49)
+
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
         self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', smoke)
