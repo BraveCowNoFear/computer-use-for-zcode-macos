@@ -24,6 +24,8 @@ FIXTURE_SLIDER_END_X = 588.0
 FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
 FIXTURE_SCROLL_PROBE_CENTER_X = 510.0
 FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM = 57.0
+FIXTURE_GESTURE_PROBE_CENTER_X = 510.0
+FIXTURE_GESTURE_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM = 22.0
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -78,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.3"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.4"},
             },
         )
         self.notify("notifications/initialized")
@@ -143,6 +145,23 @@ def fixture_screenshot_point(
     return (
         content_x * image_width / width,
         frame_y_from_top * image_height / height,
+    )
+
+
+def primary_screenshot_point(
+    state: dict[str, Any], content_x: float, content_y_from_bottom: float
+) -> tuple[float, float]:
+    """Map a fixture Cocoa point into Cua Driver's returned window PNG."""
+    bounds = state["window_bounds"]
+    width = float(bounds["width"])
+    height = float(bounds["height"])
+    image_width = float(state["screenshot_width"])
+    image_height = float(state["screenshot_height"])
+    if min(width, height, image_width, image_height) <= 0:
+        raise RuntimeError(f"Primary fixture returned invalid screenshot geometry: {state}")
+    return (
+        content_x * image_width / width,
+        (height - content_y_from_bottom) * image_height / height,
     )
 
 
@@ -264,6 +283,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "get_window_state",
             "type_text",
             "click",
+            "double_click",
+            "right_click",
         }
         missing = sorted(required - names)
         if missing:
@@ -352,6 +373,57 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             {"session": session, "pid": pid, "window_id": window_id},
         )
         require_image(content, "primary initial window state")
+
+        gesture_point = primary_screenshot_point(
+            state,
+            FIXTURE_GESTURE_PROBE_CENTER_X,
+            FIXTURE_GESTURE_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        right_clicked, _ = client.call(
+            "right_click",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                "x": gesture_point[0],
+                "y": gesture_point[1],
+            },
+        )
+        require_action_verdict(right_clicked, "primary right_click")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after right click")
+        if "Gesture: right" not in state.get("tree_markdown", ""):
+            raise RuntimeError("Primary right_click did not reach the fixture gesture probe")
+        report["steps"].append("primary_background_right_click_verified")
+
+        gesture_point = primary_screenshot_point(
+            state,
+            FIXTURE_GESTURE_PROBE_CENTER_X,
+            FIXTURE_GESTURE_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        double_clicked, _ = client.call(
+            "double_click",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                "x": gesture_point[0],
+                "y": gesture_point[1],
+            },
+        )
+        require_action_verdict(double_clicked, "primary double_click")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary window state after double click")
+        if "Gesture: double" not in state.get("tree_markdown", ""):
+            raise RuntimeError("Primary double_click did not reach the fixture gesture probe")
+        report["steps"].append("primary_background_double_click_verified")
+
         field = primary_element(state.get("elements", []), "AXTextField", "Smoke input")
         token = f"zcode-primary-{uuid.uuid4().hex[:10]}"
         typed, _ = client.call(

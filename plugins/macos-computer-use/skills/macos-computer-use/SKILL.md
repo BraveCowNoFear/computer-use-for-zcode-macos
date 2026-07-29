@@ -267,8 +267,10 @@ These direct tools intentionally have no app, window, or target restriction.
   from the pre-open observation: if opening failed, they can land in the old
   focused field.
 - Use `set_value` for non-text controls whose AX value can be replaced.
-- Use `scroll`, `drag`, double-click, or right-click primitives rather than
-  imitating them with unrelated clicks.
+- Use `scroll`, `drag`, `double_click`, or `right_click` primitives rather than
+  imitating them with unrelated clicks. For their primary pixel forms, bind
+  the exact returned pid/window and take x/y from that window's fresh PNG;
+  then re-observe because a dispatched gesture is not visible-outcome proof.
 - For Chromium page content, use primary typed browser tools after binding the
   exact native window with `get_browser_state`; keep native tools for browser
   chrome, Safari, Firefox, file pickers, downloads, and permission dialogs.

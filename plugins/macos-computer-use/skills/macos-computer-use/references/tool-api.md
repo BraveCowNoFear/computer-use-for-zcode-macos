@@ -24,6 +24,8 @@ Common flow:
 | Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
 | AX click | `click({session, pid, window_id, element_index})` |
 | Pixel click | `click({session, pid, window_id, x, y})` |
+| Double-click | `double_click({session, pid, window_id, element_token})` or fresh x/y |
+| Context click | `right_click({session, pid, window_id, element_token})` or fresh x/y |
 | Desktop click | `click({session, x, y, scope:"desktop"})` with no pid/window |
 | Enter text | `type_text({session, pid, window_id, element_index, text})` |
 | Shortcut | `hotkey({session,pid,window_id,keys:["cmd","c"]})` |

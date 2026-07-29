@@ -51,6 +51,27 @@ class ScrollProbeView(AppKit.NSView):
         self.status_label.setStringValue_(f"Scrolled: {self.total_scroll}")
 
 
+class GestureProbeView(AppKit.NSView):
+    def initWithFrame_statusLabel_(self, frame, status_label):
+        self = objc.super(GestureProbeView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self.status_label = status_label
+        self.setAccessibilityLabel_("Gesture probe")
+        return self
+
+    def drawRect_(self, _dirty_rect) -> None:
+        AppKit.NSColor.systemOrangeColor().setFill()
+        AppKit.NSBezierPath.fillRect_(self.bounds())
+
+    def mouseDown_(self, event) -> None:
+        outcome = "double" if event.clickCount() >= 2 else "left"
+        self.status_label.setStringValue_(f"Gesture: {outcome}")
+
+    def rightMouseDown_(self, _event) -> None:
+        self.status_label.setStringValue_("Gesture: right")
+
+
 def label(frame, value: str):
     control = AppKit.NSTextField.alloc().initWithFrame_(frame)
     control.setStringValue_(value)
@@ -101,6 +122,12 @@ def main() -> int:
         AppKit.NSMakeRect(420, 45, 180, 24),
         scroll_result,
     )
+    gesture_result = label(AppKit.NSMakeRect(240, 10, 170, 24), "Gesture: waiting")
+    gesture_result.setAccessibilityLabel_("Smoke gesture result")
+    gesture_probe = GestureProbeView.alloc().initWithFrame_statusLabel_(
+        AppKit.NSMakeRect(420, 10, 180, 24),
+        gesture_result,
+    )
 
     handler = FixtureHandler.alloc().initWithField_label_sliderLabel_(field, result, slider_result)
     button.setTarget_(handler)
@@ -116,6 +143,8 @@ def main() -> int:
         result,
         scroll_result,
         scroll_probe,
+        gesture_result,
+        gesture_probe,
     ):
         content.addSubview_(control)
 

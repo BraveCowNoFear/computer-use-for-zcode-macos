@@ -71,7 +71,7 @@ has_required_surface() {
     check_permissions start_session escalate_session end_session \
     get_agent_cursor_state set_agent_cursor_enabled get_cursor_position get_screen_size \
     move_cursor list_apps list_windows \
-    launch_app get_window_state get_desktop_state click press_key hotkey \
+    launch_app get_window_state get_desktop_state click double_click right_click press_key hotkey \
     type_text scroll set_value drag; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1
   done

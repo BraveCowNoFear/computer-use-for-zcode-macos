@@ -106,6 +106,8 @@ root/data template variables.
   move the pointer to the grounded point, matching the physical hover/down
   sequence used by a person. Releasing a held button at a new point posts a
   final drag event before mouse-up and retains unconfirmed releases for cleanup.
+  The signed primary backend's double- and right-click tools are also mandatory
+  runtime capabilities and are exercised against visible state by the live gate.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.

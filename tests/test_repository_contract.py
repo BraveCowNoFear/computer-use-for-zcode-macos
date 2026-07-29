@@ -163,6 +163,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
+        self.assertIn("click double_click right_click", launcher)
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -393,12 +394,17 @@ class RepositoryContractTests(unittest.TestCase):
             '"get_cursor_position"',
             '"get_screen_size"',
             '"move_cursor"',
+            '"double_click"',
+            '"right_click"',
             "primary_element_target",
+            "primary_screenshot_point",
             "require_cursor_action",
             "require_cursor_position",
             "element_token",
             '"primary_session_cursor_ready"',
             '"primary_virtual_cursor_moved_without_real_pointer"',
+            '"primary_background_right_click_verified"',
+            '"primary_background_double_click_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
@@ -430,6 +436,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(module.fixture_button_screenshot_point(state), (230.0, 400.0))
         self.assertEqual(module.fixture_screenshot_point(state, 252.0, 122.0), (504.0, 400.0))
         self.assertEqual(module.fixture_screenshot_point(state, 510.0, 57.0), (1020.0, 530.0))
+        primary_state = {
+            "window_bounds": {"width": 640, "height": 322},
+            "screenshot_width": 1280,
+            "screenshot_height": 644,
+        }
+        self.assertEqual(module.primary_screenshot_point(primary_state, 510.0, 22.0), (1020.0, 600.0))
         screen_state = {
             "window": {"bounds": {"x": 100, "y": 50, "width": 640, "height": 322}}
         }
