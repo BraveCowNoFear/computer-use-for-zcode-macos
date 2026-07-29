@@ -159,6 +159,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
+        self.assertIn("health_report check_permissions", launcher)
         self.assertIn("start_session get_session_state escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("set_agent_cursor_motion", launcher)
@@ -330,6 +331,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertLess(skill.index("Background AX"), skill.index("Direct fallback"))
         self.assertIn("end_session", skill)
         self.assertLess(skill.index("check_permissions({prompt:false})"), skill.index("start_session"))
+        self.assertLess(skill.index("health_report({})"), skill.index("check_permissions({prompt:false})"))
+        self.assertIn('`schema_version:"1"`, `platform:"darwin"`', skill)
+        self.assertIn("health call never grants access", skill)
         self.assertNotIn("check_permissions({prompt:true", skill)
         self.assertIn("Public MCP calls are status-only", skill)
         self.assertIn("permissions grant", skill)
@@ -471,6 +475,7 @@ class RepositoryContractTests(unittest.TestCase):
         for marker in (
             "run-cua-driver.sh",
             'check_permissions", {"prompt": False}',
+            '"health_report"',
             '"driver-daemon"',
             '"start_session"',
             '"get_session_state"',
@@ -498,6 +503,7 @@ class RepositoryContractTests(unittest.TestCase):
             "require_cursor_position",
             "element_token",
             '"primary_session_cursor_ready"',
+            '"primary_stable_health_report_verified"',
             '"primary_human_cursor_motion_verified"',
             '"primary_cursor_motion_restored"',
             '"primary_zoom_bound_click_verified"',

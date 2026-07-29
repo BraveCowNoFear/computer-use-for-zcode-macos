@@ -12,6 +12,7 @@ Common flow:
 
 | Intent | Tool and key fields |
 | --- | --- |
+| Stable driver diagnosis | `health_report({})`; require schema v1/darwin/pinned version and inspect named check statuses/hints |
 | Permission status | `check_permissions({prompt:false})` |
 | Begin task | `start_session({session, capture_scope})` |
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |
@@ -48,6 +49,14 @@ secrets or copied user content. Reuse that exact ID throughout one run.
 `other`. Optional `detail` is a short local diagnostic, never secrets or page
 content. Read back `get_session_state({session})`, require effective desktop
 scope, and then take a new desktop snapshot before acting.
+
+`health_report` is always a successful diagnostic call, even when its
+structured `overall` is `degraded` or `failed`. Under schema version `"1"`,
+consume named checks rather than parsing its decorative text and tolerate new
+names. On macOS, `binary_version`, `platform_supported`, `session_active`, and
+`bundle_identity` must pass before control. TCC and capability failures carry
+local remediation hints; `screen_capture_capability` may be `skip` because the
+read-only report deliberately does not trigger ScreenCaptureKit consent.
 
 For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact

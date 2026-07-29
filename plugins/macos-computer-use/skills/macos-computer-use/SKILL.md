@@ -30,7 +30,16 @@ semantic refs, typed actions, invalidation, setup, and verification.
 
 ## Start a primary session
 
-1. Call `check_permissions({prompt:false})` for a read-only status check.
+1. Call `health_report({})` as the stable read-only diagnostic. Require
+   `schema_version:"1"`, `platform:"darwin"`, and driver version `0.13.1`;
+   tolerate additional check names but require `binary_version`,
+   `platform_supported`, `session_active`, and `bundle_identity` to pass. A
+   core `overall:"failed"` result makes the primary backend unavailable. A
+   TCC/AX failure is `degraded`, not an MCP error: use that check's local
+   `hint` to distinguish a missing grant from wrong bundle attribution. The
+   health call never grants access and its diagnostic hint is not a plugin
+   approval step.
+2. Call `check_permissions({prompt:false})` for the exact read-only grant state.
    Public MCP calls are status-only in the pinned driver: explicit
    `prompt:true` is refused in every permission mode, including unrestricted,
    because only macOS or a human-run trusted host can approve TCC. If
@@ -48,11 +57,11 @@ semantic refs, typed actions, invalidation, setup, and verification.
    the user grants access and restarts ZCode, re-run only
    `check_permissions({prompt:false})`, then prove pixel readiness with a fresh
    screenshot instead of trying to raise TCC UI from the Agent.
-2. Call `start_session` with a unique, task-oriented `session`, for example
+3. Call `start_session` with a unique, task-oriented `session`, for example
    `mail-triage-a1b2`. Keep it at most 28 visible characters so the cursor badge
    stays readable, add a short uniqueness suffix for concurrent runs, and never
    put secrets or full user content in the label.
-3. Choose `capture_scope` deliberately:
+4. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.
    - `auto` for a normal multi-step app task that might later need the desktop.
      It starts window-only. Call
@@ -65,12 +74,13 @@ semantic refs, typed actions, invalidation, setup, and verification.
      secrets or copied content.
    - `desktop` when the requested task inherently crosses apps, the menu bar,
      Dock, desktop, system UI, or several windows.
-4. Pass that public `session` field on state and action calls. Call
+5. Pass that public `session` field on state and action calls. Call
    `end_session` when the UI task is complete or abandoned.
 
 Treat the primary MCP as unavailable when its server/tools are absent, stdio
 startup fails, `tools/list` or `check_permissions` does not answer, or it
-returns an unsupported/refused-operation error. If a primary session is still
+returns an unsupported/refused-operation error. Treat a malformed/failed
+schema-v1 `health_report` the same way. If a primary session is still
 reachable before switching backends, call `end_session` best-effort.
 
 ## Keep the session cursor human-visible

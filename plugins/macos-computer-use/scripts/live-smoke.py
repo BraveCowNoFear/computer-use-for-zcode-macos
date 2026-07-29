@@ -91,7 +91,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.4"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.5"},
             },
         )
         self.notify("notifications/initialized")
@@ -377,6 +377,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         advertised = client.request("tools/list").get("tools", [])
         names = {tool.get("name") for tool in advertised}
         required = {
+            "health_report",
             "check_permissions",
             "start_session",
             "get_session_state",
@@ -408,6 +409,41 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             raise RuntimeError(f"Primary MCP is missing required live-smoke tools: {', '.join(missing)}")
         report["serverVersion"] = initialized["serverInfo"]["version"]
         report["steps"].append("primary_initialized")
+
+        health, _ = client.call("health_report", {})
+        health_checks = {
+            check.get("name"): check
+            for check in health.get("checks", [])
+            if isinstance(check, dict) and isinstance(check.get("name"), str)
+        }
+        required_passing_checks = {
+            "binary_version",
+            "platform_supported",
+            "session_active",
+            "bundle_identity",
+            "tcc_accessibility",
+            "tcc_screen_recording",
+            "ax_capability",
+        }
+        failed_health_checks = sorted(
+            name
+            for name in required_passing_checks
+            if health_checks.get(name, {}).get("status") != "pass"
+        )
+        if (
+            health.get("schema_version") != "1"
+            or health.get("platform") != "darwin"
+            or health.get("driver_version") != "0.13.1"
+            or health.get("overall") != "ok"
+            or failed_health_checks
+            or health_checks.get("screen_capture_capability", {}).get("status") != "skip"
+        ):
+            raise RuntimeError(
+                "Primary stable health report was not fully ready: "
+                f"failed_checks={failed_health_checks}, report={health}"
+            )
+        report["healthSchemaVersion"] = health["schema_version"]
+        report["steps"].append("primary_stable_health_report_verified")
 
         permissions, _ = client.call("check_permissions", {"prompt": False})
         if not permissions.get("accessibility") or not permissions.get("screen_recording"):

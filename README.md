@@ -92,6 +92,9 @@ root/data template variables.
 ## What agents can do
 
 - Discover and launch native apps and select exact returned windows.
+- Diagnose the pinned driver through its stable schema-v1 health report before
+  control, separating core runtime failure, signed bundle attribution, TCC
+  grants, AX readiness, and read-only screen-capture status without prompting.
 - Launch directly into a matched pid/window set, then capture a screenshot and
   indexed Accessibility tree together on both backends.
 - Bind fallback observations to app, pid, CGWindowID, and AXWindowNumber when
