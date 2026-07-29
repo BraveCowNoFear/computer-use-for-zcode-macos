@@ -241,7 +241,8 @@ first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery and terminate only a
 disposable CI-owned process through the same stdio MCP proxy ZCode uses before
 the job passes. Every mandatory MCP `inputSchema` must exactly match the same
-signed binary's direct `describe` contract.
+signed binary's direct `describe` contract, and a strict window session must
+start, read back, and end cleanly without TCC.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

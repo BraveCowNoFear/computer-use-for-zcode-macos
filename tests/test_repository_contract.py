@@ -322,6 +322,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('client.request("tools/list")', mcp_runtime)
         self.assertIn('advertised[name].get("inputSchema")', mcp_runtime)
         self.assertIn('direct_schema = describe(binary, name)', mcp_runtime)
+        self.assertIn('"start_session", {"session": session, "capture_scope": "window"}', mcp_runtime)
+        self.assertIn('client.call("get_session_state", {"session": session})', mcp_runtime)
+        self.assertIn('client.call("end_session", {"session": session})', mcp_runtime)
         self.assertIn('"name": "kill_app"', mcp_runtime)
         self.assertIn('["/bin/sleep", "60"]', mcp_runtime)
 

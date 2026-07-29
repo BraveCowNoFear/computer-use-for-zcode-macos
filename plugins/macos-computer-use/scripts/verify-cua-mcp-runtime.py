@@ -128,8 +128,12 @@ class MCPClient:
             fail("initialize omitted serverInfo")
         self.notify("notifications/initialized")
 
-    def call(self, name: str) -> tuple[Any, list[dict[str, Any]]]:
-        result = self.request("tools/call", {"name": name, "arguments": {}})
+    def call(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        result = self.request(
+            "tools/call", {"name": name, "arguments": arguments or {}}
+        )
         if result.get("isError"):
             fail(f"{name} returned a tool error: {result.get('content')}")
         content = result.get("content", [])
@@ -175,6 +179,8 @@ def main() -> int:
 
     client = MCPClient(binary, socket)
     probe: subprocess.Popen[str] | None = None
+    session = f"zcode-ci-mcp-{os.getpid()}"
+    session_started = False
     try:
         client.initialize()
         listed = client.request("tools/list")
@@ -219,6 +225,29 @@ def main() -> int:
         if not all(isinstance(cursor[key], (int, float)) for key in ("x", "y")):
             fail("get_cursor_position returned non-numeric coordinates")
 
+        started, _ = client.call(
+            "start_session", {"session": session, "capture_scope": "window"}
+        )
+        session_started = True
+        if (
+            not isinstance(started, dict)
+            or started.get("session") != session
+            or started.get("capture_scope") != "window"
+            or started.get("effective_scope") != "window"
+            or started.get("desktop_unlocked") is not False
+            or started.get("active") is not True
+        ):
+            fail(f"start_session returned inconsistent state: {started}")
+        state, _ = client.call("get_session_state", {"session": session})
+        if (
+            not isinstance(state, dict)
+            or state.get("session") != session
+            or state.get("capture_scope") != "window"
+            or state.get("effective_scope") != "window"
+            or state.get("desktop_unlocked") is not False
+        ):
+            fail(f"get_session_state returned inconsistent state: {state}")
+
         probe = subprocess.Popen(["/bin/sleep", "60"], text=True)
         result = client.request(
             "tools/call", {"name": "kill_app", "arguments": {"pid": probe.pid}}
@@ -229,6 +258,14 @@ def main() -> int:
         if probe.returncode != -signal.SIGKILL:
             fail(f"kill_app left disposable pid {probe.pid} with status {probe.returncode}")
         probe = None
+        ended, _ = client.call("end_session", {"session": session})
+        if (
+            not isinstance(ended, dict)
+            or ended.get("session") != session
+            or ended.get("active") is not False
+        ):
+            fail(f"end_session returned inconsistent state: {ended}")
+        session_started = False
     finally:
         if probe is not None and probe.poll() is None:
             probe.terminate()
@@ -237,9 +274,16 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 probe.kill()
                 probe.wait(timeout=2)
+        if session_started:
+            try:
+                client.call("end_session", {"session": session})
+            except RuntimeError:
+                pass
         client.close()
 
-    print("Verified the complete primary surface and process control over stdio MCP.")
+    print(
+        "Verified the complete primary surface, session lifecycle, and process control over stdio MCP."
+    )
     return 0
 
 
