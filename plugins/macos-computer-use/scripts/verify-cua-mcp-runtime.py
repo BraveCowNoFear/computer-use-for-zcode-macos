@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.18"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.19"},
             },
         )
         expected = {
@@ -382,6 +382,96 @@ RECORDING_STATE_FIELDS = {
     "last_video_path",
     "owner",
 }
+
+CURSOR_MOTION_FIELDS = {
+    "start_handle",
+    "end_handle",
+    "arc_size",
+    "arc_flow",
+    "spring",
+    "glide_duration_ms",
+    "dwell_after_click_ms",
+    "idle_hide_ms",
+    "turn_radius",
+}
+DEFAULT_CURSOR_MOTION = {
+    "start_handle": 0.3,
+    "end_handle": 0.3,
+    "arc_size": 0.25,
+    "arc_flow": 0.0,
+    "spring": 0.72,
+    "glide_duration_ms": 0.0,
+    "dwell_after_click_ms": 80.0,
+    "idle_hide_ms": 20_000.0,
+    "turn_radius": 80.0,
+}
+DEFAULT_CURSOR_THEME = {
+    "id": "cua.default",
+    "version": "1.0.0",
+    "profile": "cua-driver-full-v1",
+    "reduced_motion": "auto",
+    "fallback": None,
+}
+
+
+def require_cursor_motion(name: str, value: Any) -> dict[str, Any]:
+    motion = require_object(name, value, CURSOR_MOTION_FIELDS)
+    if any(type(motion[field]) not in {int, float} for field in motion):
+        fail(f"{name} contains a non-numeric motion value: {motion}")
+    if motion != DEFAULT_CURSOR_MOTION:
+        fail(f"{name} drifted from the pinned human-like defaults: {motion}")
+    return motion
+
+
+def require_cursor_theme(name: str, value: Any) -> dict[str, Any]:
+    theme = require_object(
+        name, value, {"id", "version", "profile", "reduced_motion", "fallback"}
+    )
+    if theme != DEFAULT_CURSOR_THEME:
+        fail(f"{name} drifted from the embedded default theme: {theme}")
+    return theme
+
+
+def require_cursor_state(
+    name: str, value: Any, session: str, enabled: bool
+) -> dict[str, Any]:
+    state = require_object(
+        name,
+        value,
+        {"session", "enabled", "position", "theme", "visual_state", "motion"},
+    )
+    if state["session"] != session or state["enabled"] is not enabled:
+        fail(f"{name} returned the wrong session/enabled state: {state}")
+    if state["position"] is not None:
+        position = require_object(f"{name}.position", state["position"], {"x", "y"})
+        if any(type(position[field]) not in {int, float} for field in position):
+            fail(f"{name}.position is not numeric: {position}")
+    require_cursor_theme(f"{name}.theme", state["theme"])
+    visual = require_object(
+        f"{name}.visual_state",
+        state["visual_state"],
+        {
+            "requested_action",
+            "resolved_action",
+            "modifiers",
+            "phase",
+            "frame",
+            "preempted_count",
+        },
+    )
+    if (
+        visual["requested_action"] != "idle"
+        or visual["resolved_action"] != "idle"
+        or visual["modifiers"] != []
+        or visual["phase"] != "loop"
+        or type(visual["frame"]) is not int
+        or visual["frame"] < 0
+        or type(visual["preempted_count"]) is not int
+        or visual["preempted_count"] != 0
+    ):
+        fail(f"{name} returned a non-idle fresh-session visual state: {visual}")
+    require_cursor_motion(f"{name}.motion", state["motion"])
+    return state
 
 
 def require_recording_state(name: str, value: Any) -> dict[str, Any]:
@@ -1223,15 +1313,32 @@ def main() -> int:
         cursor_state, _ = client.call(
             "get_agent_cursor_state", {"session": session}
         )
-        if (
-            not isinstance(cursor_state, dict)
-            or cursor_state.get("session") != session
-            or cursor_state.get("enabled") is not True
-            or not isinstance(cursor_state.get("theme"), dict)
-            or not isinstance(cursor_state.get("visual_state"), dict)
-            or not isinstance(cursor_state.get("motion"), dict)
-        ):
-            fail(f"get_agent_cursor_state returned inconsistent state: {cursor_state}")
+        cursor_state = require_cursor_state(
+            "get_agent_cursor_state", cursor_state, session, True
+        )
+        if cursor_state["position"] is not None:
+            fail(f"fresh session cursor unexpectedly had a position: {cursor_state}")
+        motion_set, _ = client.call("set_agent_cursor_motion", {"session": session})
+        motion_set = require_object(
+            "set_agent_cursor_motion", motion_set, {"session", "motion"}
+        )
+        if motion_set["session"] != session:
+            fail(f"set_agent_cursor_motion returned the wrong session: {motion_set}")
+        require_cursor_motion("set_agent_cursor_motion.motion", motion_set["motion"])
+        theme_set, _ = client.call(
+            "set_agent_cursor_theme",
+            {
+                "session": session,
+                "theme_id": "cua.default",
+                "reduced_motion": "auto",
+            },
+        )
+        theme_set = require_object(
+            "set_agent_cursor_theme", theme_set, {"session", "theme"}
+        )
+        if theme_set["session"] != session:
+            fail(f"set_agent_cursor_theme returned the wrong session: {theme_set}")
+        require_cursor_theme("set_agent_cursor_theme.theme", theme_set["theme"])
         disabled, _ = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": False}
         )
@@ -1240,13 +1347,20 @@ def main() -> int:
         disabled_state, _ = client.call(
             "get_agent_cursor_state", {"session": session}
         )
-        if not isinstance(disabled_state, dict) or disabled_state.get("enabled") is not False:
-            fail("disabled session cursor did not read back as disabled")
+        require_cursor_state(
+            "disabled get_agent_cursor_state", disabled_state, session, False
+        )
         enabled, _ = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": True}
         )
         if enabled != {"session": session, "enabled": True}:
             fail(f"set_agent_cursor_enabled did not restore the session cursor: {enabled}")
+        restored_cursor, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        require_cursor_state(
+            "restored get_agent_cursor_state", restored_cursor, session, True
+        )
 
         escalated, _ = client.call(
             "escalate_session",

@@ -423,6 +423,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"arguments": {"pid": launched_pid}', mcp_runtime)
         self.assertIn('inventory_exit_deadline = time.monotonic() + 10', mcp_runtime)
         self.assertIn('"set_agent_cursor_enabled", {"session": session, "enabled": False}', mcp_runtime)
+        self.assertIn("CURSOR_MOTION_FIELDS = {", mcp_runtime)
+        self.assertIn('"glide_duration_ms": 0.0', mcp_runtime)
+        self.assertIn('"idle_hide_ms": 20_000.0', mcp_runtime)
+        self.assertIn('"id": "cua.default"', mcp_runtime)
+        self.assertIn('client.call("set_agent_cursor_motion", {"session": session})', mcp_runtime)
+        self.assertIn('"set_agent_cursor_theme",', mcp_runtime)
+        self.assertIn('"restored get_agent_cursor_state"', mcp_runtime)
         self.assertIn('"reason": "no_window_target"', mcp_runtime)
         self.assertIn('client.call("end_session", {"session": session})', mcp_runtime)
         self.assertIn('"name": "kill_app"', mcp_runtime)
@@ -547,6 +554,45 @@ class RepositoryContractTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(RuntimeError, "tool-error envelope drifted"):
             client.call_error("launch_app", {"bundle_id": "com.example.missing"})
+
+    def test_primary_cursor_state_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_cursor_state_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        state = {
+            "session": "cursor-contract",
+            "enabled": True,
+            "position": None,
+            "theme": dict(module.DEFAULT_CURSOR_THEME),
+            "visual_state": {
+                "requested_action": "idle",
+                "resolved_action": "idle",
+                "modifiers": [],
+                "phase": "loop",
+                "frame": 9,
+                "preempted_count": 0,
+            },
+            "motion": dict(module.DEFAULT_CURSOR_MOTION),
+        }
+        self.assertEqual(
+            module.require_cursor_state(
+                "cursor", state, "cursor-contract", True
+            ),
+            state,
+        )
+        with self.assertRaisesRegex(RuntimeError, "human-like defaults"):
+            module.require_cursor_state(
+                "drifted cursor",
+                dict(state, motion=dict(state["motion"], spring=0.5)),
+                "cursor-contract",
+                True,
+            )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(

@@ -101,7 +101,10 @@ distinct. Leave the default cursor enabled for visible work, demos, and screen
 recordings. If the user explicitly asks for silent background operation, call
 `set_agent_cursor_enabled({session,enabled:false})`; call
 `get_agent_cursor_state({session})` to verify a hide, restore, selected theme,
-or motion change rather than assuming the overlay accepted it.
+or motion change rather than assuming the overlay accepted it. Its primary
+state is complete rather than sparse: require `session`, `enabled`, nullable
+`position`, `theme`, `visual_state`, and `motion`; keep explicit nulls and
+fresh numeric animation fields instead of filling missing values locally.
 
 The embedded `cua.default` theme is sufficient for ordinary work. Use
 `set_agent_cursor_theme({session,theme_id,reduced_motion})` only for an explicit
@@ -129,7 +132,9 @@ Read it back and restore the prior values when the temporary presentation
 change ends. Motion tuning affects only the semantic overlay; it never changes
 the destination, makes background AX input physical, or proves an action landed.
 Do not add random target jitter because it can move a click outside the freshly
-grounded control.
+grounded control. Calling the motion setter with only `session` is an
+idempotent way to read back the current nine-field configuration; it must not
+be used as a periodic preflight.
 
 The first AX action seeds a new cursor close to its target, so its initial
 glide can be subtle. For a demo or screen recording that explicitly needs a
