@@ -434,8 +434,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"error": "FILE_NOT_FOUND"', mcp_runtime)
         self.assertIn('"post-error list_apps"', mcp_runtime)
         self.assertIn('"kill_app success payload drifted:', mcp_runtime)
-        self.assertIn('"escalation_reason": None', mcp_runtime)
-        self.assertIn('if ended != {"session": session, "active": False}', mcp_runtime)
+        self.assertIn("def require_session_state(", mcp_runtime)
+        self.assertIn('"code": "session_policy_conflict"', mcp_runtime)
+        self.assertIn('"code": "desktop_already_active"', mcp_runtime)
+        self.assertIn('"code": "session_not_started"', mcp_runtime)
+        self.assertIn("def require_ended_session(", mcp_runtime)
+        self.assertIn("revived=True", mcp_runtime)
         self.assertIn('client.call("get_recording_state")', mcp_runtime)
         self.assertIn('"record_video": False', mcp_runtime)
         self.assertIn('client.call("stop_recording")', mcp_runtime)
@@ -451,7 +455,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"legacy page mutations remained constrained', mcp_runtime)
         self.assertIn('"os_permission_prompt_requires_trusted_host"', mcp_runtime)
         self.assertIn('"start_session", {"session": session, "capture_scope": "auto"}', mcp_runtime)
-        self.assertIn('client.call("get_session_state", {"session": session})', mcp_runtime)
+        self.assertIn('"get_session_state", {"session": session}', mcp_runtime)
         self.assertIn('peer.call("get_config")', mcp_runtime)
         self.assertIn('"set_config", {"max_image_dimension": config_probe}', mcp_runtime)
         self.assertIn('("com.apple.calculator", "Calculator")', mcp_runtime)
@@ -1031,6 +1035,99 @@ class RepositoryContractTests(unittest.TestCase):
                 "drifted recording text",
                 enabled,
                 [{"type": "text", "text": "wrong"}],
+            )
+
+    def test_primary_session_lifecycle_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_session_lifecycle_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        session = "session-contract"
+        state = {
+            "session": session,
+            "capture_scope": "auto",
+            "effective_scope": "window",
+            "desktop_unlocked": False,
+            "escalation_reason": None,
+            "escalation_detail": None,
+        }
+        state_content = [
+            {
+                "type": "text",
+                "text": (
+                    f"Session '{session}' uses capture_scope='auto' "
+                    "(effective_scope='window')."
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_session_state(
+                "session",
+                state,
+                state_content,
+                session=session,
+                capture_scope="auto",
+                effective_scope="window",
+                desktop_unlocked=False,
+            ),
+            state,
+        )
+        started = {**state, "active": True, "revived": False}
+        self.assertEqual(
+            module.require_started_session(
+                "started session",
+                started,
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"✅ Session '{session}' is active with "
+                            "capture_scope='auto'."
+                        ),
+                    }
+                ],
+                session=session,
+                capture_scope="auto",
+                effective_scope="window",
+                desktop_unlocked=False,
+                revived=False,
+            ),
+            started,
+        )
+        self.assertEqual(
+            module.require_ended_session(
+                "ended session",
+                {"session": session, "active": False},
+                [{"type": "text", "text": f"✅ Session '{session}' ended."}],
+                session,
+            ),
+            {"session": session, "active": False},
+        )
+        with self.assertRaisesRegex(RuntimeError, "session state drifted"):
+            module.require_session_state(
+                "drifted session",
+                dict(state, effective_scope="desktop"),
+                state_content,
+                session=session,
+                capture_scope="auto",
+                effective_scope="window",
+                desktop_unlocked=False,
+            )
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_started_session(
+                "drifted session text",
+                started,
+                [{"type": "text", "text": "wrong"}],
+                session=session,
+                capture_scope="auto",
+                effective_scope="window",
+                desktop_unlocked=False,
+                revived=False,
             )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):

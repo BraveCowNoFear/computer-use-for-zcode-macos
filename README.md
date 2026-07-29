@@ -276,8 +276,11 @@ mutation reaches normal pid/window validation instead of the upstream
 default-disable guard, plus
 per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
-and one-way `auto` session escalation to desktop scope before restoring/ending
-its owned state. App and window discovery also pins the exact nine-field app
+and the complete session state machine: same-scope start is idempotent, a
+different live scope returns the exact no-mutation conflict, `auto` escalates
+only once with an explicit reason, end makes state inactive, and an explicit
+new start can revive the same ID under a fresh scope before a final clean end.
+App and window discovery also pins the exact nine-field app
 record and its running-only summary, ten-field WindowServer record and count
 summary, integer cursor position and exact position text, and logical main-display
 geometry plus exact point/scale text. It cold-launches a stopped Calculator or TextEdit,
@@ -302,7 +305,8 @@ The same signed-primary gate locks ordinary tool-error semantics:
 `APP_NOT_INSTALLED` and `FILE_NOT_FOUND` remain structured MCP errors without
 starting the selected app, successful `kill_app` remains a text-only SIGKILL
 acknowledgement followed by observed process disappearance, and every nullable
-session-state field is present before and after one-way desktop escalation.
+session-state field plus each exact lifecycle summary/error remains stable
+through idempotency, conflict, one-way escalation, end, and explicit revival.
 Its schema-v1 health report is now response-pinned as well: all eight macOS
 checks remain in canonical order, every entry obeys the exact status/hint/data
 shape, `overall` agrees with the check statuses, and an include-only probe

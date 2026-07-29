@@ -143,7 +143,14 @@ Pinned primary session state always contains `session`, `capture_scope`,
 `effective_scope`, `desktop_unlocked`, `escalation_reason`, and
 `escalation_detail`; the last two are explicit nulls before escalation.
 `start_session` adds exact `active` and `revived` booleans, while `end_session`
-returns exactly `{session,active:false}`.
+returns exactly `{session,active:false}`. Starting an active ID again with
+the same scope is an idempotent TTL refresh and keeps `revived:false`.
+Requesting another live scope returns `session_policy_conflict`, including
+the existing and requested scopes, without mutation. After `end_session`,
+`get_session_state` returns `session_not_started`; an explicit new
+`start_session` may bind a fresh scope and returns `revived:true`. A second
+desktop escalation returns `desktop_already_active`, also without mutation.
+These are the driver's lifecycle semantics, not plugin approval decisions.
 
 Pinned macOS `bring_to_front` has the exact schema `{pid, window_id?}` with no
 session field. With a returned window ID it first requests exact WindowServer

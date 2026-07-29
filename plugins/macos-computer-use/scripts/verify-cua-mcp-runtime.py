@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.25"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.26"},
             },
         )
         expected = {
@@ -878,6 +878,108 @@ def require_cursor_state(
     ):
         fail(f"{name} returned malformed dynamic visual state: {visual}")
     require_cursor_motion(f"{name}.motion", state["motion"])
+    return state
+
+
+SESSION_STATE_FIELDS = {
+    "session",
+    "capture_scope",
+    "effective_scope",
+    "desktop_unlocked",
+    "escalation_reason",
+    "escalation_detail",
+}
+
+
+def expected_session_state(
+    session: str,
+    capture_scope: str,
+    effective_scope: str,
+    desktop_unlocked: bool,
+    escalation_reason: str | None = None,
+    escalation_detail: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "session": session,
+        "capture_scope": capture_scope,
+        "effective_scope": effective_scope,
+        "desktop_unlocked": desktop_unlocked,
+        "escalation_reason": escalation_reason,
+        "escalation_detail": escalation_detail,
+    }
+
+
+def require_session_state(
+    name: str,
+    value: Any,
+    content: Any,
+    *,
+    session: str,
+    capture_scope: str,
+    effective_scope: str,
+    desktop_unlocked: bool,
+    escalation_reason: str | None = None,
+    escalation_detail: str | None = None,
+) -> dict[str, Any]:
+    state = require_object(name, value, SESSION_STATE_FIELDS)
+    expected = expected_session_state(
+        session,
+        capture_scope,
+        effective_scope,
+        desktop_unlocked,
+        escalation_reason,
+        escalation_detail,
+    )
+    if state != expected:
+        fail(f"{name} session state drifted: {state}")
+    require_text_content(
+        name,
+        content,
+        f"Session '{session}' uses capture_scope='{capture_scope}' "
+        f"(effective_scope='{effective_scope}').",
+    )
+    return state
+
+
+def require_started_session(
+    name: str,
+    value: Any,
+    content: Any,
+    *,
+    session: str,
+    capture_scope: str,
+    effective_scope: str,
+    desktop_unlocked: bool,
+    revived: bool,
+) -> dict[str, Any]:
+    state = require_object(
+        name, value, SESSION_STATE_FIELDS | {"active", "revived"}
+    )
+    expected = {
+        **expected_session_state(
+            session, capture_scope, effective_scope, desktop_unlocked
+        ),
+        "active": True,
+        "revived": revived,
+    }
+    if state != expected:
+        fail(f"{name} started-session state drifted: {state}")
+    require_text_content(
+        name,
+        content,
+        f"✅ Session '{session}' is active with capture_scope='{capture_scope}'.",
+    )
+    return state
+
+
+def require_ended_session(
+    name: str, value: Any, content: Any, session: str
+) -> dict[str, Any]:
+    state = require_object(name, value, {"session", "active"})
+    expected = {"session": session, "active": False}
+    if state != expected:
+        fail(f"{name} ended-session state drifted: {state}")
+    require_text_content(name, content, f"✅ Session '{session}' ended.")
     return state
 
 
@@ -1853,30 +1955,63 @@ def main() -> int:
         ) != config_snapshot:
             fail("restored configuration was not visible on the same connection")
 
-        started, _ = client.call(
+        started, started_content = client.call(
             "start_session", {"session": session, "capture_scope": "auto"}
         )
         session_started = True
-        expected_started = {
+        require_started_session(
+            "start_session",
+            started,
+            started_content,
+            session=session,
+            capture_scope="auto",
+            effective_scope="window",
+            desktop_unlocked=False,
+            revived=False,
+        )
+        repeated, repeated_content = client.call(
+            "start_session", {"session": session, "capture_scope": "auto"}
+        )
+        require_started_session(
+            "idempotent start_session",
+            repeated,
+            repeated_content,
+            session=session,
+            capture_scope="auto",
+            effective_scope="window",
+            desktop_unlocked=False,
+            revived=False,
+        )
+        conflict_message = (
+            f"session '{session}' already uses capture_scope='auto'; "
+            "capture scope is immutable until the session ends"
+        )
+        conflict, conflict_content = client.call_error(
+            "start_session", {"session": session, "capture_scope": "window"}
+        )
+        expected_conflict = {
+            "code": "session_policy_conflict",
             "session": session,
             "capture_scope": "auto",
-            "effective_scope": "window",
-            "desktop_unlocked": False,
-            "escalation_reason": None,
-            "escalation_detail": None,
-            "active": True,
-            "revived": False,
+            "requested_capture_scope": "window",
         }
-        if started != expected_started:
-            fail(f"start_session returned inconsistent state: {started}")
-        state, _ = client.call("get_session_state", {"session": session})
-        expected_window_state = {
-            key: value
-            for key, value in expected_started.items()
-            if key not in {"active", "revived"}
-        }
-        if state != expected_window_state:
-            fail(f"get_session_state returned inconsistent state: {state}")
+        if conflict != expected_conflict:
+            fail(f"start_session scope-conflict response drifted: {conflict}")
+        require_text_content(
+            "start_session scope conflict", conflict_content, conflict_message
+        )
+        state, state_content = client.call(
+            "get_session_state", {"session": session}
+        )
+        require_session_state(
+            "get_session_state after conflict",
+            state,
+            state_content,
+            session=session,
+            capture_scope="auto",
+            effective_scope="window",
+            desktop_unlocked=False,
+        )
 
         cursor_state, _ = client.call(
             "get_agent_cursor_state", {"session": session}
@@ -1930,7 +2065,7 @@ def main() -> int:
             "restored get_agent_cursor_state", restored_cursor, session, True
         )
 
-        escalated, _ = client.call(
+        escalated, escalated_content = client.call(
             "escalate_session",
             {
                 "session": session,
@@ -1938,17 +2073,52 @@ def main() -> int:
                 "detail": "ci contract proof",
             },
         )
-        expected_escalated = {
-            "session": session,
-            "capture_scope": "auto",
-            "effective_scope": "desktop",
-            "desktop_unlocked": True,
-            "escalation_reason": "no_window_target",
-            "escalation_detail": "ci contract proof",
-        }
+        expected_escalated = expected_session_state(
+            session,
+            "auto",
+            "desktop",
+            True,
+            "no_window_target",
+            "ci contract proof",
+        )
         if escalated != expected_escalated:
             fail(f"escalate_session returned inconsistent state: {escalated}")
-        escalated_state, _ = client.call("get_session_state", {"session": session})
+        require_text_content(
+            "escalate_session",
+            escalated_content,
+            f"✅ Session '{session}' escalated to desktop scope.",
+        )
+        repeated_escalation, repeated_escalation_content = client.call_error(
+            "escalate_session",
+            {"session": session, "reason": "other"},
+        )
+        if repeated_escalation != {
+            "code": "desktop_already_active",
+            "session": session,
+        }:
+            fail(
+                "repeated escalate_session response drifted: "
+                f"{repeated_escalation}"
+            )
+        require_text_content(
+            "repeated escalate_session",
+            repeated_escalation_content,
+            f"session '{session}' already has effective desktop scope",
+        )
+        escalated_state, escalated_state_content = client.call(
+            "get_session_state", {"session": session}
+        )
+        require_session_state(
+            "get_session_state after escalation",
+            escalated_state,
+            escalated_state_content,
+            session=session,
+            capture_scope="auto",
+            effective_scope="desktop",
+            desktop_unlocked=True,
+            escalation_reason="no_window_target",
+            escalation_detail="ci contract proof",
+        )
         if escalated_state != escalated:
             fail(
                 "get_session_state did not preserve the exact one-way desktop escalation"
@@ -1968,9 +2138,51 @@ def main() -> int:
         if probe.returncode != -signal.SIGKILL:
             fail(f"kill_app left disposable pid {probe.pid} with status {probe.returncode}")
         probe = None
-        ended, _ = client.call("end_session", {"session": session})
-        if ended != {"session": session, "active": False}:
-            fail(f"end_session returned inconsistent state: {ended}")
+        ended, ended_content = client.call("end_session", {"session": session})
+        require_ended_session("end_session", ended, ended_content, session)
+        session_started = False
+        ended_state, ended_state_content = client.call_error(
+            "get_session_state", {"session": session}
+        )
+        if ended_state != {"code": "session_not_started", "session": session}:
+            fail(f"ended get_session_state response drifted: {ended_state}")
+        require_text_content(
+            "ended get_session_state",
+            ended_state_content,
+            f"session '{session}' is not active",
+        )
+        revived, revived_content = client.call(
+            "start_session", {"session": session, "capture_scope": "desktop"}
+        )
+        session_started = True
+        require_started_session(
+            "revived start_session",
+            revived,
+            revived_content,
+            session=session,
+            capture_scope="desktop",
+            effective_scope="desktop",
+            desktop_unlocked=True,
+            revived=True,
+        )
+        revived_state, revived_state_content = client.call(
+            "get_session_state", {"session": session}
+        )
+        require_session_state(
+            "revived get_session_state",
+            revived_state,
+            revived_state_content,
+            session=session,
+            capture_scope="desktop",
+            effective_scope="desktop",
+            desktop_unlocked=True,
+        )
+        reended, reended_content = client.call(
+            "end_session", {"session": session}
+        )
+        require_ended_session(
+            "revived end_session", reended, reended_content, session
+        )
         session_started = False
         # The intentional trusted-host refusal may close that MCP proxy on
         # some Intel macOS hosts. Exercise it last on the otherwise idle peer
@@ -2042,7 +2254,7 @@ def main() -> int:
             shutil.rmtree(directory, ignore_errors=True)
 
     print(
-        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder responses, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
     )
     return 0
 

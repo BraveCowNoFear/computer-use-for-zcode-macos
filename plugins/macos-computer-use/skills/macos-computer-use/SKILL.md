@@ -92,6 +92,12 @@ Recording is never enabled as a side effect of ordinary Computer Use.
      secrets or copied content.
    - `desktop` when the requested task inherently crosses apps, the menu bar,
      Dock, desktop, system UI, or several windows.
+   Repeating `start_session` for an active ID is idempotent only with the same
+   scope. A different scope returns `session_policy_conflict` and leaves the
+   session unchanged. Scope is not an approval boundary: finish with
+   `end_session`, then explicitly call `start_session` again if the run
+   truly needs to reuse that ID under a fresh scope; the response reports
+   `revived:true`. Prefer a new task ID unless continuity is intentional.
 5. Pass that public `session` field on state and action calls. Call
    `end_session` when the UI task is complete or abandoned.
 
