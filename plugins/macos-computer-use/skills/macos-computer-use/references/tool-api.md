@@ -19,6 +19,8 @@ Common flow:
 | Move only the visible session cursor | `move_cursor({session, x, y, scope:"window"})` |
 | Unlock desktop for an `auto` session | `escalate_session({session, reason, detail})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
+| Isolated concurrent app | `launch_app({bundle_id, creates_new_application_instance:true})` when advertised |
+| Force exact process exit | `kill_app({pid})` only after verified cooperative quit failure or an explicit force-quit request |
 | List app windows | `list_windows({pid})` |
 | Snapshot | `get_window_state({session, pid, window_id})` |
 | Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
@@ -45,6 +47,11 @@ secrets or copied user content. Reuse that exact ID throughout one run.
 `other`. Optional `detail` is a short local diagnostic, never secrets or page
 content. Read back `get_session_state({session})`, require effective desktop
 scope, and then take a new desktop snapshot before acting.
+
+For isolated app lifecycles, snapshot existing pids before launch, require a
+new positive pid plus a window owned by that pid, and clean up only that exact
+process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the
+forceful second rung for a still-live exact pid, never a name-wide cleanup.
 
 Declared sessions receive an enabled, colored semantic cursor overlay by
 default. Primary actions animate it without moving the real OS pointer. The

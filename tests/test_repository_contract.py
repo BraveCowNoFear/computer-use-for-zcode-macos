@@ -163,6 +163,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
+        self.assertIn("launch_app kill_app", launcher)
         self.assertIn("click double_click right_click", launcher)
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
@@ -314,6 +315,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('`scope:"desktop"` is a different operation', skill)
         self.assertIn("moves the user's\nreal OS pointer", skill)
         self.assertIn("creates_new_application_instance:true", skill)
+        self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
+        self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
         self.assertIn("without moving the real OS pointer", (
             PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
         ).read_text(encoding="utf-8"))
@@ -402,6 +405,9 @@ class RepositoryContractTests(unittest.TestCase):
             '"get_cursor_position"',
             '"get_screen_size"',
             '"get_desktop_state"',
+            '"list_apps"',
+            '"launch_app"',
+            '"kill_app"',
             '"move_cursor"',
             '"press_key"',
             '"hotkey"',
@@ -424,6 +430,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_desktop_scope_verified"',
             '"primary_real_pointer_moved_from_fresh_desktop"',
             '"primary_real_pointer_restored_and_reobserved"',
+            '"primary_isolated_app_lifecycle_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
@@ -438,6 +445,7 @@ class RepositoryContractTests(unittest.TestCase):
             "fixture_button_screenshot_point",
             "desktop_screenshot_point",
             "restore_pointer_direct",
+            "wait_for_process_exit",
             "require_action_verdict",
             "self.process.kill()",
         ):

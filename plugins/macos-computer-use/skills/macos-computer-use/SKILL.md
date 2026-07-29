@@ -113,6 +113,13 @@ For concurrent runs that must control the same app independently, give each
 run a distinct session and, only when the live macOS `launch_app` schema
 advertises it, pass `creates_new_application_instance:true` so each run gets a
 fresh pid/window instead of silently sharing one single-instance window.
+Preserve pre-existing pids before an isolated launch and accept only a returned
+positive pid not already present. To close that exact instance, first use its
+fresh returned window with pid-bound `hotkey` Command-Q (foreground delivery
+when a native menu equivalent requires it) and verify process exit. Use
+`kill_app({pid})` only for that exact still-live pid after cooperative quit did
+not exit, or when the user's request explicitly requires force termination;
+it is a delivery fallback, not a plugin approval boundary.
 
 ## Observe, act once, verify
 

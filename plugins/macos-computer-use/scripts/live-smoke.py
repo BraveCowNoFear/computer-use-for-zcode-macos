@@ -80,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.8"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.9"},
             },
         )
         self.notify("notifications/initialized")
@@ -250,6 +250,25 @@ def restore_pointer_direct(position: dict[str, Any]) -> None:
     time.sleep(0.05)
 
 
+def process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def wait_for_process_exit(pid: int, timeout: float = 4.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not process_is_alive(pid):
+            return True
+        time.sleep(0.05)
+    return not process_is_alive(pid)
+
+
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
     for element in elements:
         searchable = " ".join(str(element.get(key, "")) for key in ("label", "value"))
@@ -317,6 +336,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     session = new_live_session()
     session_started = False
     original_real_cursor: dict[str, Any] | None = None
+    isolated_app_pid: int | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
@@ -333,9 +353,12 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "get_cursor_position",
             "get_screen_size",
             "move_cursor",
+            "list_apps",
             "list_windows",
+            "launch_app",
             "get_window_state",
             "get_desktop_state",
+            "kill_app",
             "type_text",
             "press_key",
             "hotkey",
@@ -383,6 +406,72 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
         report["cursorTheme"] = theme["id"]
         report["steps"].append("primary_session_cursor_ready")
+
+        apps_before, _ = client.call("list_apps", {})
+        existing_calculator_pids = {
+            int(app["pid"])
+            for app in apps_before.get("apps", [])
+            if app.get("bundle_id") == "com.apple.calculator"
+            and isinstance(app.get("pid"), int)
+            and int(app["pid"]) > 0
+        }
+        launched, _ = client.call(
+            "launch_app",
+            {
+                "session": session,
+                "bundle_id": "com.apple.calculator",
+                "creates_new_application_instance": True,
+            },
+        )
+        launched_pid = launched.get("pid")
+        if (
+            not isinstance(launched_pid, int)
+            or launched_pid <= 0
+            or launched_pid in existing_calculator_pids
+            or launched_pid in {fixture_pid, os.getpid()}
+            or launched.get("bundle_id") != "com.apple.calculator"
+        ):
+            raise RuntimeError(f"Primary launch_app did not return an isolated Calculator: {launched}")
+        isolated_app_pid = launched_pid
+        launched_windows = [
+            window
+            for window in launched.get("windows", [])
+            if window.get("pid") == launched_pid and isinstance(window.get("window_id"), int)
+        ]
+        window_deadline = time.monotonic() + 3.0
+        while not launched_windows and time.monotonic() < window_deadline:
+            listed_windows, _ = client.call("list_windows", {"pid": launched_pid})
+            launched_windows = [
+                window
+                for window in listed_windows.get("windows", [])
+                if window.get("pid") == launched_pid and isinstance(window.get("window_id"), int)
+            ]
+            if not launched_windows:
+                time.sleep(0.05)
+        if not launched_windows:
+            raise RuntimeError(f"Primary isolated Calculator returned no owned window: {launched}")
+        calculator_window = launched_windows[0]
+        quit_result, _ = client.call(
+            "hotkey",
+            {
+                "session": session,
+                "pid": launched_pid,
+                "window_id": calculator_window["window_id"],
+                "keys": ["cmd", "q"],
+                "delivery_mode": "foreground",
+            },
+        )
+        require_action_verdict(quit_result, "primary isolated Calculator quit")
+        if not wait_for_process_exit(launched_pid):
+            client.call("kill_app", {"pid": launched_pid})
+            if not wait_for_process_exit(launched_pid):
+                raise RuntimeError(f"Primary could not clean up isolated Calculator pid {launched_pid}")
+            report["isolatedAppCleanup"] = "kill_app_after_quit_noop"
+        else:
+            report["isolatedAppCleanup"] = "foreground_cmd_q"
+        isolated_app_pid = None
+        report["isolatedAppPid"] = launched_pid
+        report["steps"].append("primary_isolated_app_lifecycle_verified")
 
         # Keep these read-only diagnostics anonymous. Tying a desktop-scoped
         # helper to a window-only session would correctly require escalation.
@@ -770,6 +859,12 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if original_real_cursor is not None:
             try:
                 restore_pointer_direct(original_real_cursor)
+            except Exception:
+                pass
+        if isolated_app_pid is not None and process_is_alive(isolated_app_pid):
+            try:
+                client.call("kill_app", {"pid": isolated_app_pid})
+                wait_for_process_exit(isolated_app_pid)
             except Exception:
                 pass
         if session_started:

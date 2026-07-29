@@ -118,6 +118,10 @@ root/data template variables.
   required reason, verify `get_session_state`, move the real pointer from fresh
   primary-display pixels, restore its original multi-display position, and
   re-observe the desktop. Emergency cleanup also restores the pointer on error.
+- Launch a new isolated Calculator instance by bundle ID, reject any pid that
+  existed before the call, bind a window owned by the returned pid, then close
+  that instance with foreground Command-Q; `kill_app` is reserved for bounded
+  cleanup if the cooperative exit does not land.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.
