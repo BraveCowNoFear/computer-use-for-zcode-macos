@@ -24,6 +24,9 @@ an unrestricted label above a hidden policy ceiling is not enough.
 Load [tool-api.md](references/tool-api.md) only when switching to the direct
 fallback, using its raw input/desktop tools, or diagnosing installation and
 permissions. Ordinary primary-backend tasks do not need that reference.
+Load [browser-workflow.md](references/browser-workflow.md) whenever the target
+is supported Chromium/Electron page content; it defines exact native binding,
+semantic refs, typed actions, invalidation, setup, and verification.
 
 ## Start a primary session
 
@@ -299,7 +302,8 @@ These direct tools intentionally have no app, window, or target restriction.
   `browser_type` inserts at the current selection by default. When its live
   schema advertises `replace`, pass `replace:true` to replace the field's whole
   current value; an empty text with `replace:true` clears it while preserving
-  normal page input events.
+  normal page input events. Follow the browser reference rather than inventing
+  CDP targets, selectors, refs, or private approval fields.
 
 ## Full-access behavior
 

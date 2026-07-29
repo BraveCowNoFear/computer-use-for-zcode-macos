@@ -138,8 +138,12 @@ root/data template variables.
   A window-scoped `move_cursor` can seed a clearly visible demo glide without
   touching the real pointer; desktop scope remains an explicit real-pointer
   operation grounded in fresh full-desktop pixels.
-- Bind supported Chromium/Electron pages to typed browser tools while retaining
-  native control for browser chrome, file pickers, and permission dialogs.
+- Bind one returned Chromium/Electron native window to an exact page target,
+  then use snapshot-scoped semantic refs for navigation, trusted or explicit
+  DOM-event clicks, replacement-aware typing, pointer gestures, page dialogs,
+  uploads, and downloads. Every mutation invalidates old refs and is followed
+  by a fresh page snapshot; browser chrome, native pickers/dialogs, unsupported
+  webviews, and dependency-refused routes stay on the native control ladder.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
 - Request fallback Accessibility and Screen Recording independently, map Retina
   pointer input through fresh screenshot IDs, and release held buttons on MCP

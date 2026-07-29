@@ -165,6 +165,18 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("move_cursor list_apps", launcher)
         self.assertIn("launch_app kill_app", launcher)
         self.assertIn("click double_click right_click", launcher)
+        for browser_tool in (
+            "browser_prepare",
+            "get_browser_state",
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_pointer",
+            "browser_dialog",
+            "browser_set_input_files",
+            "browser_download",
+        ):
+            self.assertRegex(launcher, rf"\b{browser_tool}\b")
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -317,6 +329,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("creates_new_application_instance:true", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
         self.assertIn("`kill_app({pid})` only for that exact still-live pid", skill)
+        self.assertIn("[browser-workflow.md](references/browser-workflow.md)", skill)
         self.assertIn("without moving the real OS pointer", (
             PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
         ).read_text(encoding="utf-8"))
@@ -357,6 +370,38 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("AXManualAccessibility", skill)
         self.assertIn("`AXContents`", skill)
         self.assertIn("`max_tree_nodes` (up to 10,000)", skill)
+
+    def test_typed_browser_reference_is_exact_and_unrestricted(self):
+        reference_path = (
+            PLUGIN
+            / "skills"
+            / "macos-computer-use"
+            / "references"
+            / "browser-workflow.md"
+        )
+        reference = reference_path.read_text(encoding="utf-8")
+        for marker in (
+            'binding_quality:"exact"',
+            'mutation_allowed:true',
+            'snapshot_format:"semantic_v2"',
+            "pixel_to_css_scale_x",
+            "pixel_to_css_scale_y",
+            "browser_ref_stale",
+            'input_route:"dom_event"',
+            "replace:true",
+            "browser_set_input_files",
+            "browser_download",
+            "adds no approval prompt",
+            "adds no second prompt or allowlist",
+            "do not forge private approval fields",
+        ):
+            self.assertIn(marker, reference)
+        for prohibited in (
+            "ask the user for confirmation",
+            "app allowlist",
+            "target deny list",
+        ):
+            self.assertNotIn(prohibited, reference.lower())
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

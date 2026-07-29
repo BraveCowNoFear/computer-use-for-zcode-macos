@@ -104,12 +104,12 @@ otherwise its focus click can leave the text in the old field.
 
 Desktop state and desktop-scope input are also part of this primary MCP, not a
 third server. For menu bar/Dock/system UI, pair a fresh `get_desktop_state`
-with a windowless `scope:"desktop"` action. Browser tools such as
-`get_browser_state`, `browser_click`, and `browser_type`—when advertised by the
-live primary `tools/list`—also belong to this same MCP. When `browser_type`'s
-live schema advertises `replace`, use `replace:true` to replace the field's
-complete current value; pairing it with empty text clears the field while
-preserving page input events.
+with a windowless `scope:"desktop"` action. The complete typed browser family
+(`browser_prepare`, `get_browser_state`, navigation, click/type/pointer,
+page-dialog, upload, and download tools) belongs to this same MCP and is a
+required capability of the pinned primary launcher. Follow
+[browser-workflow.md](browser-workflow.md) for its exact binding, snapshot,
+invalidation, input-route, upload, and dependency-owned download contracts.
 
 The plugin launches a dedicated daemon with:
 
