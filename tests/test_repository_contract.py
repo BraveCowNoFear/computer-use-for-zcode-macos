@@ -160,6 +160,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("start_session escalate_session end_session", launcher)
+        self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -299,6 +300,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("escalate_session({session})", skill)
         self.assertIn("element_token", skill)
         self.assertIn("replace:true", skill)
+        self.assertIn("## Keep the session cursor human-visible", skill)
+        self.assertIn("set_agent_cursor_enabled({session,enabled:false})", skill)
+        self.assertIn("get_agent_cursor_state({session})", skill)
+        self.assertIn("creates_new_application_instance:true", skill)
+        self.assertIn("without moving the real OS pointer", (
+            PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
+        ).read_text(encoding="utf-8"))
         self.assertIn('scope:"desktop"', skill)
         self.assertIn("fallback is\nsessionless", skill)
         self.assertIn("screenshot as the final truth", skill)
@@ -372,6 +380,14 @@ class RepositoryContractTests(unittest.TestCase):
             '"driver-daemon"',
             '"start_session"',
             '"end_session"',
+            '"get_agent_cursor_state"',
+            '"set_agent_cursor_enabled"',
+            "primary_element_target",
+            "require_cursor_action",
+            "require_cursor_position",
+            "element_token",
+            '"primary_session_cursor_ready"',
+            '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
             '"fallback_visible_result_verified"',
@@ -406,6 +422,31 @@ class RepositoryContractTests(unittest.TestCase):
             "window": {"bounds": {"x": 100, "y": 50, "width": 640, "height": 322}}
         }
         self.assertEqual(module.fixture_screen_point(screen_state, 252.0, 122.0), (352.0, 250.0))
+
+    def test_live_smoke_validates_semantic_cursor_action_and_position(self):
+        path = PLUGIN / "scripts" / "live-smoke.py"
+        spec = importlib.util.spec_from_file_location("zcode_live_smoke_cursor_contract", path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        state = {
+            "position": {"x": 120, "y": 240.5},
+            "visual_state": {"requested_action": "text", "resolved_action": "text"},
+        }
+
+        class Client:
+            def call(self, name, arguments):
+                self.assert_call = (name, arguments)
+                return state, []
+
+        client = Client()
+        self.assertIs(module.require_cursor_action(client, "smoke", "text", "type_text"), state)
+        self.assertEqual(module.require_cursor_position(state, "click"), {"x": 120.0, "y": 240.5})
+        self.assertEqual(
+            client.assert_call,
+            ("get_agent_cursor_state", {"session": "smoke"}),
+        )
 
     def test_github_actions_are_commit_pinned(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

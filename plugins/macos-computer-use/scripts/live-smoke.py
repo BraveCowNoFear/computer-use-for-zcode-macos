@@ -78,7 +78,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.0"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.1"},
             },
         )
         self.notify("notifications/initialized")
@@ -173,6 +173,42 @@ def primary_element(elements: list[dict[str, Any]], role: str, text: str | None 
     raise RuntimeError(f"Could not find primary {role}{suffix} in {len(elements)} structured elements")
 
 
+def primary_element_target(element: dict[str, Any]) -> dict[str, Any]:
+    token = element.get("element_token")
+    if isinstance(token, str) and token:
+        return {"element_token": token}
+    index = element.get("element_index")
+    if isinstance(index, int):
+        return {"element_index": index}
+    raise RuntimeError(f"Primary element has neither an element_token nor element_index: {element}")
+
+
+def require_cursor_position(state: dict[str, Any], label: str) -> dict[str, float]:
+    position = state.get("position")
+    if not isinstance(position, dict) or not all(
+        isinstance(position.get(axis), (int, float)) for axis in ("x", "y")
+    ):
+        raise RuntimeError(f"{label} did not update the visible session cursor: {state}")
+    return {"x": float(position["x"]), "y": float(position["y"])}
+
+
+def require_cursor_action(
+    client: MCPClient, session: str, expected: str, label: str
+) -> dict[str, Any]:
+    deadline = time.monotonic() + 0.35
+    last_state: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        visual = last_state.get("visual_state", {})
+        if (
+            visual.get("requested_action") == expected
+            and visual.get("resolved_action") == expected
+        ):
+            return last_state
+        time.sleep(0.01)
+    raise RuntimeError(f"{label} did not animate as {expected!r}: {last_state}")
+
+
 def terminate(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -203,6 +239,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "check_permissions",
             "start_session",
             "end_session",
+            "get_agent_cursor_state",
+            "set_agent_cursor_enabled",
             "list_windows",
             "get_window_state",
             "type_text",
@@ -227,6 +265,27 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
 
         client.call("start_session", {"session": session, "capture_scope": "window"})
         session_started = True
+        cursor_disabled, _ = client.call(
+            "set_agent_cursor_enabled", {"session": session, "enabled": False}
+        )
+        if cursor_disabled.get("session") != session or cursor_disabled.get("enabled") is not False:
+            raise RuntimeError(f"Primary cursor did not disable for its exact session: {cursor_disabled}")
+        cursor_enabled, _ = client.call(
+            "set_agent_cursor_enabled", {"session": session, "enabled": True}
+        )
+        cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        theme = cursor_state.get("theme", {})
+        if (
+            cursor_enabled.get("session") != session
+            or cursor_enabled.get("enabled") is not True
+            or cursor_state.get("session") != session
+            or cursor_state.get("enabled") is not True
+            or not isinstance(theme.get("id"), str)
+            or not theme.get("id")
+        ):
+            raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
+        report["cursorTheme"] = theme["id"]
+        report["steps"].append("primary_session_cursor_ready")
         windows_state, _ = client.call("list_windows", {"pid": fixture_pid})
         matches = [
             window
@@ -254,11 +313,15 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
                 "session": session,
                 "pid": pid,
                 "window_id": window_id,
-                "element_index": field["element_index"],
+                **primary_element_target(field),
                 "text": token,
             },
         )
         require_action_verdict(typed, "primary type_text")
+        cursor_state = require_cursor_action(client, session, "text", "Primary type_text")
+        typed_cursor_position = None
+        if cursor_state.get("position") is not None:
+            typed_cursor_position = require_cursor_position(cursor_state, "Primary type_text")
         report["steps"].append("primary_background_text_typed")
 
         state, content = client.call(
@@ -275,10 +338,19 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
                 "session": session,
                 "pid": pid,
                 "window_id": window_id,
-                "element_index": button["element_index"],
+                **primary_element_target(button),
             },
         )
         require_action_verdict(clicked, "primary click")
+        cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        clicked_cursor_position = require_cursor_position(cursor_state, "Primary click")
+        if typed_cursor_position is not None and clicked_cursor_position == typed_cursor_position:
+            raise RuntimeError(
+                "Primary type_text and click left the session cursor at the same target: "
+                f"{clicked_cursor_position}"
+            )
+        report["cursorPosition"] = clicked_cursor_position
+        report["steps"].append("primary_session_cursor_animated")
         report["steps"].append("primary_background_button_clicked")
 
         final_state, final_content = client.call(

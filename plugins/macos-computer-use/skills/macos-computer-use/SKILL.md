@@ -62,6 +62,23 @@ startup fails, `tools/list` or `check_permissions` does not answer, or it
 returns an unsupported/refused-operation error. If a primary session is still
 reachable before switching backends, call `end_session` best-effort.
 
+## Keep the session cursor human-visible
+
+Every declared primary session owns a stable, session-colored semantic cursor.
+It animates observation, click, drag, scroll, text, key, navigation, app, and
+system activity while background window actions leave the user's real pointer
+untouched. Leave the default cursor enabled for visible work, demos, and screen
+recordings. If the user explicitly asks for silent background operation, call
+`set_agent_cursor_enabled({session,enabled:false})`; call
+`get_agent_cursor_state({session})` to verify a hide, restore, selected theme,
+or motion change rather than assuming the overlay accepted it.
+
+The cursor belongs to the session, not the target window. Reuse the same
+session ID across that run's apps and windows, give concurrent runs different
+IDs, and always call `end_session` so its cursor disappears. Do not move the
+real desktop pointer merely to make an AX action look human; normal primary
+actions animate the overlay automatically.
+
 ## Select a real target
 
 1. Use `list_apps` or `launch_app`; prefer an exact bundle ID when known.
@@ -72,6 +89,11 @@ reachable before switching backends, call `end_session` best-effort.
    `list_windows({pid})`. Never synthesize a handle.
 4. Re-list after launch, a long pause, a modal transition, or a disappeared
    window. Treat modals and sheets as their returned target window.
+
+For concurrent runs that must control the same app independently, give each
+run a distinct session and, only when the live macOS `launch_app` schema
+advertises it, pass `creates_new_application_instance:true` so each run gets a
+fresh pid/window instead of silently sharing one single-instance window.
 
 ## Observe, act once, verify
 

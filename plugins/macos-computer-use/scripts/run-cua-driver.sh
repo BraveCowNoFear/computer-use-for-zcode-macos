@@ -68,7 +68,8 @@ has_required_surface() {
   local tools
   tools="$($candidate list-tools 2>/dev/null)" || return 1
   for required in \
-    check_permissions start_session escalate_session end_session list_apps list_windows \
+    check_permissions start_session escalate_session end_session \
+    get_agent_cursor_state set_agent_cursor_enabled list_apps list_windows \
     launch_app get_window_state get_desktop_state click press_key hotkey \
     type_text scroll set_value drag; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1

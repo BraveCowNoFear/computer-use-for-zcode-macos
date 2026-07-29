@@ -14,6 +14,8 @@ Common flow:
 | --- | --- |
 | Permission status | `check_permissions({prompt:false})` |
 | Begin task | `start_session({session, capture_scope})` |
+| Inspect visible session cursor | `get_agent_cursor_state({session})` |
+| Hide/show session cursor | `set_agent_cursor_enabled({session, enabled})` |
 | Unlock desktop for an `auto` session | `escalate_session({session})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
 | List app windows | `list_windows({pid})` |
@@ -27,6 +29,14 @@ Common flow:
 | One key | `press_key({session,pid,window_id,key:"return",modifiers:[]})` |
 | Non-text AX value | `set_value({session, pid, window_id, element_index, value})` |
 | Finish task | `end_session({session})` |
+
+Declared sessions receive an enabled, colored semantic cursor overlay by
+default. Primary actions animate it without moving the real OS pointer. The
+cursor follows its session across windows and is reclaimed by `end_session`;
+anonymous actions remain cursor-less. Use the state tool to verify any cursor
+configuration change. For concurrent runs on the same app, use distinct
+sessions and `creates_new_application_instance:true` only when that optional
+field is advertised by the live macOS `launch_app` schema.
 
 Primary window coordinates use the screenshot's window-local pixel space. AX
 indexes and opaque `element_token` handles are cached against one

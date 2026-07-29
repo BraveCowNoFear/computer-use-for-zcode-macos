@@ -113,6 +113,10 @@ root/data template variables.
   verified delivery failure. Foreground fallback raises the exact bound AX
   window, then tries its main/focused attributes for apps without `AXRaise`,
   and confirms the focused pid/window ID before sending input.
+- Give every declared primary session its own colored semantic cursor overlay.
+  Click, drag, scroll, text, key, navigation, and app actions animate visibly
+  without moving the user's real pointer; the cursor can be hidden and read
+  back per session, and `end_session` removes it.
 - Bind supported Chromium/Electron pages to typed browser tools while retaining
   native control for browser chrome, file pickers, and permission dialogs.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
