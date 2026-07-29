@@ -45,7 +45,10 @@ permissions. Ordinary primary-backend tasks do not need that reference.
    the user grants access and restarts ZCode, re-run only
    `check_permissions({prompt:false})`, then prove pixel readiness with a fresh
    screenshot instead of trying to raise TCC UI from the Agent.
-2. Call `start_session` with a unique `session`.
+2. Call `start_session` with a unique, task-oriented `session`, for example
+   `mail-triage-a1b2`. Keep it at most 28 visible characters so the cursor badge
+   stays readable, add a short uniqueness suffix for concurrent runs, and never
+   put secrets or full user content in the label.
 3. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.
    - `auto` for a normal multi-step app task that might later need the desktop.
@@ -67,7 +70,9 @@ reachable before switching backends, call `end_session` best-effort.
 Every declared primary session owns a stable, session-colored semantic cursor.
 It animates observation, click, drag, scroll, text, key, navigation, app, and
 system activity while background window actions leave the user's real pointer
-untouched. Leave the default cursor enabled for visible work, demos, and screen
+untouched. Its local badge shows the public session label, while its color is
+derived from that label, so concise task names make parallel agents visibly
+distinct. Leave the default cursor enabled for visible work, demos, and screen
 recordings. If the user explicitly asks for silent background operation, call
 `set_agent_cursor_enabled({session,enabled:false})`; call
 `get_agent_cursor_state({session})` to verify a hide, restore, selected theme,

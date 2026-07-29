@@ -31,6 +31,11 @@ Common flow:
 | Non-text AX value | `set_value({session, pid, window_id, element_index, value})` |
 | Finish task | `end_session({session})` |
 
+The public session ID is also the local cursor-badge label and color seed. Use
+a short task slug plus a compact uniqueness suffix (for example,
+`mail-triage-a1b2`), keep it within 28 visible characters, and never include
+secrets or copied user content. Reuse that exact ID throughout one run.
+
 Declared sessions receive an enabled, colored semantic cursor overlay by
 default. Primary actions animate it without moving the real OS pointer. The
 cursor follows its session across windows and is reclaimed by `end_session`;

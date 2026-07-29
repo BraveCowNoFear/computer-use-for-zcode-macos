@@ -78,7 +78,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.2"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.3"},
             },
         )
         self.notify("notifications/initialized")
@@ -175,6 +175,11 @@ def demo_cursor_target(width: float, height: float) -> dict[str, float]:
     return {"x": axis_target(float(width)), "y": axis_target(float(height))}
 
 
+def new_live_session() -> str:
+    """Return a unique task label that remains readable in the cursor badge."""
+    return f"zcode-smoke-{uuid.uuid4().hex[:8]}"
+
+
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
     for element in elements:
         searchable = " ".join(str(element.get(key, "")) for key in ("label", "value"))
@@ -239,9 +244,9 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "MACOS_CUA_DATA_DIR": str(DATA_DIR),
         },
     )
-    session = f"zcode-live-{uuid.uuid4().hex}"
+    session = new_live_session()
     session_started = False
-    report: dict[str, Any] = {"steps": []}
+    report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
         advertised = client.request("tools/list").get("tools", [])

@@ -303,6 +303,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("element_token", skill)
         self.assertIn("replace:true", skill)
         self.assertIn("## Keep the session cursor human-visible", skill)
+        self.assertIn("Keep it at most 28 visible characters", skill)
+        self.assertIn("never\n   put secrets or full user content in the label", skill)
+        self.assertIn("local badge shows the public session label", skill)
         self.assertIn("set_agent_cursor_enabled({session,enabled:false})", skill)
         self.assertIn("get_agent_cursor_state({session})", skill)
         self.assertIn('move_cursor({session,x,y,scope:"window"})', skill)
@@ -435,6 +438,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(module.demo_cursor_target(10.0, 10.0), {"x": 9.0, "y": 9.0})
         with self.assertRaisesRegex(RuntimeError, "too small"):
             module.demo_cursor_target(1.0, 80.0)
+        session = module.new_live_session()
+        self.assertRegex(session, r"^zcode-smoke-[0-9a-f]{8}$")
+        self.assertLessEqual(len(session), 28)
 
     def test_live_smoke_validates_semantic_cursor_action_and_position(self):
         path = PLUGIN / "scripts" / "live-smoke.py"

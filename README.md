@@ -116,7 +116,9 @@ root/data template variables.
 - Give every declared primary session its own colored semantic cursor overlay.
   Click, drag, scroll, text, key, navigation, and app actions animate visibly
   without moving the user's real pointer; the cursor can be hidden and read
-  back per session, and `end_session` removes it.
+  back per session, and `end_session` removes it. A compact task-oriented
+  session label is shown in its local badge, making concurrent agents easy to
+  distinguish without exposing secrets or copied content.
   A window-scoped `move_cursor` can seed a clearly visible demo glide without
   touching the real pointer; desktop scope remains an explicit real-pointer
   operation grounded in fresh full-desktop pixels.
