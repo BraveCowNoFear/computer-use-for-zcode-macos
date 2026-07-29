@@ -266,6 +266,9 @@ exactly the audited 49-tool surface. It also pins the tools-list envelope,
 descriptions, standard MCP annotations, capability labels, and risk metadata.
 The initialize handshake is equally exact: protocol `2025-06-18`, the tools-only
 capability, Cua Driver `0.13.1` identity, and its macOS workflow instructions.
+The same live connection must return the exact JSON-RPC parse-error,
+method-not-found, and missing-tool-name invalid-params envelopes, keep all
+notifications silent, and still serve the complete tools list afterward.
 Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must

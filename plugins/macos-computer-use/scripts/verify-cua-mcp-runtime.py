@@ -149,6 +149,26 @@ class MCPClient:
         )
         self.next_id = 1
 
+    def exchange_line(self, line: str, label: str) -> dict[str, Any]:
+        if self.process.stdin is None or self.process.stdout is None:
+            fail("MCP proxy has no stdio pipes")
+        self.process.stdin.write(line + "\n")
+        self.process.stdin.flush()
+        ready, _, _ = select.select([self.process.stdout], [], [], 35)
+        if not ready:
+            fail(f"{label} timed out")
+        response_line = self.process.stdout.readline()
+        if not response_line:
+            stderr = self.process.stderr.read() if self.process.stderr else ""
+            fail(f"{label} received EOF: {stderr.strip()}")
+        try:
+            response = json.loads(response_line)
+        except json.JSONDecodeError as error:
+            fail(f"{label} response was not JSON: {error}")
+        if not isinstance(response, dict):
+            fail(f"{label} returned a non-object JSON-RPC envelope: {response}")
+        return response
+
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         request_id = self.next_id
         self.next_id += 1
@@ -158,21 +178,9 @@ class MCPClient:
             "method": method,
             "params": params or {},
         }
-        if self.process.stdin is None or self.process.stdout is None:
-            fail("MCP proxy has no stdio pipes")
-        self.process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
-        self.process.stdin.flush()
-        ready, _, _ = select.select([self.process.stdout], [], [], 35)
-        if not ready:
-            fail(f"{method} timed out")
-        line = self.process.stdout.readline()
-        if not line:
-            stderr = self.process.stderr.read() if self.process.stderr else ""
-            fail(f"{method} received EOF: {stderr.strip()}")
-        try:
-            response = json.loads(line)
-        except json.JSONDecodeError as error:
-            fail(f"{method} response was not JSON: {error}")
+        response = self.exchange_line(
+            json.dumps(message, separators=(",", ":")), method
+        )
         if response.get("id") != request_id:
             fail(f"{method} response id drifted: {response}")
         if "error" in response:
@@ -183,11 +191,81 @@ class MCPClient:
         return result
 
     def notify(self, method: str) -> None:
-        if self.process.stdin is None:
-            fail("MCP proxy has no stdin")
+        if self.process.stdin is None or self.process.stdout is None:
+            fail("MCP proxy has no stdio pipes")
         message = {"jsonrpc": "2.0", "method": method, "params": {}}
         self.process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
         self.process.stdin.flush()
+        ready, _, _ = select.select([self.process.stdout], [], [], 0.25)
+        if ready:
+            line = self.process.stdout.readline()
+            if line:
+                fail(f"{method} notification unexpectedly returned: {line.strip()}")
+            stderr = self.process.stderr.read() if self.process.stderr else ""
+            fail(f"{method} notification closed the MCP proxy: {stderr.strip()}")
+
+    def verify_protocol_errors(self) -> None:
+        expected_parse = {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32700, "message": "Parse error"},
+        }
+        parsed = self.exchange_line('{"jsonrpc":"2.0","id":', "malformed JSON")
+        if parsed != expected_parse:
+            fail(f"parse-error contract drifted: {parsed}")
+
+        unknown_id = self.next_id
+        self.next_id += 1
+        unknown_method = "zcode/unknown-method"
+        unknown = self.exchange_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": unknown_id,
+                    "method": unknown_method,
+                    "params": {},
+                },
+                separators=(",", ":"),
+            ),
+            "unknown method",
+        )
+        expected_unknown = {
+            "jsonrpc": "2.0",
+            "id": unknown_id,
+            "error": {
+                "code": -32601,
+                "message": f"Unknown method: {unknown_method}",
+            },
+        }
+        if unknown != expected_unknown:
+            fail(f"method-not-found contract drifted: {unknown}")
+
+        invalid_id = self.next_id
+        self.next_id += 1
+        invalid = self.exchange_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": invalid_id,
+                    "method": "tools/call",
+                    "params": {},
+                },
+                separators=(",", ":"),
+            ),
+            "invalid tools/call",
+        )
+        expected_invalid = {
+            "jsonrpc": "2.0",
+            "id": invalid_id,
+            "error": {
+                "code": -32602,
+                "message": "Invalid params: missing tool name",
+            },
+        }
+        if invalid != expected_invalid:
+            fail(f"invalid-params contract drifted: {invalid}")
+
+        self.notify("zcode/unknown-notification")
 
     def initialize(self) -> None:
         result = self.request(
@@ -195,7 +273,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.4"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.5"},
             },
         )
         expected = {
@@ -320,6 +398,7 @@ def main() -> int:
     try:
         client.initialize()
         peer.initialize()
+        client.verify_protocol_errors()
         listed = client.request("tools/list")
         if set(listed) != {"tools", "capability_version", "schema_version"}:
             fail(f"tools/list envelope drifted: {sorted(listed)}")
@@ -835,7 +914,7 @@ def main() -> int:
         client.close()
 
     print(
-        "Verified unrestricted legacy page mutation routing, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 
