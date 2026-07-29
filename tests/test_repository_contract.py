@@ -229,6 +229,23 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"$ROOT/scripts/run-cua-driver.sh" --grant-permissions', install)
         self.assertNotIn('python3 -m venv "$ROOT/.venv"', install)
 
+    def test_macos_ci_verifies_the_pinned_browser_schema(self):
+        verifier = (
+            PLUGIN / "scripts" / "verify-cua-browser-schema.py"
+        ).read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn('EXPECTED_VERSION = "0.13.1"', verifier)
+        self.assertIn('"get_browser_state"', verifier)
+        self.assertIn('"semantic_v2"', verifier)
+        self.assertIn('"browser_pointer"', verifier)
+        self.assertIn('"dom_event"', verifier)
+        self.assertIn('"browser_download"', verifier)
+        self.assertIn('"destination_root"', verifier)
+        self.assertIn(
+            'python plugins/macos-computer-use/scripts/verify-cua-browser-schema.py "$binary"',
+            workflow,
+        )
+
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
         self.assertIn('DATA_PYTHON="$DATA_DIR/venv-$MACOS_CUA_DEPENDENCY_ID/bin/python3"', smoke)
@@ -433,6 +450,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_live_smoke_sources_compile(self):
         for path in (
             PLUGIN / "scripts" / "live-smoke.py",
+            PLUGIN / "scripts" / "verify-cua-browser-schema.py",
             PLUGIN / "tests" / "live_fixture.py",
         ):
             compile(path.read_text(encoding="utf-8"), str(path), "exec")
