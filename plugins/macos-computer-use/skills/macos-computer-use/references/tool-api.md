@@ -13,7 +13,7 @@ Common flow:
 | Intent | Tool and key fields |
 | --- | --- |
 | Stable driver diagnosis | `health_report({})`; require schema v1/darwin/pinned version and inspect named check statuses/hints |
-| Fast app/window inventory | `get_accessibility_tree({})`; discovery only, then bind through exact window state |
+| Fast app/window inventory | `get_accessibility_tree({})`; AppKit/WindowServer discovery only, use structured positive IDs and then bind through exact window state |
 | Installed/running app inventory | `list_apps({})`; stopped apps use `pid:0`, and its per-app `windows` is always empty |
 | Read connection-effective image cap | `get_config({})` |
 | Temporarily request native-size PNGs | `set_config({max_image_dimension:0})`; restore the prior value immediately on the same MCP connection |
@@ -52,6 +52,13 @@ The public session ID is also the local cursor-badge label and color seed. Use
 a short task slug plus a compact uniqueness suffix (for example,
 `mail-triage-a1b2`), keep it within 28 visible characters, and never include
 secrets or copied user content. Reuse that exact ID throughout one run.
+
+`get_accessibility_tree` is the pinned no-TCC quick inventory, not the full AX
+tree implied by its historical name. Its structured result has only `apps`
+(`pid`, `name`, nullable `bundle_id`) and visible `windows` (`window_id`, `pid`,
+`app_name`, `title`). Pids/window IDs must be positive and unique within their
+arrays. The accompanying text repeats that same ordered data and may show
+`(no title)`; never extract a second or conflicting target identity from it.
 
 Pinned `get_agent_cursor_state` has exactly `session`, `enabled`, nullable
 `position`, `theme`, `visual_state`, and `motion`. The embedded default theme

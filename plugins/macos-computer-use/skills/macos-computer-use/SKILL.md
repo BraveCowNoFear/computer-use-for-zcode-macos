@@ -165,8 +165,11 @@ coordinates from a fresh `get_desktop_state` exactly like other desktop input.
 1. Use `get_accessibility_tree` for a fast broad inventory, or `list_apps`/
    `launch_app` when the app is already known; prefer an exact bundle ID. The
    lightweight tree is discovery only: it returns no actionable element handle
-   and reads no window contents. Carry only one returned pid/window candidate
-   into exact enumeration and observation.
+   and reads no window contents or TCC-gated AX subtree. Its prose is only a
+   rendering of the accompanying structured app/window arrays; select from the
+   structured positive pid/window IDs, not by parsing or trusting prose as a
+   separate observation. Carry only one returned pid/window candidate into
+   exact enumeration and observation.
 2. Filter returned windows by the task's bundle ID, exact title, or a fresh
    per-window observation. Continue only when exactly one candidate remains;
    never choose the first item, largest area, or z-order as a guess.

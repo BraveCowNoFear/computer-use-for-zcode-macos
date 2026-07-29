@@ -104,7 +104,10 @@ root/data template variables.
 
 - Discover and launch native apps and select exact returned windows.
 - Take a fast content-free inventory of running apps and visible windows before
-  binding one returned pid/window to the full screenshot-plus-AX loop.
+  binding one returned pid/window to the full screenshot-plus-AX loop. This
+  read uses AppKit/WindowServer without a TCC prompt; its text summary is an
+  exact rendering of the same structured identities, not a second source of
+  target truth.
 - Atomically select a locally installed cursor theme and reduced-motion mode in
   `start_session`, so the run never flashes the default theme first.
 - Temporarily opt one MCP connection into uncapped native-size window PNGs for
@@ -261,7 +264,8 @@ observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery, return the exact lightweight
-Accessibility inventory shape, run an owned no-video recorder through
+Accessibility inventory shape and matching human-readable summary on two MCP
+connections, reject duplicate/invalid app and window identities, run an owned no-video recorder through
 start/read/peer-read/stop while writing only a temporary local `session.json`,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page

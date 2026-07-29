@@ -408,6 +408,14 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("(session-scoped; persisted default unchanged)", mcp_runtime)
         self.assertIn('client.call("get_accessibility_tree")', mcp_runtime)
+        self.assertIn("def require_accessibility_discovery(", mcp_runtime)
+        self.assertIn('peer.call(\n            "get_accessibility_tree"', mcp_runtime)
+        self.assertIn("returned duplicate app pid", mcp_runtime)
+        self.assertIn("returned duplicate window id", mcp_runtime)
+        self.assertIn(
+            "→ Call get_window_state(pid, window_id) to inspect a window's UI.",
+            mcp_runtime,
+        )
         self.assertIn("APP_ENTRY_FIELDS = {", mcp_runtime)
         self.assertIn("WINDOW_ENTRY_FIELDS = {", mcp_runtime)
         self.assertIn("LAUNCH_WINDOW_FIELDS = {", mcp_runtime)
@@ -775,6 +783,81 @@ class RepositoryContractTests(unittest.TestCase):
                     "max_image_dimension": 1,
                 },
                 0,
+            )
+
+    def test_primary_accessibility_discovery_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_accessibility_discovery_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        discovery = {
+            "apps": [
+                {"pid": 101, "name": "Finder", "bundle_id": "com.apple.finder"},
+                {"pid": 202, "name": "Fixture", "bundle_id": None},
+            ],
+            "windows": [
+                {
+                    "window_id": 303,
+                    "pid": 101,
+                    "app_name": "Finder",
+                    "title": "Desktop",
+                },
+                {
+                    "window_id": 404,
+                    "pid": 202,
+                    "app_name": "Fixture",
+                    "title": "",
+                },
+            ],
+        }
+        content = [
+            {
+                "type": "text",
+                "text": (
+                    "2 running app(s), 2 visible window(s)\n"
+                    "- Finder (pid 101) [com.apple.finder]\n"
+                    "- Fixture (pid 202)\n\n"
+                    "Windows:\n"
+                    '- Finder (pid 101) "Desktop" [window_id: 303]\n'
+                    "- Fixture (pid 202) (no title) [window_id: 404]\n"
+                    "→ Call get_window_state(pid, window_id) to inspect a window's UI."
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_accessibility_discovery(
+                "discovery", discovery, content
+            ),
+            discovery,
+        )
+
+        duplicate_app = dict(discovery)
+        duplicate_app["apps"] = [*discovery["apps"], dict(discovery["apps"][0])]
+        with self.assertRaisesRegex(RuntimeError, "duplicate app pid"):
+            module.require_accessibility_discovery(
+                "duplicate app", duplicate_app, content
+            )
+
+        duplicate_window = dict(discovery)
+        duplicate_window["windows"] = [
+            *discovery["windows"],
+            dict(discovery["windows"][0]),
+        ]
+        with self.assertRaisesRegex(RuntimeError, "duplicate window id"):
+            module.require_accessibility_discovery(
+                "duplicate window", duplicate_window, content
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_accessibility_discovery(
+                "drifted discovery",
+                discovery,
+                [{"type": "text", "text": "wrong"}],
             )
 
     def test_primary_cursor_state_validators_reject_drift(self):

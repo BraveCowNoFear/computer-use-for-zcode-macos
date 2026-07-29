@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.22"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.23"},
             },
         )
         expected = {
@@ -641,6 +641,78 @@ def require_permissions(
     )
     require_text_content(name, content, expected_text)
     return permissions
+
+
+def require_accessibility_discovery(
+    name: str, value: Any, content: Any
+) -> dict[str, Any]:
+    discovery = require_object(name, value, {"apps", "windows"})
+    apps = discovery["apps"]
+    windows = discovery["windows"]
+    if not isinstance(apps, list) or not isinstance(windows, list):
+        fail(f"{name} did not return app/window arrays")
+
+    app_pids: set[int] = set()
+    for index, app in enumerate(apps):
+        app = require_object(
+            f"{name}.apps[{index}]", app, {"pid", "name", "bundle_id"}
+        )
+        if (
+            type(app["pid"]) is not int
+            or app["pid"] <= 0
+            or not isinstance(app["name"], str)
+            or not app["name"]
+            or (
+                app["bundle_id"] is not None
+                and (
+                    not isinstance(app["bundle_id"], str)
+                    or not app["bundle_id"]
+                )
+            )
+        ):
+            fail(f"{name} returned malformed regular-app identity: {app}")
+        if app["pid"] in app_pids:
+            fail(f"{name} returned duplicate app pid {app['pid']}")
+        app_pids.add(app["pid"])
+
+    window_ids: set[int] = set()
+    for index, window in enumerate(windows):
+        window = require_object(
+            f"{name}.windows[{index}]",
+            window,
+            {"window_id", "pid", "app_name", "title"},
+        )
+        if (
+            type(window["window_id"]) is not int
+            or window["window_id"] <= 0
+            or type(window["pid"]) is not int
+            or window["pid"] <= 0
+            or not isinstance(window["app_name"], str)
+            or not window["app_name"]
+            or not isinstance(window["title"], str)
+        ):
+            fail(f"{name} returned malformed visible-window identity: {window}")
+        if window["window_id"] in window_ids:
+            fail(f"{name} returned duplicate window id {window['window_id']}")
+        window_ids.add(window["window_id"])
+
+    lines = [f"{len(apps)} running app(s), {len(windows)} visible window(s)"]
+    for app in apps:
+        bundle = f" [{app['bundle_id']}]" if app["bundle_id"] is not None else ""
+        lines.append(f"- {app['name']} (pid {app['pid']}){bundle}")
+    if windows:
+        lines.extend(("", "Windows:"))
+        for window in windows:
+            title = f'"{window["title"]}"' if window["title"] else "(no title)"
+            lines.append(
+                f"- {window['app_name']} (pid {window['pid']}) {title} "
+                f"[window_id: {window['window_id']}]"
+            )
+        lines.append(
+            "→ Call get_window_state(pid, window_id) to inspect a window's UI."
+        )
+    require_text_content(name, content, "\n".join(lines))
+    return discovery
 
 
 def require_config(name: str, value: Any) -> dict[str, Any]:
@@ -1234,42 +1306,18 @@ def main() -> int:
                 json.dumps(signed_tcc, sort_keys=True) + "\n", encoding="utf-8"
             )
 
-        discovery, _ = client.call("get_accessibility_tree")
-        discovery = require_object(
-            "get_accessibility_tree", discovery, {"apps", "windows"}
+        discovery_value, discovery_content = client.call("get_accessibility_tree")
+        discovery = require_accessibility_discovery(
+            "get_accessibility_tree", discovery_value, discovery_content
         )
-        discovery_contracts = {
-            "apps": {"pid", "name", "bundle_id"},
-            "windows": {"window_id", "pid", "app_name", "title"},
-        }
-        for collection, fields in discovery_contracts.items():
-            entries = discovery[collection]
-            if not isinstance(entries, list):
-                fail(f"get_accessibility_tree.{collection} is not an array")
-            for entry in entries:
-                if not isinstance(entry, dict) or set(entry) != fields:
-                    fail(
-                        "get_accessibility_tree."
-                        f"{collection} entry fields drifted: {entry}"
-                    )
-                if type(entry["pid"]) is not int or entry["pid"] <= 0:
-                    fail(
-                        f"get_accessibility_tree.{collection} returned an invalid pid"
-                    )
-        for app in discovery["apps"]:
-            if not isinstance(app["name"], str) or (
-                app["bundle_id"] is not None
-                and not isinstance(app["bundle_id"], str)
-            ):
-                fail("get_accessibility_tree returned malformed app identity")
-        for window in discovery["windows"]:
-            if (
-                type(window["window_id"]) is not int
-                or window["window_id"] <= 0
-                or not isinstance(window["app_name"], str)
-                or not isinstance(window["title"], str)
-            ):
-                fail("get_accessibility_tree returned malformed window identity")
+        peer_discovery_value, peer_discovery_content = peer.call(
+            "get_accessibility_tree"
+        )
+        require_accessibility_discovery(
+            "peer get_accessibility_tree",
+            peer_discovery_value,
+            peer_discovery_content,
+        )
 
         initial_recording = require_recording_state(
             "initial get_recording_state", client.call("get_recording_state")[0]
