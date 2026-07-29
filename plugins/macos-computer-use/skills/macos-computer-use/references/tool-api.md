@@ -13,6 +13,7 @@ Common flow:
 | Intent | Tool and key fields |
 | --- | --- |
 | Stable driver diagnosis | `health_report({})`; require schema v1/darwin/pinned version and inspect named check statuses/hints |
+| Fast app/window inventory | `get_accessibility_tree({})`; discovery only, then bind through exact window state |
 | Read session-effective image cap | `get_config({session})` |
 | Temporarily request native-size PNGs | `set_config({session, max_image_dimension:0})`; restore the prior value or end the session |
 | Permission status | `check_permissions({prompt:false})` |

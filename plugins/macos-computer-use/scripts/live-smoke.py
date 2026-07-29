@@ -94,7 +94,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.12.0"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.12.1"},
             },
         )
         self.notify("notifications/initialized")
@@ -412,6 +412,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     opened_folder: Path | None = None
     opened_folder_pid: int | None = None
     opened_folder_window_id: int | None = None
+    discovered_fixture_window_id: int | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
@@ -421,6 +422,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "health_report",
             "get_config",
             "set_config",
+            "get_accessibility_tree",
             "check_permissions",
             "start_session",
             "get_session_state",
@@ -492,6 +494,23 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             )
         report["healthSchemaVersion"] = health["schema_version"]
         report["steps"].append("primary_stable_health_report_verified")
+
+        desktop_discovery, _ = client.call("get_accessibility_tree", {})
+        discovered_fixture_windows = [
+            window
+            for window in desktop_discovery.get("windows", [])
+            if window.get("pid") == fixture_pid
+            and window.get("title") == "ZCode Computer Use Live Smoke"
+            and isinstance(window.get("window_id"), int)
+        ]
+        if len(discovered_fixture_windows) != 1:
+            raise RuntimeError(
+                "Primary lightweight desktop discovery did not return one exact fixture window: "
+                f"{desktop_discovery}"
+            )
+        discovered_fixture_window_id = int(discovered_fixture_windows[0]["window_id"])
+        report["discoveredFixtureWindowId"] = discovered_fixture_window_id
+        report["steps"].append("primary_lightweight_desktop_discovery_verified")
 
         permissions, _ = client.call("check_permissions", {"prompt": False})
         if not permissions.get("accessibility") or not permissions.get("screen_recording"):
@@ -729,6 +748,11 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         window = matches[0]
         pid = int(window["pid"])
         window_id = int(window["window_id"])
+        if window_id != discovered_fixture_window_id:
+            raise RuntimeError(
+                "Primary lightweight discovery and exact list_windows disagreed: "
+                f"discovered={discovered_fixture_window_id}, listed={window_id}"
+            )
         report["window"] = {key: window.get(key) for key in ("window_id", "pid", "app_name", "title")}
         report["steps"].append("primary_window_bound")
 

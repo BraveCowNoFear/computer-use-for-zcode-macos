@@ -92,6 +92,8 @@ root/data template variables.
 ## What agents can do
 
 - Discover and launch native apps and select exact returned windows.
+- Take a fast content-free inventory of running apps and visible windows before
+  binding one returned pid/window to the full screenshot-plus-AX loop.
 - Temporarily opt one named session into uncapped native-size window PNGs for
   pixel-perfect verification, prove peer sessions retain their own effective
   setting, and restore without changing the daemon-global persisted default.
