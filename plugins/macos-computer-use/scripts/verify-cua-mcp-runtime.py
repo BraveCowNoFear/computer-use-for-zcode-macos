@@ -343,8 +343,38 @@ def main() -> int:
         ):
             fail(f"launch_app did not return a new owned Calculator pid: {launched}")
         owned_app_pid = launched_pid
-        if launched.get("bundle_id") != "com.apple.calculator":
-            fail(f"launch_app returned the wrong bundle identity: {launched}")
+
+        launched_app: dict[str, Any] | None = None
+        identity_deadline = time.monotonic() + 5
+        while time.monotonic() < identity_deadline:
+            app_inventory, _ = client.call("list_apps")
+            app_inventory = require_object(
+                "post-launch list_apps", app_inventory, {"apps"}
+            )
+            if not isinstance(app_inventory["apps"], list):
+                fail("post-launch list_apps.apps is not an array")
+            launched_app = next(
+                (
+                    app
+                    for app in app_inventory["apps"]
+                    if isinstance(app, dict) and app.get("pid") == launched_pid
+                ),
+                None,
+            )
+            if (
+                launched_app is not None
+                and launched_app.get("bundle_id") == "com.apple.calculator"
+            ):
+                break
+            time.sleep(0.05)
+        if (
+            launched_app is None
+            or launched_app.get("bundle_id") != "com.apple.calculator"
+        ):
+            fail(
+                "fresh list_apps did not bind the owned pid to Calculator: "
+                f"launch={launched}, inventory_app={launched_app}"
+            )
 
         launched_windows = launched.get("windows", [])
         if not isinstance(launched_windows, list):
