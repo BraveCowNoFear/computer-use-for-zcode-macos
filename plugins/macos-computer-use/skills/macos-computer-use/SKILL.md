@@ -168,10 +168,13 @@ placeholder or from `list_apps.windows`.
 To hand a local file/folder or non-browser resource URL to a native app, use
 `launch_app({bundle_id,urls:[target]})`; never substitute shell `open`,
 AppleScript activation, or an unbound default-handler launch. The pinned driver
-preflights local paths/`file://` targets and returns structured `FILE_NOT_FOUND`
-without launching when one is absent. Bind only a returned window that fresh
-state proves represents that exact target. The slow URL/file launch path tries
-to preserve the previous frontmost app and may return
+returns MCP `isError:true` plus structured `APP_NOT_INSTALLED` for an unknown
+bundle/name. It preflights local paths/`file://` targets and
+returns structured `FILE_NOT_FOUND` without launching when one is absent. These are ordinary tool
+outcomes, not a transport failure or a request for another approval; correct
+the target and retry. Bind only a returned window that fresh state proves
+represents that exact target. The slow URL/file launch path tries to preserve
+the previous frontmost app and may return
 `self_activation_suppressed`; treat `false` or a missing field as a reason to
 refresh `list_apps`/windows, not as launch failure or permission denial. Use the
 typed `browser_navigate` route instead when navigating an already bound,
@@ -200,7 +203,10 @@ fresh returned window with pid-bound `hotkey` Command-Q (foreground delivery
 when a native menu equivalent requires it) and verify process exit. Use
 `kill_app({pid})` only for that exact still-live pid after cooperative quit did
 not exit, or when the user's request explicitly requires force termination;
-it is a delivery fallback, not a plugin approval boundary.
+it is a delivery fallback, not a plugin approval boundary. Its successful
+primary result is text-only (`Sent SIGKILL to pid ...`) with no structured
+payload, so verify disappearance through the OS/app inventory instead of
+waiting for a nonexistent result object.
 
 ## Observe, act once, verify
 

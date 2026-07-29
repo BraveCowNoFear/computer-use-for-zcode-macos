@@ -224,6 +224,10 @@ Driver `0.13.1` 身份以及 macOS 工作流说明；同一条真实连接还必
 应用与窗口发现还会锁定九字段 App 记录、十字段 WindowServer 记录、整数光标坐标和
 逻辑屏幕几何类型；冷启动返回的窗口投影必须在随后完整窗口清单中保持同一 pid/window
 身份，避免 Agent 把停止 App 的 pid 0 或 `list_apps` 中故意为空的 `windows` 当成可操作目标。
+同一个签名主后端门禁还会锁定普通工具错误语义：`APP_NOT_INSTALLED` 与
+`FILE_NOT_FOUND` 必须作为结构化 MCP 错误返回且不得启动所选 App；成功的
+`kill_app` 仍是纯文本 SIGKILL 确认，随后必须观察到进程消失；会话在单向升级桌面
+作用域前后的全部 nullable 字段也必须完整存在。
 普通仓库测试还会从固定的原生/浏览器合同推导同一组 49 个工具，并要求每个准确工具名都能
 在 Skill 文档中被发现，避免诊断用 `get_screen_size` 或显式版本提示
 `check_for_update` 只存在于 schema、却无法被 ZCode Agent 正确路由。

@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.17"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.18"},
             },
         )
         expected = {
@@ -301,6 +301,21 @@ class MCPClient:
             fail(f"{name}.content is not an array")
         return result.get("structuredContent"), content
 
+    def call_error(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        result = self.request(
+            "tools/call", {"name": name, "arguments": arguments or {}}
+        )
+        if set(result) != {"content", "isError", "structuredContent"}:
+            fail(f"{name} tool-error envelope drifted: {result}")
+        if result["isError"] is not True:
+            fail(f"{name} unexpectedly succeeded: {result}")
+        content = result["content"]
+        if not isinstance(content, list):
+            fail(f"{name}.content is not an array")
+        return result["structuredContent"], content
+
     def close(self) -> None:
         if self.process.stdin is not None:
             self.process.stdin.close()
@@ -320,6 +335,15 @@ def require_object(name: str, value: Any, fields: set[str]) -> dict[str, Any]:
         fail(f"{name} returned no structured object")
     if set(value) != fields:
         fail(f"{name} fields drifted: {sorted(value)}")
+    return value
+
+
+def require_text_content(
+    name: str, value: Any, expected_text: str
+) -> list[dict[str, Any]]:
+    expected = [{"type": "text", "text": expected_text}]
+    if value != expected:
+        fail(f"{name} text content drifted: {value}")
     return value
 
 
@@ -964,6 +988,49 @@ def main() -> int:
             fail("no installed, stopped Calculator or TextEdit is safe to own")
         owned_bundle_id, owned_app_name = lifecycle_target
 
+        missing_bundle_id = f"com.zcode.ci.definitely-not-installed.{os.getpid()}"
+        missing_app, missing_app_content = client.call_error(
+            "launch_app", {"bundle_id": missing_bundle_id}
+        )
+        if missing_app != {
+            "error": "APP_NOT_INSTALLED",
+            "bundle_id": missing_bundle_id,
+        }:
+            fail(f"launch_app APP_NOT_INSTALLED payload drifted: {missing_app}")
+        require_text_content(
+            "launch_app APP_NOT_INSTALLED",
+            missing_app_content,
+            f"No installed macOS app found for bundle_id '{missing_bundle_id}'.",
+        )
+
+        missing_launch_path = recording_dir / "definitely-missing-launch-target.md"
+        if missing_launch_path.exists():
+            fail(f"owned missing-file fixture unexpectedly exists: {missing_launch_path}")
+        missing_file, missing_file_content = client.call_error(
+            "launch_app",
+            {"bundle_id": owned_bundle_id, "urls": [str(missing_launch_path)]},
+        )
+        if missing_file != {
+            "error": "FILE_NOT_FOUND",
+            "url": str(missing_launch_path),
+            "path": str(missing_launch_path),
+        }:
+            fail(f"launch_app FILE_NOT_FOUND payload drifted: {missing_file}")
+        require_text_content(
+            "launch_app FILE_NOT_FOUND",
+            missing_file_content,
+            f"Local launch_app url target does not exist: {missing_launch_path}",
+        )
+        after_preflight_error, _ = client.call("list_apps")
+        after_preflight_error = require_app_inventory(
+            "post-error list_apps", after_preflight_error
+        )
+        if any(
+            app["bundle_id"] == owned_bundle_id and app["pid"] > 0
+            for app in after_preflight_error["apps"]
+        ):
+            fail("launch_app FILE_NOT_FOUND mutated the stopped target lifecycle")
+
         launched, _ = client.call(
             "launch_app",
             {"bundle_id": owned_bundle_id},
@@ -1045,7 +1112,15 @@ def main() -> int:
                 f"launch={launched_windows}, fresh={owned_windows}"
             )
 
-        client.call("kill_app", {"pid": launched_pid})
+        killed_app = client.request(
+            "tools/call", {"name": "kill_app", "arguments": {"pid": launched_pid}}
+        )
+        if killed_app != {
+            "content": [
+                {"type": "text", "text": f"✅ Sent SIGKILL to pid {launched_pid}."}
+            ]
+        }:
+            fail(f"kill_app success payload drifted: {killed_app}")
         exit_deadline = time.monotonic() + 5
         while process_exists(launched_pid) and time.monotonic() < exit_deadline:
             time.sleep(0.05)
@@ -1124,23 +1199,25 @@ def main() -> int:
             "start_session", {"session": session, "capture_scope": "auto"}
         )
         session_started = True
-        if (
-            not isinstance(started, dict)
-            or started.get("session") != session
-            or started.get("capture_scope") != "auto"
-            or started.get("effective_scope") != "window"
-            or started.get("desktop_unlocked") is not False
-            or started.get("active") is not True
-        ):
+        expected_started = {
+            "session": session,
+            "capture_scope": "auto",
+            "effective_scope": "window",
+            "desktop_unlocked": False,
+            "escalation_reason": None,
+            "escalation_detail": None,
+            "active": True,
+            "revived": False,
+        }
+        if started != expected_started:
             fail(f"start_session returned inconsistent state: {started}")
         state, _ = client.call("get_session_state", {"session": session})
-        if (
-            not isinstance(state, dict)
-            or state.get("session") != session
-            or state.get("capture_scope") != "auto"
-            or state.get("effective_scope") != "window"
-            or state.get("desktop_unlocked") is not False
-        ):
+        expected_window_state = {
+            key: value
+            for key, value in expected_started.items()
+            if key not in {"active", "revived"}
+        }
+        if state != expected_window_state:
             fail(f"get_session_state returned inconsistent state: {state}")
 
         cursor_state, _ = client.call(
@@ -1179,15 +1256,15 @@ def main() -> int:
                 "detail": "ci contract proof",
             },
         )
-        if (
-            not isinstance(escalated, dict)
-            or escalated.get("session") != session
-            or escalated.get("capture_scope") != "auto"
-            or escalated.get("effective_scope") != "desktop"
-            or escalated.get("desktop_unlocked") is not True
-            or escalated.get("escalation_reason") != "no_window_target"
-            or escalated.get("escalation_detail") != "ci contract proof"
-        ):
+        expected_escalated = {
+            "session": session,
+            "capture_scope": "auto",
+            "effective_scope": "desktop",
+            "desktop_unlocked": True,
+            "escalation_reason": "no_window_target",
+            "escalation_detail": "ci contract proof",
+        }
+        if escalated != expected_escalated:
             fail(f"escalate_session returned inconsistent state: {escalated}")
         escalated_state, _ = client.call("get_session_state", {"session": session})
         if escalated_state != escalated:
@@ -1199,18 +1276,18 @@ def main() -> int:
         result = client.request(
             "tools/call", {"name": "kill_app", "arguments": {"pid": probe.pid}}
         )
-        if result.get("isError"):
-            fail(f"kill_app returned a tool error: {result.get('content')}")
+        if result != {
+            "content": [
+                {"type": "text", "text": f"✅ Sent SIGKILL to pid {probe.pid}."}
+            ]
+        }:
+            fail(f"kill_app success payload drifted: {result}")
         probe.wait(timeout=5)
         if probe.returncode != -signal.SIGKILL:
             fail(f"kill_app left disposable pid {probe.pid} with status {probe.returncode}")
         probe = None
         ended, _ = client.call("end_session", {"session": session})
-        if (
-            not isinstance(ended, dict)
-            or ended.get("session") != session
-            or ended.get("active") is not False
-        ):
+        if ended != {"session": session, "active": False}:
             fail(f"end_session returned inconsistent state: {ended}")
         session_started = False
         # The intentional trusted-host refusal may close that MCP proxy on

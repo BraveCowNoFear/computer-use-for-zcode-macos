@@ -71,6 +71,8 @@ For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact
 process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the
 forceful second rung for a still-live exact pid, never a name-wide cleanup.
+Primary success is text-only (`Sent SIGKILL to pid ...`); process disappearance
+is the authoritative outcome.
 
 Pinned `list_apps` entries contain exactly `pid`, `name`, `bundle_id`,
 `active`, `running`, `launch_path`, `kind`, `last_used`, and the deliberately
@@ -82,6 +84,19 @@ pid; `active:true` implies running. Pinned `list_windows` entries contain
 six-field projection (`window_id`, `pid`, `app_name`, `title`, `bounds`,
 `is_on_screen`). It is usable as a returned target, while a later state change
 requires fresh exact enumeration.
+
+Primary `launch_app` target failures remain successful JSON-RPC exchanges with
+MCP `isError:true`. An unknown exact bundle ID returns structured
+`{error:"APP_NOT_INSTALLED",bundle_id}`; an absent local path returns
+`{error:"FILE_NOT_FOUND",url,path}` and performs no launch. Handle the
+structured business error and retain the current process/window grounding;
+do not reinterpret it as daemon loss, a TCC denial, or an approval handoff.
+
+Pinned primary session state always contains `session`, `capture_scope`,
+`effective_scope`, `desktop_unlocked`, `escalation_reason`, and
+`escalation_detail`; the last two are explicit nulls before escalation.
+`start_session` adds exact `active` and `revived` booleans, while `end_session`
+returns exactly `{session,active:false}`.
 
 Pinned macOS `bring_to_front` has the exact schema `{pid, window_id?}` with no
 session field. With a returned window ID it first requests exact WindowServer

@@ -290,6 +290,11 @@ Every mandatory MCP
 `inputSchema` must exactly match the same
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.
+The same signed-primary gate locks ordinary tool-error semantics:
+`APP_NOT_INSTALLED` and `FILE_NOT_FOUND` remain structured MCP errors without
+starting the selected app, successful `kill_app` remains a text-only SIGKILL
+acknowledgement followed by observed process disappearance, and every nullable
+session-state field is present before and after one-way desktop escalation.
 The ordinary repository suite derives that same 49-tool union from the pinned
 native/browser contracts and requires every exact tool name to be discoverable
 through the Skill documentation. This keeps service helpers such as the

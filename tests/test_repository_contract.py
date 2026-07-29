@@ -395,6 +395,13 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('inventory["current_space_id"] is not None', mcp_runtime)
         self.assertIn("require_launch_result(", mcp_runtime)
         self.assertIn("fresh_window_ids", mcp_runtime)
+        self.assertIn("def call_error(", mcp_runtime)
+        self.assertIn('"error": "APP_NOT_INSTALLED"', mcp_runtime)
+        self.assertIn('"error": "FILE_NOT_FOUND"', mcp_runtime)
+        self.assertIn('"post-error list_apps"', mcp_runtime)
+        self.assertIn('"kill_app success payload drifted:', mcp_runtime)
+        self.assertIn('"escalation_reason": None', mcp_runtime)
+        self.assertIn('if ended != {"session": session, "active": False}', mcp_runtime)
         self.assertIn('client.call("get_recording_state")', mcp_runtime)
         self.assertIn('"record_video": False', mcp_runtime)
         self.assertIn('client.call("stop_recording")', mcp_runtime)
@@ -412,7 +419,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('("com.apple.calculator", "Calculator")', mcp_runtime)
         self.assertIn('("com.apple.TextEdit", "TextEdit")', mcp_runtime)
         self.assertIn('command.endswith(expected_suffix)', mcp_runtime)
-        self.assertIn('client.call("kill_app", {"pid": launched_pid})', mcp_runtime)
+        self.assertIn('killed_app = client.request(', mcp_runtime)
+        self.assertIn('"arguments": {"pid": launched_pid}', mcp_runtime)
         self.assertIn('inventory_exit_deadline = time.monotonic() + 10', mcp_runtime)
         self.assertIn('"set_agent_cursor_enabled", {"session": session, "enabled": False}', mcp_runtime)
         self.assertIn('"reason": "no_window_target"', mcp_runtime)
@@ -505,6 +513,40 @@ class RepositoryContractTests(unittest.TestCase):
                 "com.apple.calculator",
                 "Calculator",
             )
+
+    def test_primary_tool_errors_preserve_mcp_business_payload(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_tool_error_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        expected_structured = {
+            "error": "APP_NOT_INSTALLED",
+            "bundle_id": "com.example.missing",
+        }
+        expected_content = [{"type": "text", "text": "missing app"}]
+        client = object.__new__(module.MCPClient)
+        client.request = lambda method, params: {
+            "content": expected_content,
+            "isError": True,
+            "structuredContent": expected_structured,
+        }
+        self.assertEqual(
+            client.call_error("launch_app", {"bundle_id": "com.example.missing"}),
+            (expected_structured, expected_content),
+        )
+        module.require_text_content("error", expected_content, "missing app")
+
+        client.request = lambda method, params: {
+            "content": expected_content,
+            "isError": True,
+        }
+        with self.assertRaisesRegex(RuntimeError, "tool-error envelope drifted"):
+            client.call_error("launch_app", {"bundle_id": "com.example.missing"})
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(
