@@ -181,7 +181,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
 兜底，检查固定发布归档与 Cua AI 签名身份，直接解析该签名二进制的九个类型化浏览器和
 三十七个原生观察/动作/生命周期/配置请求 schema，覆盖全部必需主后端工具，并运行
-真实 Plugin 自有首次安装。
+真实 Plugin 自有首次安装。实际 unrestricted daemon 还必须完成无需 TCC 的
+应用/窗口/屏幕/光标发现，并只终止一个 CI 自己创建的临时进程，门禁才算通过。
 真实的后台
 “截图 → 点击/输入 → 再截图”
 闭环必须在已解锁且授予 TCC 的交互式 Mac 上测试，托管 CI 无法伪造这一点。

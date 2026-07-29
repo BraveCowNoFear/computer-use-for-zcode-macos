@@ -6,7 +6,7 @@
       "name": "macos-computer-use",
       "source": "./plugins/macos-computer-use",
       "description": "Full local mouse, keyboard, screenshot, window, and Accessibility control for macOS",
-      "version": "0.14.1",
+      "version": "0.14.2",
       "category": "productivity",
       "tags": ["macos", "computer-use", "desktop-control", "mcp"],
       "strict": true

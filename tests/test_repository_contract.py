@@ -308,6 +308,12 @@ class RepositoryContractTests(unittest.TestCase):
             'python plugins/macos-computer-use/scripts/verify-cua-browser-schema.py "$binary"',
             workflow,
         )
+        self.assertIn(
+            'python plugins/macos-computer-use/scripts/verify-cua-runtime-discovery.py "$product_binary" "$socket"',
+            workflow,
+        )
+        self.assertIn('call kill_app --socket "$socket"', workflow)
+        self.assertIn('! /bin/kill -0 "$kill_probe_pid"', workflow)
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(
@@ -598,6 +604,7 @@ class RepositoryContractTests(unittest.TestCase):
             PLUGIN / "scripts" / "live-smoke.py",
             PLUGIN / "scripts" / "verify-cua-native-schema.py",
             PLUGIN / "scripts" / "verify-cua-browser-schema.py",
+            PLUGIN / "scripts" / "verify-cua-runtime-discovery.py",
             PLUGIN / "tests" / "live_fixture.py",
         ):
             compile(path.read_text(encoding="utf-8"), str(path), "exec")

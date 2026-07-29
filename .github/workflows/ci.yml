@@ -95,7 +95,12 @@ jobs:
           socket="$RUNNER_TEMP/cua-policy-proof.sock"
           CUA_DRIVER_RS_TELEMETRY_ENABLED=false CUA_DRIVER_RS_UPDATE_CHECK=false CUA_DRIVER_TELEMETRY_HOME="$data/cua-telemetry" "$product_binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
           daemon_pid=$!
+          kill_probe_pid=""
           cleanup_policy_proof() {
+            if [[ -n "$kill_probe_pid" ]]; then
+              /bin/kill "$kill_probe_pid" >/dev/null 2>&1 || true
+              wait "$kill_probe_pid" 2>/dev/null || true
+            fi
             "$product_binary" stop --socket "$socket" >/dev/null 2>&1 || true
             wait "$daemon_pid" 2>/dev/null || true
           }
@@ -113,6 +118,14 @@ jobs:
           grep -F "user policy: configured=false, active=false, valid=true" <<<"$status"
           grep -F "managed policy: configured=false, active=false, valid=true" <<<"$status"
           grep -F "session policy: configured=false, approved_at_startup=false, valid=true" <<<"$status"
+          python plugins/macos-computer-use/scripts/verify-cua-runtime-discovery.py "$product_binary" "$socket"
+          /bin/sleep 60 &
+          kill_probe_pid=$!
+          kill_probe="$(printf '{\"pid\":%s}' "$kill_probe_pid" | "$product_binary" call kill_app --socket "$socket")"
+          grep -F "Sent SIGKILL to pid $kill_probe_pid" <<<"$kill_probe"
+          wait "$kill_probe_pid" 2>/dev/null || true
+          ! /bin/kill -0 "$kill_probe_pid" 2>/dev/null
+          kill_probe_pid=""
           prompt_refusal="$(printf '%s' '{"prompt":true}' | "$product_binary" call check_permissions --socket "$socket" 2>&1 || true)"
           grep -F "os_permission_prompt_requires_trusted_host" <<<"$prompt_refusal"
           cleanup_policy_proof

@@ -237,7 +237,9 @@ also imports the native fallback, verifies the pinned release archive and Cua
 AI signer identity, parses all nine typed-browser and thirty-seven native
 observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
-first-install launcher.
+first-install launcher. The unrestricted live daemon must also execute
+permission-free app/window/screen/cursor discovery and terminate only a
+disposable CI-owned process before the job passes.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 
