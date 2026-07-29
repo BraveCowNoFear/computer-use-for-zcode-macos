@@ -51,7 +51,9 @@ macOS 实现和开源 Cua Driver；ZCode 打包、无审批启动器、兜底运
 
 第一次启动时，主启动器只下载固定版本的 Cua Driver 通用发布归档，校验
 SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI Team ID 和
-签名 Authority。它会证明仅保存在 Plugin 数据目录内的持久遥测设置已关闭，同时关闭独立更新检查，再以
+签名 Authority。以后每次复用还会核对主驱动与光标辅助程序是否逐字节匹配固定
+发布版的 SHA-256，因此不会把另一个“签名有效且版本号相同”的 Bundle 误当成已测试
+发行物。它会证明仅保存在 Plugin 数据目录内的持久遥测设置已关闭，同时关闭独立更新检查，再以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
 专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；

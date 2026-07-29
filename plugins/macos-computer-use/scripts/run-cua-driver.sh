@@ -13,6 +13,8 @@ CUA_TAG="cua-driver-rs-v${CUA_VERSION}"
 ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"
 ASSET_URL="https://github.com/trycua/cua/releases/download/${CUA_TAG}/${ASSET_NAME}"
 ASSET_SHA256="236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032"
+EXPECTED_BINARY_SHA256="3b926c2ce6be80099176f43f0e00d81caf4ac9746a72756cbb7361bef8dbbbce"
+EXPECTED_CURSOR_HELPER_SHA256="04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957"
 EXPECTED_TEAM_ID="YCK386LBJ7"
 EXPECTED_AUTHORITY="Developer ID Application: Cua AI, Inc. (YCK386LBJ7)"
 APP_PARENT="$DATA_DIR/cua-driver-app"
@@ -48,11 +50,22 @@ if [[ "$telemetry_owner" != "$UID" ]]; then
 fi
 chmod 700 "$TELEMETRY_HOME"
 
+matches_sha256() {
+  local path="$1" expected="$2" actual
+  [[ -f "$path" ]] || return 1
+  actual="$(/usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}')" || return 1
+  [[ "$actual" == "$expected" ]]
+}
+
 has_required_surface() {
   local candidate="$1"
   local bundle="${2:-$APP_BUNDLE}"
+  local cursor_helper="$bundle/Contents/MacOS/cua-cursor-theme"
   [[ -x "$candidate" ]] || return 1
   [[ "$candidate" -ef "$bundle/Contents/MacOS/cua-driver" ]] || return 1
+  [[ -x "$cursor_helper" ]] || return 1
+  matches_sha256 "$candidate" "$EXPECTED_BINARY_SHA256" || return 1
+  matches_sha256 "$cursor_helper" "$EXPECTED_CURSOR_HELPER_SHA256" || return 1
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist" 2>/dev/null || true)" == "com.trycua.driver" ]] || return 1
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist" 2>/dev/null || true)" == "$CUA_VERSION" ]] || return 1
   /usr/bin/codesign --verify --deep --strict "$bundle" >/dev/null 2>&1 || return 1
@@ -136,7 +149,7 @@ install_driver() {
     local extracted_app="$extracted/CuaDriver.app"
     local extracted_bin="$extracted_app/Contents/MacOS/cua-driver"
     if ! has_required_surface "$extracted_bin" "$extracted_app"; then
-      echo "Refusing the Cua Driver release: signer identity or required surface mismatch." >&2
+      echo "Refusing the Cua Driver release: exact binary identity, signer, or required surface mismatch." >&2
       exit 1
     fi
     rm -rf -- "$APP_ROOT"

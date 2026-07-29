@@ -62,6 +62,9 @@ jobs:
           tar -xzf /tmp/cua-driver-release.tar.gz -C /tmp/cua-driver-release
           app=/tmp/cua-driver-release/cua-driver-rs-0.13.1-darwin-universal/CuaDriver.app
           binary="$app/Contents/MacOS/cua-driver"
+          cursor_helper="$app/Contents/MacOS/cua-cursor-theme"
+          echo "3b926c2ce6be80099176f43f0e00d81caf4ac9746a72756cbb7361bef8dbbbce  $binary" | shasum -a 256 -c -
+          echo "04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957  $cursor_helper" | shasum -a 256 -c -
           lipo "$binary" -verify_arch arm64 x86_64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.trycua.driver"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "0.13.1"
@@ -85,7 +88,10 @@ jobs:
           test "$(stat -f '%Lp' "$data/cua-telemetry")" = "700"
           product_app="$data/cua-driver-app/v0.13.1/CuaDriver.app"
           product_binary="$product_app/Contents/MacOS/cua-driver"
+          product_cursor_helper="$product_app/Contents/MacOS/cua-cursor-theme"
           test -x "$product_binary"
+          echo "3b926c2ce6be80099176f43f0e00d81caf4ac9746a72756cbb7361bef8dbbbce  $product_binary" | shasum -a 256 -c -
+          echo "04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957  $product_cursor_helper" | shasum -a 256 -c -
           test "$product_app" != "/Applications/CuaDriver.app"
           product_signing_info="$(codesign -dv --verbose=4 "$product_app" 2>&1)"
           grep -Fx "TeamIdentifier=YCK386LBJ7" <<<"$product_signing_info"

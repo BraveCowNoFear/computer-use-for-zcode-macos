@@ -382,7 +382,10 @@ action, including keyboard/text actions.
 
 The primary first-run launcher downloads the pinned upstream release archive,
 verifies its SHA-256, atomically publishes `CuaDriver.app` inside the plugin data
-directory, and accepts only the tested Cua AI Team ID/signing authority. It
+directory, and accepts only the tested Cua AI Team ID/signing authority. Every
+reuse also requires the exact pinned SHA-256 for both the main driver and cursor
+helper executables; a different same-version bundle is rejected even when its
+signature is otherwise valid. It
 proves telemetry persisted inside plugin data is disabled without changing the
 user's unrelated `~/.cua-driver` preference, turns off the separate update check,
 and never overwrites a global `/Applications` app. The fallback requires CPython

@@ -145,8 +145,18 @@ class RepositoryContractTests(unittest.TestCase):
             'ASSET_SHA256="236fc1aa02a09046945074623a02c86646b0be4c48754c6f502f9b1fff2bc032"',
             launcher,
         )
+        self.assertIn(
+            'EXPECTED_BINARY_SHA256="3b926c2ce6be80099176f43f0e00d81caf4ac9746a72756cbb7361bef8dbbbce"',
+            launcher,
+        )
+        self.assertIn(
+            'EXPECTED_CURSOR_HELPER_SHA256="04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957"',
+            launcher,
+        )
         self.assertIn('ASSET_NAME="cua-driver-rs-${CUA_VERSION}-darwin-universal.tar.gz"', launcher)
         self.assertIn('verify_sha256 "$ASSET" "$ASSET_SHA256"', launcher)
+        self.assertIn('matches_sha256 "$candidate" "$EXPECTED_BINARY_SHA256"', launcher)
+        self.assertIn('matches_sha256 "$cursor_helper" "$EXPECTED_CURSOR_HELPER_SHA256"', launcher)
         self.assertIn('APP_ROOT="$APP_PARENT/v${CUA_VERSION}"', launcher)
         self.assertNotIn('/Applications/CuaDriver.app', launcher)
         self.assertIn('mv "$extracted" "$APP_ROOT"', launcher)
@@ -157,6 +167,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('EXPECTED_TEAM_ID="YCK386LBJ7"', launcher)
         self.assertIn('EXPECTED_AUTHORITY="Developer ID Application: Cua AI, Inc. (YCK386LBJ7)"', launcher)
         self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertGreaterEqual(workflow.count("3b926c2ce6be80099176f43f0e00d81caf4ac9746a72756cbb7361bef8dbbbce"), 2)
+        self.assertGreaterEqual(workflow.count("04123f0f6611dfc5428aa13e863982c9da8e963d9ccde1a89fdc922b39093957"), 2)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn(

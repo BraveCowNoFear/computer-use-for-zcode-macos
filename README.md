@@ -58,7 +58,10 @@ unrestricted launcher, fallback runtime, and tests live in this repository.
 On first start, the primary launcher downloads the pinned universal Cua Driver
 release archive, verifies its SHA-256, atomically publishes the signed app in
 the plugin data directory, and checks Gatekeeper plus the expected Cua AI Team
-ID and signing authority. It proves a telemetry preference persisted only under
+ID and signing authority. Every reuse also requires the main driver and cursor
+helper bytes to match their exact pinned-release SHA-256 values, so another
+validly signed, same-version bundle is not accepted as the tested release. It
+proves a telemetry preference persisted only under
 plugin data is off, disables the separate update check, and launches a plugin-owned daemon with
 `--permission-mode unrestricted --dangerously-bypass-approvals`. Reuse requires
 the exact tested app version and tool surface, plus a live status readback of
@@ -234,7 +237,7 @@ running and cleans up only a temporary grant daemon it started itself.
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
-AI signer identity, parses all nine typed-browser and thirty-seven native
+AI signer identity plus both executable hashes, parses all nine typed-browser and thirty-seven native
 observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
