@@ -302,15 +302,6 @@ def main() -> int:
             health_checks["tcc_screen_recording"].get("status") == "pass"
         ) != permissions["screen_recording"]:
             fail("health_report and check_permissions disagreed on Screen Recording")
-        prompt_result = client.request(
-            "tools/call",
-            {"name": "check_permissions", "arguments": {"prompt": True}},
-        )
-        if not prompt_result.get("isError") or "os_permission_prompt_requires_trusted_host" not in json.dumps(
-            prompt_result, ensure_ascii=False
-        ):
-            fail(f"public MCP prompt=true did not fail at the trusted-host TCC boundary: {prompt_result}")
-
         apps, _ = client.call("list_apps")
         apps = require_object("list_apps", apps, {"apps"})
         if not isinstance(apps["apps"], list):
@@ -459,6 +450,22 @@ def main() -> int:
         ):
             fail(f"end_session returned inconsistent state: {ended}")
         session_started = False
+        # The intentional trusted-host refusal may close that MCP proxy on
+        # some Intel macOS hosts. Exercise it last on the otherwise idle peer
+        # so an expected refusal cannot contaminate normal ZCode calls.
+        prompt_result = peer.request(
+            "tools/call",
+            {"name": "check_permissions", "arguments": {"prompt": True}},
+        )
+        if not prompt_result.get(
+            "isError"
+        ) or "os_permission_prompt_requires_trusted_host" not in json.dumps(
+            prompt_result, ensure_ascii=False
+        ):
+            fail(
+                "public MCP prompt=true did not fail at the trusted-host TCC "
+                f"boundary: {prompt_result}"
+            )
     finally:
         if probe is not None and probe.poll() is None:
             probe.terminate()
