@@ -128,26 +128,19 @@ class FixtureHandler(BaseHTTPRequestHandler):
         sys.stderr.write("[zcode-browser-fixture] " + format % args + "\n")
 
 
-def serve_fixture(ready_path: Path) -> int:
+def start_fixture(
+) -> tuple[ThreadingHTTPServer, threading.Thread, str, str]:
     state = FixtureState()
     handler = type("BoundFixtureHandler", (FixtureHandler,), {"state": state})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
     port = int(server.server_address[1])
-    ready_path.write_text(
-        json.dumps(
-            {
-                "fixture_url": f"http://127.0.0.1:{port}/fixture",
-                "state_url": f"http://127.0.0.1:{port}/state",
-            },
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
-    )
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-    return 0
+    fixture_url = f"http://127.0.0.1:{port}/fixture"
+    state_url = f"http://127.0.0.1:{port}/state"
+    if fixture_snapshot(state_url) != (0, 0, "seed"):
+        fail("fixture state oracle did not begin cleanly")
+    return server, thread, fixture_url, state_url
 
 
 def fixture_snapshot(state_url: str) -> tuple[int, int, str]:
@@ -163,49 +156,6 @@ def fixture_snapshot(state_url: str) -> tuple[int, int, str]:
     ):
         fail(f"fixture state oracle drifted: {value}")
     return value["page_loads"], value["counter"], value["input_value"]
-
-
-def start_fixture(temp_root: Path) -> tuple[subprocess.Popen[bytes], str, str]:
-    ready_path = temp_root / "fixture-ready.json"
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            str(Path(__file__).resolve()),
-            "--serve-fixture",
-            str(ready_path),
-        ],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    ready: dict[str, Any] | None = None
-
-    def observe() -> bool:
-        nonlocal ready
-        if process.poll() is not None:
-            fail(f"fixture server exited early with code {process.returncode}")
-        if not ready_path.is_file():
-            return False
-        try:
-            candidate = json.loads(ready_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return False
-        if not isinstance(candidate, dict):
-            return False
-        fixture_url = candidate.get("fixture_url")
-        state_url = candidate.get("state_url")
-        if not isinstance(fixture_url, str) or not isinstance(state_url, str):
-            return False
-        ready = candidate
-        return True
-
-    wait_until("isolated fixture server", observe, timeout=5)
-    assert ready is not None
-    fixture_url = ready["fixture_url"]
-    state_url = ready["state_url"]
-    if fixture_snapshot(state_url) != (0, 0, "seed"):
-        fail("fixture state oracle did not begin cleanly")
-    return process, fixture_url, state_url
 
 
 def wait_until(label: str, predicate: Any, timeout: float = 20.0) -> None:
@@ -529,7 +479,8 @@ def main() -> int:
     socket = sys.argv[2]
     module = load_primary_verifier()
     client = module.MCPClient(binary, socket)
-    fixture_process: subprocess.Popen[bytes] | None = None
+    server: ThreadingHTTPServer | None = None
+    server_thread: threading.Thread | None = None
     source_process: subprocess.Popen[bytes] | None = None
     source_pid: int | None = None
     source_window_id: int | None = None
@@ -547,7 +498,7 @@ def main() -> int:
     try:
         client.initialize()
         executable, product = browser_binary()
-        fixture_process, fixture_url, fixture_state_url = start_fixture(temp_root)
+        server, server_thread, fixture_url, fixture_state_url = start_fixture()
         source_process, source_pid, source_window_id = launch_source_browser(
             client, executable, product, source_profile
         )
@@ -739,21 +690,17 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 source_process.kill()
                 source_process.wait(timeout=3)
-        if fixture_process is not None and fixture_process.poll() is None:
-            fixture_process.terminate()
-            try:
-                fixture_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                fixture_process.kill()
-                fixture_process.wait(timeout=3)
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        if server_thread is not None:
+            server_thread.join(timeout=3)
         client.close()
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 3 and sys.argv[1] == "--serve-fixture":
-            raise SystemExit(serve_fixture(Path(sys.argv[2]).resolve()))
         raise SystemExit(main())
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
