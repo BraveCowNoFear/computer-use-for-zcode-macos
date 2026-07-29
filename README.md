@@ -287,8 +287,10 @@ On such a Mac, run the disposable end-to-end gate below. It creates its own
 temporary AppKit window, verifies signed-driver identity plus background
 screenshot/type/click on the primary backend, then exercises full-desktop
 shortcut/text input plus real Quartz coordinate click, slider drag, raw
-held-button sequence, and scroll through the direct fallback. Both paths
-re-observe and verify the visible result. The gate restores the original
+held-button sequence, and scroll through the direct fallback. That pixel path
+captures after each state change and verifies the fixture's local, atomically
+published control state instead of assuming a bare Python process exposes a
+complete app-bundle AX tree. Both paths re-observe the visible result. The gate restores the original
 pointer position before closing its fixture, and
 touches no user document:
 

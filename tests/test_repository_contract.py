@@ -788,6 +788,8 @@ class RepositoryContractTests(unittest.TestCase):
             "restore_pointer_direct",
             "wait_for_process_exit",
             "require_action_verdict",
+            "wait_for_fixture_state",
+            "ZCODE_LIVE_FIXTURE_STATE",
             "self.process.kill()",
         ):
             self.assertIn(marker, smoke)
@@ -795,6 +797,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("class HotkeyTextField", fixture)
         self.assertIn("NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift", fixture)
         self.assertIn('button.setKeyEquivalent_(" ")', fixture)
+        self.assertIn("def publish_state", fixture)
+        self.assertIn('publish_state(field=value, received=value)', fixture)
 
     def test_live_smoke_maps_cocoa_fixture_geometry_into_png_pixels(self):
         path = PLUGIN / "scripts" / "live-smoke.py"

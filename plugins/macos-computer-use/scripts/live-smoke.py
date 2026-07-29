@@ -9,6 +9,7 @@ import select
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +23,8 @@ EXPECTED_CUA_VERSION = "0.13.1"
 EXPECTED_CUA_SOURCE_SHA = "d8c1efac808333bbecfcb2a9ff6705b5b1e6195a"
 FIXTURE_BUTTON_CENTER_X = 115.0
 FIXTURE_BUTTON_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
+FIXTURE_FIELD_CENTER_X = 320.0
+FIXTURE_FIELD_CENTER_Y_FROM_CONTENT_BOTTOM = 186.0
 FIXTURE_SLIDER_START_X = 252.0
 FIXTURE_SLIDER_END_X = 588.0
 FIXTURE_SLIDER_CENTER_Y_FROM_CONTENT_BOTTOM = 122.0
@@ -94,7 +97,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.17.12"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.17.13"},
             },
         )
         self.notify("notifications/initialized")
@@ -133,6 +136,32 @@ def element_index(tree: str, role: str, text: str | None = None) -> int:
 def require_image(content: list[dict[str, Any]], step: str) -> None:
     if not any(item.get("type") == "image" and item.get("data") for item in content):
         raise RuntimeError(f"{step} did not return a native MCP image block")
+
+
+def image_payload(content: list[dict[str, Any]], step: str) -> str:
+    for item in content:
+        if item.get("type") == "image" and item.get("data"):
+            return str(item["data"])
+    raise RuntimeError(f"{step} did not return a native MCP image block")
+
+
+def wait_for_fixture_state(
+    path: Path,
+    predicate: Any,
+    label: str,
+    timeout: float = 3.0,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    latest: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        try:
+            latest = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            latest = {}
+        if predicate(latest):
+            return latest
+        time.sleep(0.02)
+    raise RuntimeError(f"Timed out waiting for fixture {label}: {latest}")
 
 
 def require_action_verdict(result: dict[str, Any], step: str) -> None:
@@ -1508,7 +1537,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             shutil.rmtree(opened_folder, ignore_errors=True)
 
 
-def run_fallback() -> dict[str, Any]:
+def run_fallback(fixture_state_path: Path) -> dict[str, Any]:
     client = MCPClient([sys.executable, "-m", "macos_cua.server"])
     report: dict[str, Any] = {"steps": []}
     original_cursor: dict[str, Any] | None = None
@@ -1542,21 +1571,25 @@ def run_fallback() -> dict[str, Any]:
             {"window": window, "include_screenshot": True, "include_text": True},
         )
         require_image(content, "fallback initial window state")
-        tree = state["accessibility"]["tree"]
-        field_index = element_index(tree, "AXTextField")
-        focused, _ = client.call("click", {"window": window, "element_index": field_index})
+        if not isinstance(state.get("accessibility", {}).get("tree"), str):
+            raise RuntimeError("Fallback Accessibility observation returned no tree")
+        initial_image = image_payload(content, "fallback initial window state")
+        field_x, field_y = fixture_screenshot_point(
+            state,
+            FIXTURE_FIELD_CENTER_X,
+            FIXTURE_FIELD_CENTER_Y_FROM_CONTENT_BOTTOM,
+        )
+        focused, _ = client.call(
+            "click",
+            {
+                "window": window,
+                "x": field_x,
+                "y": field_y,
+                "screenshotId": state["screenshots"][0]["id"],
+            },
+        )
         require_action_verdict(focused, "fallback field click")
         report["steps"].append("fallback_field_focused")
-
-        focus_state, focus_content = client.call(
-            "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
-        )
-        require_image(focus_content, "fallback window state after focus click")
-        focused_element = focus_state["accessibility"].get("focused_element") or ""
-        if "AXTextField" not in focused_element:
-            raise RuntimeError(f"Fallback focus click did not focus the text field: {focused_element!r}")
-        report["steps"].append("fallback_field_focus_verified")
 
         desktop, desktop_content = client.call("get_desktop_state")
         require_image(desktop_content, "fallback desktop state before shortcut")
@@ -1574,13 +1607,37 @@ def run_fallback() -> dict[str, Any]:
 
         state, content = client.call(
             "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
+            {"window": window, "include_screenshot": True, "include_text": False},
         )
         require_image(content, "fallback window state after typing")
-        tree = state["accessibility"]["tree"]
-        if token not in tree:
-            raise RuntimeError("Fresh fallback state did not contain the text sent through desktop_type_text")
-        element_index(tree, "AXSlider", "Smoke slider")
+        click_x, click_y = fixture_button_screenshot_point(state)
+        clicked, _ = client.call(
+            "click",
+            {
+                "window": state["window"],
+                "x": click_x,
+                "y": click_y,
+                "screenshotId": state["screenshots"][0]["id"],
+            },
+        )
+        require_action_verdict(clicked, "fallback physical coordinate click")
+        report["steps"].append("fallback_physical_button_clicked")
+        wait_for_fixture_state(
+            fixture_state_path,
+            lambda value: value.get("received") == token,
+            "submitted text",
+        )
+        report["steps"].append("fallback_field_focus_verified")
+
+        visible_state, visible_content = client.call(
+            "get_window_state",
+            {"window": window, "include_screenshot": True, "include_text": False},
+        )
+        visible_image = image_payload(visible_content, "fallback visible result")
+        if visible_image == initial_image:
+            raise RuntimeError("Fallback submitted text did not change the visible window screenshot")
+        report["steps"].append("fallback_visible_result_verified")
+        state = visible_state
         drag_start = fixture_screenshot_point(
             state,
             FIXTURE_SLIDER_START_X,
@@ -1606,14 +1663,14 @@ def run_fallback() -> dict[str, Any]:
         require_action_verdict(dragged, "fallback physical slider drag")
         state, content = client.call(
             "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
+            {"window": window, "include_screenshot": True, "include_text": False},
         )
         require_image(content, "fallback window state after physical drag")
-        slider_match = re.search(r"Slider: (\d+)", state["accessibility"]["tree"])
-        if slider_match is None or int(slider_match.group(1)) < 80:
-            raise RuntimeError(
-                f"Fallback physical drag did not move the slider near its end: {state['accessibility']['tree']}"
-            )
+        wait_for_fixture_state(
+            fixture_state_path,
+            lambda value: int(value.get("slider", -1)) >= 80,
+            "slider end",
+        )
         report["steps"].append("fallback_physical_drag_verified")
 
         raw_start = fixture_screen_point(
@@ -1649,68 +1706,43 @@ def run_fallback() -> dict[str, Any]:
         require_action_verdict(released, "fallback raw mouse_up")
         state, content = client.call(
             "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
+            {"window": window, "include_screenshot": True, "include_text": False},
         )
         require_image(content, "fallback window state after raw held drag")
-        slider_match = re.search(r"Slider: (\d+)", state["accessibility"]["tree"])
-        if slider_match is None or int(slider_match.group(1)) > 20:
-            raise RuntimeError(
-                f"Fallback raw mouse sequence did not return the slider near its start: {state['accessibility']['tree']}"
-            )
+        wait_for_fixture_state(
+            fixture_state_path,
+            lambda value: 0 <= int(value.get("slider", 101)) <= 20,
+            "slider start",
+        )
         report["steps"].append("fallback_raw_mouse_sequence_verified")
 
-        tree = state["accessibility"]["tree"]
-        element_index(tree, "AXButton", "Copy value")
-        click_x, click_y = fixture_button_screenshot_point(state)
-        clicked, _ = client.call(
-            "click",
-            {
-                "window": state["window"],
-                "x": click_x,
-                "y": click_y,
-                "screenshotId": state["screenshots"][0]["id"],
-            },
-        )
-        require_action_verdict(clicked, "fallback physical coordinate click")
-        report["steps"].append("fallback_physical_button_clicked")
-
-        final_state, final_content = client.call(
-            "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
-        )
-        require_image(final_content, "fallback final window state")
-        expected = f"Received: {token}"
-        if expected not in final_state["accessibility"]["tree"]:
-            raise RuntimeError(f"Fallback final visible/AX result did not contain {expected!r}")
-        report["steps"].append("fallback_visible_result_verified")
-
         scroll_point = fixture_screenshot_point(
-            final_state,
+            state,
             FIXTURE_SCROLL_PROBE_CENTER_X,
             FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM,
         )
         scrolled, _ = client.call(
             "scroll",
             {
-                "window": final_state["window"],
+                "window": state["window"],
                 "x": scroll_point[0],
                 "y": scroll_point[1],
                 "scrollX": 0,
                 "scrollY": 120,
-                "screenshotId": final_state["screenshots"][0]["id"],
+                "screenshotId": state["screenshots"][0]["id"],
             },
         )
         require_action_verdict(scrolled, "fallback physical scroll")
         scroll_state, scroll_content = client.call(
             "get_window_state",
-            {"window": window, "include_screenshot": True, "include_text": True},
+            {"window": window, "include_screenshot": True, "include_text": False},
         )
         require_image(scroll_content, "fallback window state after physical scroll")
-        scroll_match = re.search(r"Scrolled: (\d+)", scroll_state["accessibility"]["tree"])
-        if scroll_match is None or int(scroll_match.group(1)) <= 0:
-            raise RuntimeError(
-                f"Fallback physical scroll did not reach its coordinate probe: {scroll_state['accessibility']['tree']}"
-            )
+        wait_for_fixture_state(
+            fixture_state_path,
+            lambda value: int(value.get("scroll", 0)) > 0,
+            "scroll probe",
+        )
         report["steps"].append("fallback_physical_scroll_verified")
 
         restored, _ = client.call(
@@ -1752,11 +1784,16 @@ def main() -> int:
 
     backend = requested_backend(sys.argv[1:])
 
+    fixture_state_directory = Path(tempfile.mkdtemp(prefix="zcode-live-fixture-"))
+    fixture_state_path = fixture_state_directory / "state.json"
+    fixture_env = os.environ.copy()
+    fixture_env["ZCODE_LIVE_FIXTURE_STATE"] = str(fixture_state_path)
     fixture = subprocess.Popen(
         [sys.executable, str(FIXTURE)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=fixture_env,
     )
     report: dict[str, Any] = {"ok": False, "backend": backend, "steps": []}
     try:
@@ -1765,17 +1802,23 @@ def main() -> int:
         if not ready.startswith("READY "):
             raise RuntimeError(f"Fixture failed to become ready: {ready}")
         report["steps"].append("fixture_ready")
+        wait_for_fixture_state(
+            fixture_state_path,
+            lambda value: value.get("ready") is True,
+            "readiness",
+        )
         if backend in {"all", "primary"}:
             report["primary"] = run_primary(fixture.pid)
             report["steps"].append("primary_complete")
         if backend in {"all", "fallback"}:
-            report["fallback"] = run_fallback()
+            report["fallback"] = run_fallback(fixture_state_path)
             report["steps"].append("fallback_complete")
         report["ok"] = True
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     finally:
         terminate(fixture)
+        shutil.rmtree(fixture_state_directory, ignore_errors=True)
 
 
 if __name__ == "__main__":

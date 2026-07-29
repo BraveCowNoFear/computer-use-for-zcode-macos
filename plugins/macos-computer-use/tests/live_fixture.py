@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
+from pathlib import Path
 
 import AppKit  # type: ignore[import-not-found]
 import objc  # type: ignore[import-not-found]
@@ -11,6 +13,17 @@ from Foundation import NSObject  # type: ignore[import-not-found]
 
 
 WINDOW_TITLE = "ZCode Computer Use Live Smoke"
+STATE_PATH = Path(os.environ["ZCODE_LIVE_FIXTURE_STATE"]) if os.environ.get("ZCODE_LIVE_FIXTURE_STATE") else None
+STATE: dict[str, object] = {}
+
+
+def publish_state(**updates: object) -> None:
+    if STATE_PATH is None:
+        return
+    STATE.update(updates)
+    temporary = STATE_PATH.with_name(f".{STATE_PATH.name}-{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(STATE, sort_keys=True), encoding="utf-8")
+    os.replace(temporary, STATE_PATH)
 
 
 class FixtureHandler(NSObject):
@@ -26,15 +39,20 @@ class FixtureHandler(NSObject):
 
     @objc.IBAction
     def submit_(self, _sender) -> None:
-        self.label.setStringValue_(f"Received: {self.field.stringValue()}")
+        value = str(self.field.stringValue())
+        self.label.setStringValue_(f"Received: {value}")
+        publish_state(field=value, received=value)
 
     @objc.IBAction
     def sliderChanged_(self, sender) -> None:
-        self.slider_label.setStringValue_(f"Slider: {int(round(sender.doubleValue()))}")
+        value = int(round(sender.doubleValue()))
+        self.slider_label.setStringValue_(f"Slider: {value}")
+        publish_state(slider=value)
 
     @objc.IBAction
     def menuPicked_(self, _sender) -> None:
         self.menu_label.setStringValue_("Menu: picked")
+        publish_state(menu="picked")
 
 class ScrollProbeView(AppKit.NSView):
     def initWithFrame_statusLabel_(self, frame, status_label):
@@ -53,6 +71,7 @@ class ScrollProbeView(AppKit.NSView):
     def scrollWheel_(self, event) -> None:
         self.total_scroll += max(1, int(round(abs(event.scrollingDeltaY()))))
         self.status_label.setStringValue_(f"Scrolled: {self.total_scroll}")
+        publish_state(scroll=self.total_scroll)
 
 
 class GestureProbeView(AppKit.NSView):
@@ -71,9 +90,11 @@ class GestureProbeView(AppKit.NSView):
     def mouseDown_(self, event) -> None:
         outcome = "double" if event.clickCount() >= 2 else "left"
         self.status_label.setStringValue_(f"Gesture: {outcome}")
+        publish_state(gesture=outcome)
 
     def rightMouseDown_(self, _event) -> None:
         self.status_label.setStringValue_("Gesture: right")
+        publish_state(gesture="right")
 
 
 class HotkeyTextField(AppKit.NSTextField):
@@ -90,6 +111,7 @@ class HotkeyTextField(AppKit.NSTextField):
         required = AppKit.NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift
         if key == "k" and flags & required == required:
             self.status_label.setStringValue_("Hotkey: received")
+            publish_state(hotkey="received")
             return
         objc.super(HotkeyTextField, self).keyDown_(event)
 
@@ -198,6 +220,17 @@ def main() -> int:
     app.finishLaunching()
     window.makeKeyAndOrderFront_(None)
     app.activateIgnoringOtherApps_(True)
+    publish_state(
+        ready=True,
+        pid=os.getpid(),
+        field="",
+        received="",
+        slider=0,
+        scroll=0,
+        gesture="waiting",
+        hotkey="waiting",
+        menu="waiting",
+    )
     print(f"READY {os.getpid()} {WINDOW_TITLE}", flush=True)
     app.run()
     return 0
