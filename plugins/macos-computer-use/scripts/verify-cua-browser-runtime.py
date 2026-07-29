@@ -18,6 +18,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from urllib.request import ProxyHandler, build_opener
 
 
 def fail(message: str) -> None:
@@ -79,39 +80,132 @@ input.addEventListener('input', () => {
 
 class FixtureHandler(BaseHTTPRequestHandler):
     state: FixtureState
+    protocol_version = "HTTP/1.1"
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib callback name
         parsed = urlparse(self.path)
+        if parsed.path == "/state":
+            page_loads, counter, input_value = self.state.snapshot()
+            body = json.dumps(
+                {
+                    "page_loads": page_loads,
+                    "counter": counter,
+                    "input_value": input_value,
+                },
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/event":
             self.state.update(parse_qs(parsed.query, keep_blank_values=True))
             self.send_response(204)
+            self.send_header("Connection", "close")
             self.end_headers()
             return
-        if parsed.path in {"/", "/index.html"}:
+        if parsed.path in {"/", "/fixture", "/index.html"}:
             with self.state.lock:
                 self.state.page_loads += 1
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(FIXTURE_HTML)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(FIXTURE_HTML)
             return
         self.send_response(404)
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
         self.end_headers()
 
     def log_message(self, format: str, *args: Any) -> None:
-        del format, args
+        sys.stderr.write("[zcode-browser-fixture] " + format % args + "\n")
 
 
-def start_fixture() -> tuple[ThreadingHTTPServer, threading.Thread, FixtureState, str]:
+def serve_fixture(ready_path: Path) -> int:
     state = FixtureState()
     handler = type("BoundFixtureHandler", (FixtureHandler,), {"state": state})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
     port = int(server.server_address[1])
-    return server, thread, state, f"http://127.0.0.1:{port}/"
+    ready_path.write_text(
+        json.dumps(
+            {
+                "fixture_url": f"http://127.0.0.1:{port}/fixture",
+                "state_url": f"http://127.0.0.1:{port}/state",
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+    return 0
+
+
+def fixture_snapshot(state_url: str) -> tuple[int, int, str]:
+    # Never let a runner proxy intercept the loopback state oracle.
+    opener = build_opener(ProxyHandler({}))
+    with opener.open(state_url, timeout=2) as response:
+        value = json.loads(response.read())
+    if (
+        not isinstance(value, dict)
+        or type(value.get("page_loads")) is not int
+        or type(value.get("counter")) is not int
+        or not isinstance(value.get("input_value"), str)
+    ):
+        fail(f"fixture state oracle drifted: {value}")
+    return value["page_loads"], value["counter"], value["input_value"]
+
+
+def start_fixture(temp_root: Path) -> tuple[subprocess.Popen[bytes], str, str]:
+    ready_path = temp_root / "fixture-ready.json"
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--serve-fixture",
+            str(ready_path),
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    ready: dict[str, Any] | None = None
+
+    def observe() -> bool:
+        nonlocal ready
+        if process.poll() is not None:
+            fail(f"fixture server exited early with code {process.returncode}")
+        if not ready_path.is_file():
+            return False
+        try:
+            candidate = json.loads(ready_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return False
+        if not isinstance(candidate, dict):
+            return False
+        fixture_url = candidate.get("fixture_url")
+        state_url = candidate.get("state_url")
+        if not isinstance(fixture_url, str) or not isinstance(state_url, str):
+            return False
+        ready = candidate
+        return True
+
+    wait_until("isolated fixture server", observe, timeout=5)
+    assert ready is not None
+    fixture_url = ready["fixture_url"]
+    state_url = ready["state_url"]
+    if fixture_snapshot(state_url) != (0, 0, "seed"):
+        fail("fixture state oracle did not begin cleanly")
+    return process, fixture_url, state_url
 
 
 def wait_until(label: str, predicate: Any, timeout: float = 20.0) -> None:
@@ -435,8 +529,7 @@ def main() -> int:
     socket = sys.argv[2]
     module = load_primary_verifier()
     client = module.MCPClient(binary, socket)
-    server: ThreadingHTTPServer | None = None
-    server_thread: threading.Thread | None = None
+    fixture_process: subprocess.Popen[bytes] | None = None
     source_process: subprocess.Popen[bytes] | None = None
     source_pid: int | None = None
     source_window_id: int | None = None
@@ -454,7 +547,7 @@ def main() -> int:
     try:
         client.initialize()
         executable, product = browser_binary()
-        server, server_thread, fixture, fixture_url = start_fixture()
+        fixture_process, fixture_url, fixture_state_url = start_fixture(temp_root)
         source_process, source_pid, source_window_id = launch_source_browser(
             client, executable, product, source_profile
         )
@@ -505,7 +598,9 @@ def main() -> int:
         require_text(
             "browser_navigate", navigated_content, f"navigated {tab} to {fixture_url}"
         )
-        wait_until("fixture navigation", lambda: fixture.snapshot()[0] >= 1)
+        wait_until(
+            "fixture navigation", lambda: fixture_snapshot(fixture_state_url)[0] >= 1
+        )
 
         first, first_refs = require_snapshot(client, browser_session, target, tab)
         if (
@@ -539,7 +634,9 @@ def main() -> int:
             clicked_content,
             f"dispatched DOM click on {increment['ref']} in {tab}",
         )
-        wait_until("page click effect", lambda: fixture.snapshot()[1] == 1)
+        wait_until(
+            "page click effect", lambda: fixture_snapshot(fixture_state_url)[1] == 1
+        )
 
         second, second_refs = require_snapshot(client, browser_session, target, tab)
         if (
@@ -583,7 +680,10 @@ def main() -> int:
             typed_content,
             f"typed {len(typed_text)} char(s) into {tab}, replacing 4 char(s)",
         )
-        wait_until("page type effect", lambda: fixture.snapshot()[2] == typed_text)
+        wait_until(
+            "page type effect",
+            lambda: fixture_snapshot(fixture_state_url)[2] == typed_text,
+        )
 
         final, final_refs = require_snapshot(client, browser_session, target, tab)
         final_input = action_ref(final_refs, "zcode-input", "type")
@@ -639,17 +739,21 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 source_process.kill()
                 source_process.wait(timeout=3)
-        if server is not None:
-            server.shutdown()
-            server.server_close()
-        if server_thread is not None:
-            server_thread.join(timeout=3)
+        if fixture_process is not None and fixture_process.poll() is None:
+            fixture_process.terminate()
+            try:
+                fixture_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                fixture_process.kill()
+                fixture_process.wait(timeout=3)
         client.close()
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) == 3 and sys.argv[1] == "--serve-fixture":
+            raise SystemExit(serve_fixture(Path(sys.argv[2]).resolve()))
         raise SystemExit(main())
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
