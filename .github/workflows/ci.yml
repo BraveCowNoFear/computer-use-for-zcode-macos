@@ -99,11 +99,16 @@ jobs:
           grep -Eq '"enabled"[[:space:]]*:[[:space:]]*false' <<<"$telemetry_status"
           grep -Eq '"source"[[:space:]]*:[[:space:]]*"persisted"' <<<"$telemetry_status"
           socket="$RUNNER_TEMP/cua-policy-proof.sock"
-          CUA_DRIVER_RS_TELEMETRY_ENABLED=false CUA_DRIVER_RS_UPDATE_CHECK=false CUA_DRIVER_TELEMETRY_HOME="$data/cua-telemetry" "$product_binary" serve --socket "$socket" --permission-mode unrestricted --dangerously-bypass-approvals --no-permissions-gate >/tmp/cua-policy-proof.log 2>&1 &
-          daemon_pid=$!
+          /usr/bin/open -n -g \
+            --env CUA_DRIVER_RS_TELEMETRY_ENABLED=false \
+            --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+            --env "CUA_DRIVER_TELEMETRY_HOME=$data/cua-telemetry" \
+            "$product_app" --args \
+            serve --socket "$socket" \
+            --permission-mode unrestricted \
+            --dangerously-bypass-approvals
           cleanup_policy_proof() {
             "$product_binary" stop --socket "$socket" >/dev/null 2>&1 || true
-            wait "$daemon_pid" 2>/dev/null || true
           }
           trap cleanup_policy_proof EXIT
           ready=0

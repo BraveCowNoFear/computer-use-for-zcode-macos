@@ -329,6 +329,8 @@ class RepositoryContractTests(unittest.TestCase):
             'python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py "$product_binary" "$socket"',
             workflow,
         )
+        self.assertIn('"$product_app" --args', workflow)
+        self.assertNotIn("--no-permissions-gate", workflow)
         mcp_runtime = (
             PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
         ).read_text(encoding="utf-8")
