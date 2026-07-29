@@ -17,8 +17,9 @@ second approval exchange.
    local and do not upload or quote its contents unless the user requests that.
 2. Call `get_recording_state({})`. Continue only when `enabled:false`. The
    recorder is daemon-global: a new start replaces the active owner, and manual
-   `stop_recording({})` is unconditional. Never start over, stop, or reuse the
-   directory of another live recording.
+   `stop_recording({})` is unconditional; the driver does not refuse either
+   operation merely because another connection owns the current recording.
+   Never start over, stop, or reuse the directory of another live recording.
 3. Call `start_recording({output_dir,record_video:false})` and require
    `enabled:true`, the exact resolved `output_dir`, and `next_turn:1`. Video is
    deliberately off by default. Pass `record_video:true` only when video was
@@ -36,6 +37,12 @@ second approval exchange.
    ordered `turn-NNNNN/` with `action.json`, evidence, and the available before/
    after state and images. Do not claim video success unless `video_active` was
    true and the finalized `last_video_path` exists after stop.
+
+The pinned text responses mirror the same state: status is exactly
+`recording: disabled` or `recording: enabled output_dir=<path> next_turn=<N>`
+after the checkmark; a no-video start reports `Recording started -> <path>`,
+and a no-video manual stop reports `Recording stopped.`. Consume the structured
+eight-field state for decisions and use the text only as a parity diagnostic.
 
 Each complete turn uses the pinned evidence layout:
 

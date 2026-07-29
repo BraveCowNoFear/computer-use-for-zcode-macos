@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.24"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.25"},
             },
         )
         expected = {
@@ -881,7 +881,9 @@ def require_cursor_state(
     return state
 
 
-def require_recording_state(name: str, value: Any) -> dict[str, Any]:
+def require_recording_state(
+    name: str, value: Any, content: Any | None = None
+) -> dict[str, Any]:
     state = require_object(name, value, RECORDING_STATE_FIELDS)
     if type(state["recording"]) is not bool or type(state["enabled"]) is not bool:
         fail(f"{name} omitted recording booleans")
@@ -894,6 +896,14 @@ def require_recording_state(name: str, value: Any) -> dict[str, Any]:
     for field in ("output_dir", "last_error", "last_video_path", "owner"):
         if state[field] is not None and not isinstance(state[field], str):
             fail(f"{name}.{field} is neither a string nor null")
+    if content is not None:
+        summary = (
+            f"recording: enabled output_dir={state['output_dir']} "
+            f"next_turn={state['next_turn']}"
+            if state["enabled"]
+            else "recording: disabled"
+        )
+        require_text_content(name, content, f"✅ {summary}")
     return state
 
 
@@ -1190,6 +1200,7 @@ def main() -> int:
     config_original: int | None = None
     config_changed = False
     recording_dir: Path | None = None
+    recording_dirs: list[Path] = []
     recording_started = False
     try:
         client.initialize()
@@ -1374,8 +1385,13 @@ def main() -> int:
             peer_discovery_content,
         )
 
+        initial_recording_value, initial_recording_content = client.call(
+            "get_recording_state"
+        )
         initial_recording = require_recording_state(
-            "initial get_recording_state", client.call("get_recording_state")[0]
+            "initial get_recording_state",
+            initial_recording_value,
+            initial_recording_content,
         )
         expected_disabled_recording = {
             "recording": False,
@@ -1399,12 +1415,19 @@ def main() -> int:
                 dir=temp_parent if temp_parent else None,
             )
         ).resolve()
+        recording_dirs.append(recording_dir)
+        started_recording_value, started_recording_content = client.call(
+            "start_recording",
+            {"output_dir": str(recording_dir), "record_video": False},
+        )
         started_recording = require_recording_state(
             "start_recording",
-            client.call(
-                "start_recording",
-                {"output_dir": str(recording_dir), "record_video": False},
-            )[0],
+            started_recording_value,
+        )
+        require_text_content(
+            "start_recording",
+            started_recording_content,
+            f"✅ Recording started -> {recording_dir}",
         )
         recording_started = True
         if (
@@ -1417,33 +1440,114 @@ def main() -> int:
             or not started_recording["owner"]
         ):
             fail(f"start_recording returned inconsistent state: {started_recording}")
+        owner_readback_value, owner_readback_content = client.call(
+            "get_recording_state"
+        )
         if require_recording_state(
-            "recording owner readback", client.call("get_recording_state")[0]
+            "recording owner readback",
+            owner_readback_value,
+            owner_readback_content,
         ) != started_recording:
             fail("get_recording_state did not preserve the recording owner/state")
+        peer_readback_value, peer_readback_content = peer.call(
+            "get_recording_state"
+        )
         if require_recording_state(
-            "peer recording readback", peer.call("get_recording_state")[0]
+            "peer recording readback",
+            peer_readback_value,
+            peer_readback_content,
         ) != started_recording:
             fail("peer MCP connection did not observe daemon-global recording state")
-        session_file = recording_dir / "session.json"
+        first_session_file = recording_dir / "session.json"
         started_manifest = require_recording_manifest(
-            "started recording session.json", session_file
+            "started recording session.json", first_session_file
         )
         if started_manifest["cursor"]["sample_count"] != 0:
             fail(f"new recording began with cursor samples: {started_manifest}")
+
+        replacement_dir = Path(
+            tempfile.mkdtemp(
+                prefix="zcode-primary-recorder-takeover-",
+                dir=temp_parent if temp_parent else None,
+            )
+        ).resolve()
+        recording_dirs.append(replacement_dir)
+        replacement_value, replacement_content = peer.call(
+            "start_recording",
+            {"output_dir": str(replacement_dir), "record_video": False},
+        )
+        replacement_recording = require_recording_state(
+            "peer replacement start_recording", replacement_value
+        )
+        require_text_content(
+            "peer replacement start_recording",
+            replacement_content,
+            f"✅ Recording started -> {replacement_dir}",
+        )
+        if (
+            replacement_recording["recording"] is not True
+            or replacement_recording["output_dir"] != str(replacement_dir)
+            or replacement_recording["next_turn"] != 1
+            or replacement_recording["last_error"] is not None
+            or replacement_recording["video_active"] is not False
+            or replacement_recording["last_video_path"] is not None
+            or not replacement_recording["owner"]
+            or replacement_recording["owner"] == started_recording["owner"]
+        ):
+            fail(
+                "peer start_recording did not take over daemon-global ownership: "
+                f"first={started_recording}, replacement={replacement_recording}"
+            )
+        recording_dir = replacement_dir
+        takeover_readback_value, takeover_readback_content = client.call(
+            "get_recording_state"
+        )
+        if require_recording_state(
+            "cross-connection takeover readback",
+            takeover_readback_value,
+            takeover_readback_content,
+        ) != replacement_recording:
+            fail("original MCP connection did not observe recorder ownership takeover")
+        require_recording_manifest(
+            "preserved replaced recording session.json", first_session_file
+        )
+        session_file = replacement_dir / "session.json"
+        replacement_manifest = require_recording_manifest(
+            "replacement recording session.json", session_file
+        )
+        if replacement_manifest["cursor"]["sample_count"] != 0:
+            fail(
+                "replacement recording began with cursor samples: "
+                f"{replacement_manifest}"
+            )
+
+        stopped_recording_value, stopped_recording_content = client.call(
+            "stop_recording"
+        )
         stopped_recording = require_recording_state(
-            "stop_recording", client.call("stop_recording")[0]
+            "non-owner stop_recording", stopped_recording_value
+        )
+        require_text_content(
+            "non-owner stop_recording",
+            stopped_recording_content,
+            "✅ Recording stopped.",
         )
         recording_started = False
         if stopped_recording != expected_disabled_recording:
-            fail(f"stop_recording returned inconsistent state: {stopped_recording}")
+            fail(
+                "manual non-owner stop_recording did not stop the global recorder: "
+                f"{stopped_recording}"
+            )
+        post_stop_value, post_stop_content = peer.call("get_recording_state")
         if require_recording_state(
-            "post-stop recording state", peer.call("get_recording_state")[0]
+            "post-stop recording state",
+            post_stop_value,
+            post_stop_content,
         ) != expected_disabled_recording:
             fail("peer MCP connection retained stopped recording state")
         require_recording_manifest("final recording session.json", session_file)
-        if (recording_dir / "recording.mp4").exists():
-            fail("record_video:false unexpectedly created recording.mp4")
+        if any((directory / "recording.mp4").exists() for directory in recording_dirs):
+            fail("record_video:false unexpectedly created a recording.mp4")
 
         try:
             client.call("page", {"action": "execute_javascript"})
@@ -1934,8 +2038,8 @@ def main() -> int:
                 pass
         peer.close()
         client.close()
-        if recording_dir is not None:
-            shutil.rmtree(recording_dir, ignore_errors=True)
+        for directory in recording_dirs:
+            shutil.rmtree(directory, ignore_errors=True)
 
     print(
         "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder responses, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."

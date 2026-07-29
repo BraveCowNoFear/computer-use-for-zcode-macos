@@ -203,8 +203,9 @@ root/data template variables.
   pointer or changing focus; it appears only for a safely mapped selected tab,
   and never replaces the following snapshot as completion evidence.
 - Record explicitly requested local action trajectories with ordered pre/post
-  screenshots, state, and arguments; refuse to replace another connection's
-  daemon-global recording, default video off, and finalize the exact owned
+  screenshots, state, and arguments. Because upstream recording is daemon-global,
+  a new start takes ownership and manual stop is unconditional; preflight state,
+  avoid clobbering another run, default video off, and finalize the exact owned
   directory before inspecting evidence. Deliberate same-live-window replay is
   available with error-stop and fresh visible verification.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
@@ -267,6 +268,8 @@ permission-free app/window/screen/cursor discovery, return the exact lightweight
 Accessibility inventory shape and matching human-readable summary on two MCP
 connections, reject duplicate/invalid app and window identities, run an owned no-video recorder through
 start/read/peer-read/stop while writing only a temporary local `session.json`,
+prove that a second connection takes over the daemon-global owner and that a
+manual stop from the prior connection is unconditional,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page
 mutation reaches normal pid/window validation instead of the upstream

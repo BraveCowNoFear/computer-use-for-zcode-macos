@@ -440,6 +440,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"record_video": False', mcp_runtime)
         self.assertIn('client.call("stop_recording")', mcp_runtime)
         self.assertIn('"zcode-primary-recorder-"', mcp_runtime)
+        self.assertIn('"zcode-primary-recorder-takeover-"', mcp_runtime)
+        self.assertIn("did not take over daemon-global ownership", mcp_runtime)
+        self.assertIn("manual non-owner stop_recording", mcp_runtime)
+        self.assertIn('"✅ Recording stopped."', mcp_runtime)
         self.assertIn('manifest["schema_version"] != 1', mcp_runtime)
         self.assertIn('"final recording session.json"', mcp_runtime)
         self.assertIn('"recording.mp4"', mcp_runtime)
@@ -965,6 +969,68 @@ class RepositoryContractTests(unittest.TestCase):
                 ),
                 "cursor-contract",
                 True,
+            )
+
+    def test_primary_recording_state_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_recording_state_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        disabled = {
+            "recording": False,
+            "enabled": False,
+            "output_dir": None,
+            "next_turn": 1,
+            "last_error": None,
+            "video_active": False,
+            "last_video_path": None,
+            "owner": None,
+        }
+        self.assertEqual(
+            module.require_recording_state(
+                "disabled recording",
+                disabled,
+                [{"type": "text", "text": "✅ recording: disabled"}],
+            ),
+            disabled,
+        )
+        enabled = dict(
+            disabled,
+            recording=True,
+            enabled=True,
+            output_dir="/tmp/zcode-recording",
+            owner="connection-a",
+        )
+        self.assertEqual(
+            module.require_recording_state(
+                "enabled recording",
+                enabled,
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "✅ recording: enabled "
+                            "output_dir=/tmp/zcode-recording next_turn=1"
+                        ),
+                    }
+                ],
+            ),
+            enabled,
+        )
+        with self.assertRaisesRegex(RuntimeError, "recording disagreed"):
+            module.require_recording_state(
+                "drifted recording", dict(enabled, recording=False)
+            )
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_recording_state(
+                "drifted recording text",
+                enabled,
+                [{"type": "text", "text": "wrong"}],
             )
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
