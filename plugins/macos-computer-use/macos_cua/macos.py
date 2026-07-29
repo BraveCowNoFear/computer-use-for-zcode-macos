@@ -1586,6 +1586,76 @@ class MacOSBackend:
             self._skylight_last_status = f"front-readback-unavailable:{type(error).__name__}"
             return False
 
+    def _focused_ax_window_matches(
+        self,
+        focused: Any,
+        target_ax_window: Any,
+        window_id: int,
+    ) -> tuple[bool, Any, str]:
+        """Compare AX windows without assuming AXWindowNumber is available."""
+        if focused is None:
+            return False, None, "missing"
+        number_attr = self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber")
+        focused_number = self._ax_copy(focused, number_attr)
+        try:
+            if int(focused_number) == int(window_id):
+                return True, focused_number, "window-number"
+        except (TypeError, ValueError):
+            pass
+        try:
+            if focused is target_ax_window or focused == target_ax_window:
+                return True, focused_number, "element-equality"
+        except Exception:
+            pass
+        cf_equal = getattr(self.ApplicationServices, "CFEqual", None)
+        if callable(cf_equal):
+            try:
+                if bool(cf_equal(focused, target_ax_window)):
+                    return True, focused_number, "cf-equality"
+            except Exception:
+                pass
+
+        title_attr = self._ax_attr("kAXTitleAttribute", "AXTitle")
+        position_attr = self._ax_attr("kAXPositionAttribute", "AXPosition")
+        size_attr = self._ax_attr("kAXSizeAttribute", "AXSize")
+
+        def signature(element: Any) -> tuple[str, tuple[float, float] | None, tuple[float, float] | None]:
+            title = str(self._ax_copy(element, title_attr) or "")
+            position = self._point_components(
+                self._ax_value(
+                    self._ax_copy(element, position_attr),
+                    self._ax_attr("kAXValueCGPointType", 1),
+                )
+            )
+            size = self._point_components(
+                self._ax_value(
+                    self._ax_copy(element, size_attr),
+                    self._ax_attr("kAXValueCGSizeType", 2),
+                )
+            )
+            return title, position, size
+
+        focused_signature = signature(focused)
+        target_signature = signature(target_ax_window)
+        if (
+            focused_signature[1] is not None
+            and focused_signature[2] is not None
+            and target_signature[1] is not None
+            and target_signature[2] is not None
+            and focused_signature[0] == target_signature[0]
+            and all(
+                abs(left - right) <= 1
+                for left, right in zip(
+                    (*focused_signature[1], *focused_signature[2]),
+                    (*target_signature[1], *target_signature[2]),
+                )
+            )
+        ):
+            # `_ax_window` already rejected a title/geometry tie while binding
+            # the fresh CG window, so this signature remains exact.
+            return True, focused_number, "unique-signature"
+        return False, focused_number, "mismatch"
+
     def _activate(self, window: dict[str, Any]) -> None:
         A = self.AppKit
         app = A.NSRunningApplication.runningApplicationWithProcessIdentifier_(int(window["pid"]))
@@ -1633,6 +1703,7 @@ class MacOSBackend:
         last_ax_frontmost: Any = None
         last_focused_number: Any = None
         last_focused_matches = False
+        last_focused_match_path = "not-checked"
         while time.monotonic() < deadline:
             frontmost = workspace.frontmostApplication()
             front_pid = int(frontmost.processIdentifier()) if frontmost is not None else 0
@@ -1649,16 +1720,16 @@ class MacOSBackend:
                     app_element,
                     self._ax_attr("kAXFocusedWindowAttribute", "AXFocusedWindow"),
                 )
-                focused_number = self._ax_copy(
-                    focused,
-                    self._ax_attr("kAXWindowNumberAttribute", "AXWindowNumber"),
-                ) if focused is not None else None
+                focused_matches, focused_number, focused_match_path = (
+                    self._focused_ax_window_matches(
+                        focused,
+                        target_ax_window,
+                        int(window["id"]),
+                    )
+                )
                 last_focused_number = focused_number
-                try:
-                    focused_matches = int(focused_number) == int(window["id"])
-                except (TypeError, ValueError):
-                    focused_matches = focused is not None and focused == target_ax_window
                 last_focused_matches = focused_matches
+                last_focused_match_path = focused_match_path
                 if focused_matches:
                     return
             time.sleep(0.02)
@@ -1678,6 +1749,7 @@ class MacOSBackend:
                 else None
             ),
             "focusedWindowMatches": last_focused_matches,
+            "focusedWindowMatchPath": last_focused_match_path,
             "skylightStatus": self._skylight_last_status,
         }
         summary = ", ".join(f"{key}={value}" for key, value in detail.items() if key != "ok")

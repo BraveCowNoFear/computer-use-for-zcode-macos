@@ -349,7 +349,9 @@ window ID through Cua Driver's local SkyLight path, falling back to public
 AppKit activation when that SPI is unavailable. It then performs `AXRaise`; if
 unsupported, it sets the bound window's `AXMain=true` and then `AXFocused=true`.
 WindowServer's foreground PSN (or the public frontmost pid) and the focused
-AXWindowNumber must still match before input is sent.
+AXWindowNumber must still match before input is sent. When an app omits
+AXWindowNumber, the focused AX window must instead match the unique
+title/position/size signature established by fresh CG-window binding.
 
 Do not pass primary handles to fallback tools. A fallback window looks like:
 

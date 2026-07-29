@@ -1759,6 +1759,29 @@ class ContractTests(unittest.TestCase):
         backend._skylight_set_front_process.assert_called_once_with(80, 8)
         running.activateWithOptions_.assert_not_called()
 
+    def test_focused_ax_window_uses_the_unique_bound_signature_without_a_window_number(self):
+        focused, target = object(), object()
+        backend = MacOSBackend()
+        backend.ApplicationServices = types.SimpleNamespace()
+        values = {
+            (focused, "AXTitle"): "Editor",
+            (focused, "AXPosition"): (100, 80),
+            (focused, "AXSize"): (900, 700),
+            (target, "AXTitle"): "Editor",
+            (target, "AXPosition"): (100, 80),
+            (target, "AXSize"): (900, 700),
+        }
+        backend._ax_copy = lambda element, attribute: values.get((element, attribute))
+
+        matches, number, path = backend._focused_ax_window_matches(focused, target, 8)
+
+        self.assertTrue(matches)
+        self.assertIsNone(number)
+        self.assertEqual(path, "unique-signature")
+
+        values[(focused, "AXTitle")] = "Other"
+        self.assertFalse(backend._focused_ax_window_matches(focused, target, 8)[0])
+
     def test_skylight_foreground_binds_the_exact_window_owner_and_no_windows_option(self):
         calls = []
 

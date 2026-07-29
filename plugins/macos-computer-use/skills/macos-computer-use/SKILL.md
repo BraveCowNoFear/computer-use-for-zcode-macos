@@ -350,8 +350,10 @@ Activation first uses Cua Driver's local exact-window SkyLight path, with public
 AppKit activation as the compatibility fallback. For apps without `AXRaise`, it
 then tries the bound window's `AXMain` and `AXFocused` attributes. Input still
 starts only after WindowServer's foreground PSN (or the public frontmost pid)
-and the focused window ID read back as the exact target; these delivery rungs
-are not treated as proof by themselves.
+and the focused AXWindowNumber read back as the exact target. If an app omits
+that number, the focus readback must match the unique title/position/size
+signature proven while binding the fresh CG window. These delivery rungs are
+not treated as proof by themselves.
 
 Fallback `launch_app` returns the matched pid/windows. Choose only one
 task-matching candidate and preserve the whole
