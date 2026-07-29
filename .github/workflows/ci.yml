@@ -102,6 +102,7 @@ jobs:
           /usr/bin/open -n -g \
             --env CUA_DRIVER_RS_TELEMETRY_ENABLED=false \
             --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+            --env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1 \
             --env "CUA_DRIVER_TELEMETRY_HOME=$data/cua-telemetry" \
             "$product_app" --args \
             serve --socket "$socket" \

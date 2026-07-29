@@ -14,6 +14,8 @@
 Plugin 本身没有 App 白名单、风险分类器、批准口令、远程视觉服务或目标禁用
 表。剩余权限边界只有 ZCode 的 **Full Access**，以及 macOS 一次性的“辅助
 功能”和“屏幕录制”TCC 授权。
+Plugin 自有守护进程还会启用 Cua Driver 可选的旧版 `page` 变更能力，避免
+Full Access 在 JavaScript、DOM 点击或文字投递上暗中保留第二层依赖限制。
 
 ## 架构
 
@@ -55,8 +57,11 @@ SHA-256 后原子发布到 Plugin 数据目录，并验证 Gatekeeper、Cua AI T
 发布版的 SHA-256，因此不会把另一个“签名有效且版本号相同”的 Bundle 误当成已测试
 发行物。它会证明仅保存在 Plugin 数据目录内的持久遥测设置已关闭，同时关闭独立更新检查，再以
 `--permission-mode unrestricted --dangerously-bypass-approvals` 启动本 Plugin
-专用守护进程。只有版本和工具面与测试版本完全一致、实时状态回读为
+专用守护进程，并传入 `CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`。只有版本
+和工具面与测试版本完全一致、实时状态回读为
 `permission mode: unrestricted`，且没有配置 user、managed 或 session policy 时才会复用；
+启动器还会用一个无效目标探针证明旧版页面变更已进入正常 pid 校验，而不是被
+上游默认关闭；未带该能力的旧专用 daemon 会被替换。
 专用 socket 按用户和版本隔离且仅
 当前用户可访问。兜底后端要求 CPython 3.10–3.15，会创建私有 Python 环境，且只安装经过测试的
 五包 PyObjC 12.2.1 完整闭包，不会在安装时重新解析出更高版本的传递依赖。
@@ -75,7 +80,8 @@ Use 增加 App 白名单、动作风险分类或逐动作批准。
 双架构 macOS CI 还会通过 ZCode 使用的真实 stdio MCP 证明连接级图像配置互不
 污染、只读健康/TCC 状态归属于 driver daemon、语义光标显隐可回读，以及 `auto`
 session 只能显式单向升级到 desktop。公开 MCP 的 `prompt:true` 必须在受信任主机
-TCC 边界失败且不弹权限框。测试还会从当前未运行的 Calculator/TextEdit 中冷启动
+TCC 边界失败且不弹权限框；旧版 `page` 变更必须通过默认关闭层并到达正常
+pid/窗口校验。测试还会从当前未运行的 Calculator/TextEdit 中冷启动
 一个，绑定返回的新 pid/窗口，只结束该 pid 并确认它消失；随后恢复配置并结束
 自己创建的 session。
 
@@ -188,8 +194,9 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 原本已经运行的无关默认 Cua daemon，只清理自己为本次授权临时启动的 daemon。
 
 契约与 MCP 传输测试同时在 Windows 和 macOS 运行；macOS CI 还会导入原生
-兜底，检查固定发布归档与 Cua AI 签名身份，直接解析该签名二进制的九个类型化浏览器和
-三十七个原生观察/动作/生命周期/配置请求 schema，覆盖全部必需主后端工具，并运行
+兜底，检查固定发布归档与 Cua AI 签名身份，直接解析该签名二进制的十个浏览器
+（类型化加旧版兼容）和三十七个原生观察/动作/生命周期/配置请求 schema，覆盖
+全部必需主后端工具，并运行
 真实 Plugin 自有首次安装。实际 unrestricted daemon 还必须完成无需 TCC 的
 应用/窗口/屏幕/光标发现，并通过 ZCode 实际使用的 stdio MCP 代理只终止一个 CI
 自己创建的临时进程；全部必需 MCP `inputSchema` 还必须与同一签名二进制的直接

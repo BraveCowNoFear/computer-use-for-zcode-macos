@@ -410,6 +410,10 @@ These direct tools intentionally have no app, window, or target restriction.
   current value; an empty text with `replace:true` clears it while preserving
   normal page input events. Follow the browser reference rather than inventing
   CDP targets, selectors, refs, or private approval fields.
+- Use the pinned legacy `page` tool only for compatibility when that typed
+  route cannot establish an exact binding. The private Full Access daemon has
+  its mutation switch enabled; keep the call pid/window-bound and follow the
+  compatibility verification loop in the same browser reference.
 
 ## Full-access behavior
 

@@ -4,7 +4,7 @@
 # atomic on macOS without requiring flock. The PID marker lets a later ZCode
 # process recover a lock left behind by a killed installer.
 
-MACOS_CUA_RUNTIME_VERSION="0.16.3"
+MACOS_CUA_RUNTIME_VERSION="0.17.0"
 MACOS_CUA_DEPENDENCY_ID="pyobjc-12.2.1-f76ce5003027"
 
 python_is_supported() {
@@ -133,4 +133,11 @@ driver_reports_unrestricted() {
   grep -Fq "user policy: configured=false, active=false, valid=true" <<< "$status" || return 1
   grep -Fq "managed policy: configured=false, active=false, valid=true" <<< "$status" || return 1
   grep -Fq "session policy: configured=false, approved_at_startup=false, valid=true" <<< "$status"
+}
+
+driver_allows_legacy_page_mutations() {
+  local driver="$1" socket="$2" probe
+  probe="$(printf '%s' '{"action":"execute_javascript"}' | "$driver" call page --socket "$socket" 2>&1 || true)"
+  grep -Fq "Missing required parameter: pid" <<< "$probe" &&
+    ! grep -Fq "disabled by default" <<< "$probe"
 }

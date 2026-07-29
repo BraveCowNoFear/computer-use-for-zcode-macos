@@ -31,6 +31,7 @@ TELEMETRY_HOME="$DATA_DIR/cua-telemetry"
 export CUA_DRIVER_RS_TELEMETRY_ENABLED=0
 export CUA_TELEMETRY_ENABLED=0
 export CUA_DRIVER_RS_UPDATE_CHECK=false
+export CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1
 export CUA_DRIVER_TELEMETRY_HOME="$TELEMETRY_HOME"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -87,7 +88,7 @@ has_required_surface() {
     move_cursor list_apps list_windows bring_to_front \
     launch_app kill_app get_window_state get_desktop_state click double_click right_click press_key hotkey \
     type_text scroll set_value drag zoom browser_prepare get_browser_state browser_navigate \
-    browser_click browser_type browser_pointer browser_dialog browser_set_input_files browser_download \
+    page browser_click browser_type browser_pointer browser_dialog browser_set_input_files browser_download \
     start_recording stop_recording get_recording_state replay_trajectory; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1
   done
@@ -227,7 +228,8 @@ fi
 chmod 700 "$SOCKET_DIR"
 
 daemon_is_verified() {
-  driver_reports_unrestricted "$BIN" "$SOCKET"
+  driver_reports_unrestricted "$BIN" "$SOCKET" &&
+    driver_allows_legacy_page_mutations "$BIN" "$SOCKET"
 }
 
 stop_plugin_daemon_bounded() {
@@ -271,6 +273,7 @@ if ! daemon_is_verified; then
     --env CUA_DRIVER_RS_TELEMETRY_ENABLED=0 \
     --env CUA_TELEMETRY_ENABLED=0 \
     --env CUA_DRIVER_RS_UPDATE_CHECK=false \
+    --env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1 \
     --env "CUA_DRIVER_TELEMETRY_HOME=$TELEMETRY_HOME" \
     "$APP_BUNDLE" --args \
     serve \
@@ -287,7 +290,6 @@ if ! daemon_is_verified; then
     fi
     if "$BIN" status --socket "$SOCKET" >/dev/null 2>&1; then
       ready=2
-      break
     fi
     sleep 0.2
     attempt=$((attempt + 1))

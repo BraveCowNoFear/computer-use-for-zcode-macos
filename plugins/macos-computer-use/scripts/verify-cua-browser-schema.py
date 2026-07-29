@@ -15,6 +15,40 @@ from typing import Any
 EXPECTED_VERSION = "0.13.1"
 
 CONTRACTS: dict[str, dict[str, Any]] = {
+    "page": {
+        "additional_properties": False,
+        "exact_properties": True,
+        "exact_required": True,
+        "properties": {
+            "pid", "window_id", "action", "selector", "text", "cdp_port",
+            "target_url_contains", "javascript", "css_selector", "attributes",
+            "bundle_id", "user_has_confirmed_enabling",
+        },
+        "required": {"action"},
+        "enums": {
+            "action": {
+                "execute_javascript", "get_text", "query_dom", "click_element",
+                "insert_text", "type_keystrokes",
+                "enable_javascript_apple_events",
+            },
+        },
+        "types": {
+            "pid": "integer",
+            "window_id": "integer",
+            "action": "string",
+            "selector": "string",
+            "text": "string",
+            "cdp_port": "integer",
+            "target_url_contains": "string",
+            "javascript": "string",
+            "css_selector": "string",
+            "attributes": "array",
+            "bundle_id": "string",
+            "user_has_confirmed_enabling": "boolean",
+        },
+        "item_types": {"attributes": "string"},
+        "limits": {"cdp_port": {"minimum": 1, "maximum": 65535}},
+    },
     "get_browser_state": {
         "properties": {
             "session", "pid", "window_id", "target_id", "tab_id",
@@ -121,24 +155,46 @@ def describe(binary: Path, name: str) -> dict[str, Any]:
         schema = json.loads(output.split(marker, 1)[1].strip())
     except json.JSONDecodeError as error:
         fail(f"{name} input_schema is not JSON: {error}")
-    if schema.get("type") != "object" or schema.get("additionalProperties") is not True:
-        fail(f"{name} no longer advertises an extensible object schema")
+    if schema.get("type") != "object":
+        fail(f"{name} no longer advertises an object schema")
     return schema
 
 
 def verify_schema(name: str, schema: dict[str, Any], contract: dict[str, Any]) -> None:
+    expected_additional = contract.get("additional_properties", True)
+    if schema.get("additionalProperties") is not expected_additional:
+        fail(
+            f"{name} additionalProperties drifted: expected {expected_additional}, "
+            f"got {schema.get('additionalProperties')!r}"
+        )
     properties = schema.get("properties")
     if not isinstance(properties, dict):
         fail(f"{name} omitted properties")
 
-    missing = contract.get("properties", set()) - properties.keys()
-    if missing:
-        fail(f"{name} omitted properties {sorted(missing)}")
+    expected_properties = contract.get("properties", set())
+    if contract.get("exact_properties"):
+        if set(properties) != expected_properties:
+            fail(
+                f"{name} properties drifted: expected {sorted(expected_properties)}, "
+                f"got {sorted(properties)}"
+            )
+    else:
+        missing = expected_properties - properties.keys()
+        if missing:
+            fail(f"{name} omitted properties {sorted(missing)}")
 
     required = set(schema.get("required", []))
-    missing_required = contract.get("required", set()) - required
-    if missing_required:
-        fail(f"{name} made required fields optional: {sorted(missing_required)}")
+    expected_required = contract.get("required", set())
+    if contract.get("exact_required"):
+        if required != expected_required:
+            fail(
+                f"{name} required fields drifted: expected {sorted(expected_required)}, "
+                f"got {sorted(required)}"
+            )
+    else:
+        missing_required = expected_required - required
+        if missing_required:
+            fail(f"{name} made required fields optional: {sorted(missing_required)}")
 
     for field, expected in contract.get("enums", {}).items():
         actual = set(properties[field].get("enum", []))
@@ -191,7 +247,10 @@ def main() -> int:
     for name, contract in CONTRACTS.items():
         verify_schema(name, describe(binary, name), contract)
 
-    print(f"Verified {len(CONTRACTS)} typed browser schemas from Cua Driver {EXPECTED_VERSION}.")
+    print(
+        f"Verified {len(CONTRACTS)} typed and legacy browser schemas "
+        f"from Cua Driver {EXPECTED_VERSION}."
+    )
     return 0
 
 

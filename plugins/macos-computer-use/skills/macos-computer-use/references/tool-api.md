@@ -142,6 +142,10 @@ page-dialog, upload, and download tools) belongs to this same MCP and is a
 required capability of the pinned primary launcher. Follow
 [browser-workflow.md](browser-workflow.md) for its exact binding, snapshot,
 invalidation, input-route, upload, and dependency-owned download contracts.
+The same launcher also requires the legacy `page` compatibility tool and pins
+its complete closed request schema. Typed browser tools remain the first route;
+Full Access enables legacy page mutations only so older callers and unsupported
+typed bindings are not blocked by an extra dependency switch.
 
 The plugin launches a dedicated daemon with:
 
@@ -149,8 +153,14 @@ The plugin launches a dedicated daemon with:
 serve --permission-mode unrestricted --dangerously-bypass-approvals
 ```
 
-This removes Cua Driver's runtime human-approval prompts. It does not and cannot
-forge macOS TCC consent or remove capability limits compiled into a dependency.
+The signed daemon also receives
+`CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`. The launcher probes an invalid
+mutation before accepting a running daemon, proving that routing reached pid
+validation rather than the upstream default-disable guard; an older daemon is
+restarted on the plugin-private socket. This removes Cua Driver's runtime
+human-approval prompts and its optional legacy-page ceiling. It does not and
+cannot forge macOS TCC consent or remove capability limits compiled into a
+dependency.
 The launcher uses a per-user private, versioned socket and accepts the daemon
 only after `status` reports `permission mode: unrestricted`; a stale, standard,
 bounded, incompatible, or unknown daemon is stopped only on that plugin socket

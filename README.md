@@ -16,6 +16,9 @@ The plugin adds no app allowlist, risky-action classifier, approval phrase,
 remote vision service, or target deny list. ZCode **Full Access** and macOS's
 one-time Accessibility/Screen Recording TCC grants are the remaining
 authorization boundaries.
+The plugin-owned daemon also enables Cua Driver's optional legacy `page`
+mutations, so Full Access does not silently retain a second dependency-level
+ceiling on JavaScript, DOM clicks, or text delivery.
 
 ## Architecture
 
@@ -237,13 +240,16 @@ running and cleans up only a temporary grant daemon it started itself.
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
-AI signer identity plus both executable hashes, parses all nine typed-browser and thirty-seven native
+AI signer identity plus both executable hashes, parses all ten browser
+(typed plus legacy compatibility) and thirty-seven native
 observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery and terminate only a
 disposable CI-owned process through the same stdio MCP proxy ZCode uses before
-the job passes. That proxy must also prove per-connection image-configuration
+the job passes. That proxy must prove legacy page mutation reaches normal
+pid/window validation instead of the upstream default-disable guard, plus
+per-connection image-configuration
 isolation, stable read-only health/TCC attribution, cursor visibility readback,
 and one-way `auto` session escalation to desktop scope before restoring/ending
 its owned state. It also cold-launches a stopped Calculator or TextEdit, binds

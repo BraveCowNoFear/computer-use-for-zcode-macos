@@ -122,7 +122,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.16.3"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.0"},
             },
         )
         if not isinstance(result.get("serverInfo"), dict):
@@ -220,8 +220,8 @@ def main() -> int:
     required = load_contracts(scripts / "verify-cua-native-schema.py") | load_contracts(
         scripts / "verify-cua-browser-schema.py"
     )
-    if len(required) != 46:
-        fail(f"expected 46 pinned tools, got {len(required)}")
+    if len(required) != 47:
+        fail(f"expected 47 pinned tools, got {len(required)}")
 
     client = MCPClient(binary, socket)
     peer = MCPClient(binary, socket)
@@ -324,6 +324,19 @@ def main() -> int:
             health_checks["tcc_screen_recording"].get("status") == "pass"
         ) != permissions["screen_recording"]:
             fail("health_report and check_permissions disagreed on Screen Recording")
+
+        try:
+            client.call("page", {"action": "execute_javascript"})
+        except RuntimeError as error:
+            page_probe = str(error)
+            if (
+                "Missing required parameter: pid" not in page_probe
+                or "disabled by default" in page_probe
+            ):
+                fail(f"legacy page mutations remained constrained: {page_probe}")
+        else:
+            fail("invalid page mutation probe unexpectedly succeeded")
+
         apps, _ = client.call("list_apps")
         apps = require_object("list_apps", apps, {"apps"})
         if not isinstance(apps["apps"], list):
@@ -648,7 +661,7 @@ def main() -> int:
         client.close()
 
     print(
-        "Verified primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
+        "Verified unrestricted legacy page mutation routing, primary diagnostics, complete schemas, connection isolation, native app/cursor/session lifecycle, and process control over stdio MCP."
     )
     return 0
 

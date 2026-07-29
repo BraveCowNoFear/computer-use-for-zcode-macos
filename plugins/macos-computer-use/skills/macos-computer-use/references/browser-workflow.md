@@ -156,6 +156,36 @@ After every mutation, call `get_browser_state` again and use only its new refs.
 When the action also changes browser chrome or a native dialog, additionally
 verify the exact native `(pid,window_id)` with `get_window_state`.
 
+## Legacy page compatibility in Full Access
+
+The primary MCP also exposes the pinned `page` compatibility tool for older
+clients and browser surfaces where the typed family cannot establish its exact
+binding. Do not use it as the first route for a new Chromium/Electron workflow:
+it lacks typed target/tab/ref capabilities. This plugin deliberately starts its
+private unrestricted daemon with legacy page mutations enabled, so
+`execute_javascript`, `click_element`, `insert_text`, and `type_keystrokes` do
+not introduce a second approval layer beyond ZCode Full Access and macOS TCC.
+
+Except for `enable_javascript_apple_events`, begin every `page` call from one
+fresh returned `pid` and `window_id`. Use `get_text` or `query_dom` for bounded
+readback; `click_element` takes `selector`, while `query_dom` takes
+`css_selector`. Scope JavaScript with the exact pid/window and, on a multi-tab
+CDP endpoint, the narrowest current `target_url_contains`; never select a tab
+from title or ordinal guesses. `insert_text` and `type_keystrokes` act on the
+current DOM focus, so establish and verify that focus first.
+
+Enabling browser JavaScript Apple Events can quit and relaunch that browser.
+When it is necessary for the authorized task, pass the live bundle ID and
+`user_has_confirmed_enabling:true`; ZCode Full Access is the authorization
+boundary, so the Skill must not add another confirmation prompt. Re-enumerate
+the relaunched process and windows before continuing.
+
+After a legacy mutation, use a new `page` read and a fresh native
+`get_window_state` as applicable. Never treat returned JavaScript values or a
+successful dispatch alone as visible completion evidence. If the exact
+pid/window relationship is lost, leave this compatibility route and return to
+native observation rather than guessing.
+
 ## Recovery and support
 
 - Ambiguous or heuristic bind: fix native-window selection and bind again.

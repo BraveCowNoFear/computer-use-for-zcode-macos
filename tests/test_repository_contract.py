@@ -187,6 +187,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("click double_click right_click", launcher)
         self.assertRegex(launcher, r"\bzoom\b")
         for browser_tool in (
+            "page",
             "browser_prepare",
             "get_browser_state",
             "browser_navigate",
@@ -209,8 +210,11 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
         self.assertIn("CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
+        self.assertIn("export CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1", launcher)
         self.assertIn("--env CUA_DRIVER_RS_UPDATE_CHECK=false", launcher)
         self.assertIn("--env CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
+        self.assertIn("--env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1", launcher)
+        self.assertIn('driver_allows_legacy_page_mutations "$BIN" "$SOCKET"', launcher)
         self.assertIn('TELEMETRY_HOME="$DATA_DIR/cua-telemetry"', launcher)
         self.assertIn('export CUA_DRIVER_TELEMETRY_HOME="$TELEMETRY_HOME"', launcher)
         self.assertIn('--env "CUA_DRIVER_TELEMETRY_HOME=$TELEMETRY_HOME"', launcher)
@@ -226,6 +230,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('user policy: configured=false, active=false, valid=true', common)
         self.assertIn('managed policy: configured=false, active=false, valid=true', common)
         self.assertIn('session policy: configured=false, approved_at_startup=false, valid=true', common)
+        self.assertIn("driver_allows_legacy_page_mutations", common)
+        self.assertIn("Missing required parameter: pid", common)
+        self.assertIn("disabled by default", common)
         self.assertIn('driver_reports_unrestricted "$BIN" "$SOCKET"', launcher)
         self.assertIn("will not mislabel a policy-constrained daemon as full access", launcher)
         for variable in (
@@ -248,6 +255,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("user policy: configured=false, active=false, valid=true", workflow)
         self.assertIn("managed policy: configured=false, active=false, valid=true", workflow)
         self.assertIn("session policy: configured=false, approved_at_startup=false, valid=true", workflow)
+        self.assertIn("--env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1", workflow)
 
     def test_manual_install_and_doctor_reuse_the_automatic_fallback_runtime(self):
         install = (PLUGIN / "scripts" / "install.sh").read_text(encoding="utf-8")
@@ -266,6 +274,10 @@ class RepositoryContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn('EXPECTED_VERSION = "0.13.1"', browser_verifier)
+        self.assertIn('"page"', browser_verifier)
+        self.assertIn('"execute_javascript"', browser_verifier)
+        self.assertIn('"enable_javascript_apple_events"', browser_verifier)
+        self.assertIn('"user_has_confirmed_enabling"', browser_verifier)
         self.assertIn('"get_browser_state"', browser_verifier)
         self.assertIn('"semantic_v2"', browser_verifier)
         self.assertIn('"browser_pointer"', browser_verifier)
@@ -339,6 +351,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('direct_schema = describe(binary, name)', mcp_runtime)
         self.assertIn('client.call("health_report")', mcp_runtime)
         self.assertIn('client.call("check_permissions", {"prompt": False})', mcp_runtime)
+        self.assertIn('client.call("page", {"action": "execute_javascript"})', mcp_runtime)
+        self.assertIn('"legacy page mutations remained constrained', mcp_runtime)
         self.assertIn('"os_permission_prompt_requires_trusted_host"', mcp_runtime)
         self.assertIn('"start_session", {"session": session, "capture_scope": "auto"}', mcp_runtime)
         self.assertIn('client.call("get_session_state", {"session": session})', mcp_runtime)
@@ -378,7 +392,7 @@ class RepositoryContractTests(unittest.TestCase):
         native, browser = contract_sets
         self.assertTrue(native.isdisjoint(browser))
         self.assertEqual(required, native | browser)
-        self.assertEqual(len(required), 46)
+        self.assertEqual(len(required), 47)
 
     def test_live_smoke_reuses_the_automatic_fallback_runtime(self):
         smoke = (PLUGIN / "scripts" / "live-smoke.sh").read_text(encoding="utf-8")
@@ -447,6 +461,10 @@ class RepositoryContractTests(unittest.TestCase):
             '! driver_reports_unrestricted standard_driver /tmp/standard.sock\n'
             '! driver_reports_unrestricted restricted_driver /tmp/restricted.sock\n'
             'driver_reports_unrestricted unrestricted_driver /tmp/unrestricted.sock\n'
+            'page_disabled_driver() { printf "%s\\n" "legacy page mutation is disabled by default" >&2; return 1; }\n'
+            'page_enabled_driver() { printf "%s\\n" "Missing required parameter: pid" >&2; return 1; }\n'
+            '! driver_allows_legacy_page_mutations page_disabled_driver /tmp/page-disabled.sock\n'
+            'driver_allows_legacy_page_mutations page_enabled_driver /tmp/page-enabled.sock\n'
         )
         completed = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=10)
         self.assertEqual(completed.returncode, 0, completed.stderr)
