@@ -159,7 +159,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('TeamIdentifier=$EXPECTED_TEAM_ID', launcher)
         self.assertIn("--permission-mode unrestricted", launcher)
         self.assertIn("--dangerously-bypass-approvals", launcher)
-        self.assertIn("start_session escalate_session end_session", launcher)
+        self.assertIn("start_session get_session_state escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
@@ -300,7 +300,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertNotIn("check_permissions({prompt:true", skill)
         self.assertIn("Public MCP calls are status-only", skill)
         self.assertIn("permissions grant", skill)
-        self.assertIn("escalate_session({session})", skill)
+        self.assertIn('escalate_session({session,reason:"no_window_target",detail:"menu bar required"})', skill)
+        self.assertIn("keep optional detail bounded and free of", skill)
         self.assertIn("element_token", skill)
         self.assertIn("replace:true", skill)
         self.assertIn("## Keep the session cursor human-visible", skill)
@@ -393,11 +394,14 @@ class RepositoryContractTests(unittest.TestCase):
             'check_permissions", {"prompt": False}',
             '"driver-daemon"',
             '"start_session"',
+            '"get_session_state"',
+            '"escalate_session"',
             '"end_session"',
             '"get_agent_cursor_state"',
             '"set_agent_cursor_enabled"',
             '"get_cursor_position"',
             '"get_screen_size"',
+            '"get_desktop_state"',
             '"move_cursor"',
             '"press_key"',
             '"hotkey"',
@@ -417,6 +421,9 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_background_scroll_verified"',
             '"primary_background_hotkey_verified"',
             '"primary_background_press_key_verified"',
+            '"primary_desktop_scope_verified"',
+            '"primary_real_pointer_moved_from_fresh_desktop"',
+            '"primary_real_pointer_restored_and_reobserved"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',
             '"primary_visible_result_verified"',
@@ -429,6 +436,8 @@ class RepositoryContractTests(unittest.TestCase):
             '"fallback_raw_mouse_sequence_verified"',
             '"fallback_cursor_restored"',
             "fixture_button_screenshot_point",
+            "desktop_screenshot_point",
+            "restore_pointer_direct",
             "require_action_verdict",
             "self.process.kill()",
         ):
@@ -458,6 +467,19 @@ class RepositoryContractTests(unittest.TestCase):
             "screenshot_height": 644,
         }
         self.assertEqual(module.primary_screenshot_point(primary_state, 510.0, 22.0), (1020.0, 600.0))
+        desktop_state = {
+            "screen_width": 720,
+            "screen_height": 450,
+            "screenshot_width": 1440,
+            "screenshot_height": 900,
+        }
+        self.assertEqual(module.desktop_screenshot_point(desktop_state, 100, 50), (200.0, 100.0))
+        self.assertEqual(
+            module.nudged_primary_pointer_target(desktop_state, {"x": 100, "y": 50}),
+            {"x": 112, "y": 50},
+        )
+        self.assertTrue(module.cursor_matches({"x": 112, "y": 51}, {"x": 112, "y": 50}))
+        self.assertFalse(module.cursor_matches({"x": 114, "y": 50}, {"x": 112, "y": 50}))
         screen_state = {
             "window": {"bounds": {"x": 100, "y": 50, "width": 640, "height": 322}}
         }

@@ -80,7 +80,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.7"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.10.8"},
             },
         )
         self.notify("notifications/initialized")
@@ -199,6 +199,57 @@ def new_live_session() -> str:
     return f"zcode-smoke-{uuid.uuid4().hex[:8]}"
 
 
+def desktop_screenshot_point(
+    state: dict[str, Any], screen_x: float, screen_y: float
+) -> tuple[float, float]:
+    """Map a primary-display Quartz point into its fresh desktop PNG pixels."""
+    screen_width = float(state["screen_width"])
+    screen_height = float(state["screen_height"])
+    image_width = float(state["screenshot_width"])
+    image_height = float(state["screenshot_height"])
+    if min(screen_width, screen_height, image_width, image_height) <= 0:
+        raise RuntimeError(f"Primary desktop returned invalid geometry: {state}")
+    return (
+        float(screen_x) * image_width / screen_width,
+        float(screen_y) * image_height / screen_height,
+    )
+
+
+def nudged_primary_pointer_target(
+    state: dict[str, Any], current: dict[str, Any]
+) -> dict[str, float]:
+    """Choose a small, observable pointer move that stays on the primary display."""
+    width = float(state["screen_width"])
+    height = float(state["screen_height"])
+    if width <= 30 or height <= 4:
+        raise RuntimeError(f"Primary display was too small for pointer proof: {state}")
+    x = min(max(float(current["x"]), 2.0), width - 3.0)
+    y = min(max(float(current["y"]), 2.0), height - 3.0)
+    x += 12.0 if x <= width - 15.0 else -12.0
+    return {"x": round(x), "y": round(y)}
+
+
+def cursor_matches(actual: dict[str, Any], expected: dict[str, Any], tolerance: float = 1.0) -> bool:
+    return all(
+        isinstance(actual.get(axis), (int, float))
+        and isinstance(expected.get(axis), (int, float))
+        and abs(float(actual[axis]) - float(expected[axis])) <= tolerance
+        for axis in ("x", "y")
+    )
+
+
+def restore_pointer_direct(position: dict[str, Any]) -> None:
+    """Best-effort emergency restoration, including a cursor on another display."""
+    import Quartz  # type: ignore[import-not-found]
+
+    result = Quartz.CGWarpMouseCursorPosition(
+        (float(position["x"]), float(position["y"]))
+    )
+    if result not in (None, 0):
+        raise RuntimeError(f"Quartz pointer restoration failed with CGError {result}")
+    time.sleep(0.05)
+
+
 def primary_element(elements: list[dict[str, Any]], role: str, text: str | None = None) -> dict[str, Any]:
     for element in elements:
         searchable = " ".join(str(element.get(key, "")) for key in ("label", "value"))
@@ -265,6 +316,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     )
     session = new_live_session()
     session_started = False
+    original_real_cursor: dict[str, Any] | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
@@ -273,6 +325,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         required = {
             "check_permissions",
             "start_session",
+            "get_session_state",
+            "escalate_session",
             "end_session",
             "get_agent_cursor_state",
             "set_agent_cursor_enabled",
@@ -281,6 +335,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "move_cursor",
             "list_windows",
             "get_window_state",
+            "get_desktop_state",
             "type_text",
             "press_key",
             "hotkey",
@@ -305,7 +360,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         report["permissionAttribution"] = attribution
         report["steps"].append("primary_permissions_ready")
 
-        client.call("start_session", {"session": session, "capture_scope": "window"})
+        client.call("start_session", {"session": session, "capture_scope": "auto"})
         session_started = True
         cursor_disabled, _ = client.call(
             "set_agent_cursor_enabled", {"session": session, "enabled": False}
@@ -337,6 +392,11 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if not isinstance(width, (int, float)) or not isinstance(height, (int, float)):
             raise RuntimeError(f"Primary screen size was not numeric: {screen_size}")
         real_cursor_before, _ = client.call("get_cursor_position", {})
+        if not isinstance(real_cursor_before, dict) or not cursor_matches(
+            real_cursor_before, real_cursor_before, tolerance=0
+        ):
+            raise RuntimeError(f"Primary real pointer position was invalid: {real_cursor_before}")
+        original_real_cursor = dict(real_cursor_before)
         virtual_target = demo_cursor_target(width, height)
         client.call(
             "move_cursor",
@@ -618,8 +678,100 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if expected not in final_state.get("tree_markdown", ""):
             raise RuntimeError(f"Primary final visible/AX result did not contain {expected!r}")
         report["steps"].append("primary_visible_result_verified")
+
+        escalated, _ = client.call(
+            "escalate_session",
+            {
+                "session": session,
+                "reason": "no_window_target",
+                "detail": "live-smoke desktop pointer proof",
+            },
+        )
+        if escalated.get("effective_scope") != "desktop" or escalated.get("desktop_unlocked") is not True:
+            raise RuntimeError(f"Primary session did not escalate to desktop: {escalated}")
+        session_state, _ = client.call("get_session_state", {"session": session})
+        if (
+            session_state.get("capture_scope") != "auto"
+            or session_state.get("effective_scope") != "desktop"
+            or session_state.get("escalation_reason") != "no_window_target"
+        ):
+            raise RuntimeError(f"Primary desktop session state was inconsistent: {session_state}")
+        report["steps"].append("primary_desktop_scope_verified")
+
+        desktop_state, desktop_content = client.call("get_desktop_state", {"session": session})
+        require_image(desktop_content, "primary desktop state before pointer move")
+        current_pointer, _ = client.call("get_cursor_position", {"session": session})
+        target_screen = nudged_primary_pointer_target(desktop_state, current_pointer)
+        target_pixels = desktop_screenshot_point(
+            desktop_state,
+            target_screen["x"],
+            target_screen["y"],
+        )
+        moved, _ = client.call(
+            "move_cursor",
+            {
+                "session": session,
+                "scope": "desktop",
+                "x": target_pixels[0],
+                "y": target_pixels[1],
+            },
+        )
+        if moved.get("scope") != "desktop" or moved.get("effect") != "unverifiable":
+            raise RuntimeError(f"Primary desktop pointer move returned no usable verdict: {moved}")
+        moved_pointer, _ = client.call("get_cursor_position", {"session": session})
+        if not cursor_matches(moved_pointer, target_screen):
+            raise RuntimeError(
+                f"Primary desktop pointer reached {moved_pointer}, expected {target_screen}"
+            )
+        report["steps"].append("primary_real_pointer_moved_from_fresh_desktop")
+
+        restore_state, restore_content = client.call("get_desktop_state", {"session": session})
+        require_image(restore_content, "primary desktop state before pointer restoration")
+        screen_width = float(restore_state["screen_width"])
+        screen_height = float(restore_state["screen_height"])
+        original_on_primary = (
+            0 <= float(original_real_cursor["x"]) < screen_width
+            and 0 <= float(original_real_cursor["y"]) < screen_height
+        )
+        if original_on_primary:
+            restore_pixels = desktop_screenshot_point(
+                restore_state,
+                float(original_real_cursor["x"]),
+                float(original_real_cursor["y"]),
+            )
+            client.call(
+                "move_cursor",
+                {
+                    "session": session,
+                    "scope": "desktop",
+                    "x": restore_pixels[0],
+                    "y": restore_pixels[1],
+                },
+            )
+            report["pointerRestorePath"] = "primary_desktop"
+        else:
+            restore_pointer_direct(original_real_cursor)
+            report["pointerRestorePath"] = "quartz_multidisplay_cleanup"
+        restored_pointer, _ = client.call("get_cursor_position", {"session": session})
+        if not cursor_matches(restored_pointer, original_real_cursor):
+            raise RuntimeError(
+                f"Primary pointer restoration reached {restored_pointer}, expected {original_real_cursor}"
+            )
+        final_desktop_state, final_desktop_content = client.call(
+            "get_desktop_state", {"session": session}
+        )
+        require_image(final_desktop_content, "primary final desktop state")
+        if final_desktop_state.get("display") != "primary":
+            raise RuntimeError(f"Primary final desktop state was malformed: {final_desktop_state}")
+        original_real_cursor = None
+        report["steps"].append("primary_real_pointer_restored_and_reobserved")
         return report
     finally:
+        if original_real_cursor is not None:
+            try:
+                restore_pointer_direct(original_real_cursor)
+            except Exception:
+                pass
         if session_started:
             try:
                 client.call("end_session", {"session": session})

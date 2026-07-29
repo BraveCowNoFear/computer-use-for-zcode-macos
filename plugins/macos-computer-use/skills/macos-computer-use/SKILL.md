@@ -52,9 +52,14 @@ permissions. Ordinary primary-backend tasks do not need that reference.
 3. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.
    - `auto` for a normal multi-step app task that might later need the desktop.
-     It starts window-only. Call `escalate_session({session})` only after the
-     window action ladder has been exhausted and freshly verified, then obtain
-     a new desktop state before any desktop action.
+     It starts window-only. Call
+     `escalate_session({session,reason:"no_window_target",detail:"menu bar required"})`
+     only after the window action ladder has been exhausted and freshly
+     verified, then obtain a new desktop state before any desktop action. Pick
+     the truthful reason from `ax_tree_pixel_mismatch`,
+     `background_delivery_failed`, `foreground_ineffective`,
+     `no_window_target`, or `other`; keep optional detail bounded and free of
+     secrets or copied content.
    - `desktop` when the requested task inherently crosses apps, the menu bar,
      Dock, desktop, system UI, or several windows.
 4. Pass that public `session` field on state and action calls. Call

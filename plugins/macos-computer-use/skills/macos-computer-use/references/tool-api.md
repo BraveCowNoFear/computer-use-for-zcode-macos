@@ -17,7 +17,7 @@ Common flow:
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |
 | Hide/show session cursor | `set_agent_cursor_enabled({session, enabled})` |
 | Move only the visible session cursor | `move_cursor({session, x, y, scope:"window"})` |
-| Unlock desktop for an `auto` session | `escalate_session({session})` after verified window-ladder exhaustion |
+| Unlock desktop for an `auto` session | `escalate_session({session, reason, detail})` after verified window-ladder exhaustion |
 | Launch app | `launch_app({bundle_id})` |
 | List app windows | `list_windows({pid})` |
 | Snapshot | `get_window_state({session, pid, window_id})` |
@@ -39,6 +39,12 @@ The public session ID is also the local cursor-badge label and color seed. Use
 a short task slug plus a compact uniqueness suffix (for example,
 `mail-triage-a1b2`), keep it within 28 visible characters, and never include
 secrets or copied user content. Reuse that exact ID throughout one run.
+
+`escalate_session` requires a truthful `reason`: `ax_tree_pixel_mismatch`,
+`background_delivery_failed`, `foreground_ineffective`, `no_window_target`, or
+`other`. Optional `detail` is a short local diagnostic, never secrets or page
+content. Read back `get_session_state({session})`, require effective desktop
+scope, and then take a new desktop snapshot before acting.
 
 Declared sessions receive an enabled, colored semantic cursor overlay by
 default. Primary actions animate it without moving the real OS pointer. The

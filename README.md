@@ -114,6 +114,10 @@ root/data template variables.
   and an element-bound Space key independently before the final mouse click.
 - Require a snapshot-bound `set_value` to return confirmed AX readback and a
   fresh slider element to expose the requested value independently of dragging.
+- Exercise the primary session's real `auto` to desktop transition with a
+  required reason, verify `get_session_state`, move the real pointer from fresh
+  primary-display pixels, restore its original multi-display position, and
+  re-observe the desktop. Emergency cleanup also restores the pointer on error.
 - Type Unicode, press Mac shortcuts with real modifier down/up transitions,
   accept common X11/macOS and keypad-navigation key aliases, and set
   Accessibility values.
