@@ -69,7 +69,7 @@ has_required_surface() {
   tools="$($candidate list-tools 2>/dev/null)" || return 1
   for required in \
     check_permissions start_session get_session_state escalate_session end_session \
-    get_agent_cursor_state set_agent_cursor_enabled get_cursor_position get_screen_size \
+    get_agent_cursor_state set_agent_cursor_enabled set_agent_cursor_motion get_cursor_position get_screen_size \
     move_cursor list_apps list_windows \
     launch_app kill_app get_window_state get_desktop_state click double_click right_click press_key hotkey \
     type_text scroll set_value drag browser_prepare get_browser_state browser_navigate \

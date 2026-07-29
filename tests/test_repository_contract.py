@@ -161,6 +161,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("--dangerously-bypass-approvals", launcher)
         self.assertIn("start_session get_session_state escalate_session end_session", launcher)
         self.assertIn("get_agent_cursor_state set_agent_cursor_enabled", launcher)
+        self.assertIn("set_agent_cursor_motion", launcher)
         self.assertIn("get_cursor_position get_screen_size", launcher)
         self.assertIn("move_cursor list_apps", launcher)
         self.assertIn("launch_app kill_app", launcher)
@@ -340,6 +341,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("local badge shows the public session label", skill)
         self.assertIn("set_agent_cursor_enabled({session,enabled:false})", skill)
         self.assertIn("get_agent_cursor_state({session})", skill)
+        self.assertIn("`set_agent_cursor_motion` with only that session", skill)
+        self.assertIn("Motion tuning affects only the semantic overlay", skill)
+        self.assertIn("Do not add random target jitter", skill)
         self.assertIn('move_cursor({session,x,y,scope:"window"})', skill)
         self.assertIn('`scope:"desktop"` is a different operation', skill)
         self.assertIn("moves the user's\nreal OS pointer", skill)
@@ -465,6 +469,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"end_session"',
             '"get_agent_cursor_state"',
             '"set_agent_cursor_enabled"',
+            '"set_agent_cursor_motion"',
             '"get_cursor_position"',
             '"get_screen_size"',
             '"get_desktop_state"',
@@ -482,6 +487,8 @@ class RepositoryContractTests(unittest.TestCase):
             "require_cursor_position",
             "element_token",
             '"primary_session_cursor_ready"',
+            '"primary_human_cursor_motion_verified"',
+            '"primary_cursor_motion_restored"',
             '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',

@@ -92,6 +92,18 @@ IDs, and always call `end_session` so its cursor disappears. Do not move the
 real desktop pointer merely to make an AX action look human; normal primary
 actions animate the overlay automatically.
 
+The built-in motion is already speed-based and human-readable. For a demo,
+screen recording, or an explicit request for a different feel, first read the
+session's `motion` from `get_agent_cursor_state`, then call
+`set_agent_cursor_motion` with only that session and the desired subset of
+`start_handle`, `end_handle`, `arc_size`, `arc_flow`, `spring`,
+`glide_duration_ms`, `dwell_after_click_ms`, `idle_hide_ms`, or `turn_radius`.
+Read it back and restore the prior values when the temporary presentation
+change ends. Motion tuning affects only the semantic overlay; it never changes
+the destination, makes background AX input physical, or proves an action landed.
+Do not add random target jitter because it can move a click outside the freshly
+grounded control.
+
 The first AX action seeds a new cursor close to its target, so its initial
 glide can be subtle. For a demo or screen recording that explicitly needs a
 clear approach path, call `move_cursor({session,x,y,scope:"window"})` once at a

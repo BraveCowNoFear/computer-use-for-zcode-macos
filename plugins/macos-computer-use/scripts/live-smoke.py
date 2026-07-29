@@ -26,6 +26,17 @@ FIXTURE_SCROLL_PROBE_CENTER_X = 510.0
 FIXTURE_SCROLL_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM = 57.0
 FIXTURE_GESTURE_PROBE_CENTER_X = 510.0
 FIXTURE_GESTURE_PROBE_CENTER_Y_FROM_CONTENT_BOTTOM = 22.0
+CURSOR_MOTION_FIELDS = {
+    "start_handle",
+    "end_handle",
+    "arc_size",
+    "arc_flow",
+    "spring",
+    "glide_duration_ms",
+    "dwell_after_click_ms",
+    "idle_hide_ms",
+    "turn_radius",
+}
 
 
 def read_line(stream: TextIO, timeout: float, label: str) -> str:
@@ -80,7 +91,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.1"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.2"},
             },
         )
         self.notify("notifications/initialized")
@@ -126,6 +137,28 @@ def require_action_verdict(result: dict[str, Any], step: str) -> None:
     verified = result.get("verified")
     if effect not in {"confirmed", "unverifiable", "suspected_noop"} or not isinstance(verified, bool):
         raise RuntimeError(f"{step} returned no usable action verdict: {result}")
+
+
+def numeric_cursor_motion(motion: dict[str, Any]) -> dict[str, float | int]:
+    return {
+        key: value
+        for key, value in motion.items()
+        if key in CURSOR_MOTION_FIELDS and isinstance(value, (int, float))
+    }
+
+
+def require_cursor_motion(
+    actual: dict[str, Any], expected: dict[str, float | int], step: str
+) -> None:
+    for field, expected_value in expected.items():
+        actual_value = actual.get(field)
+        if (
+            not isinstance(actual_value, (int, float))
+            or abs(float(actual_value) - float(expected_value)) > 1e-6
+        ):
+            raise RuntimeError(
+                f"{step} did not retain {field}={expected_value}: {actual}"
+            )
 
 
 def fixture_screenshot_point(
@@ -335,6 +368,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     )
     session = new_live_session()
     session_started = False
+    original_cursor_motion: dict[str, Any] | None = None
     original_real_cursor: dict[str, Any] | None = None
     isolated_app_pid: int | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
@@ -350,6 +384,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "end_session",
             "get_agent_cursor_state",
             "set_agent_cursor_enabled",
+            "set_agent_cursor_motion",
             "get_cursor_position",
             "get_screen_size",
             "move_cursor",
@@ -395,6 +430,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         )
         cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
         theme = cursor_state.get("theme", {})
+        initial_motion = cursor_state.get("motion")
         if (
             cursor_enabled.get("session") != session
             or cursor_enabled.get("enabled") is not True
@@ -402,10 +438,35 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             or cursor_state.get("enabled") is not True
             or not isinstance(theme.get("id"), str)
             or not theme.get("id")
+            or not isinstance(initial_motion, dict)
         ):
             raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
+        original_cursor_motion = dict(initial_motion)
         report["cursorTheme"] = theme["id"]
         report["steps"].append("primary_session_cursor_ready")
+
+        human_motion = {
+            "start_handle": 0.34,
+            "end_handle": 0.42,
+            "arc_size": 0.18,
+            "arc_flow": 0.12,
+            "spring": 0.78,
+            "glide_duration_ms": 0,
+            "dwell_after_click_ms": 95,
+            "idle_hide_ms": 20_000,
+            "turn_radius": 72,
+        }
+        configured_motion, _ = client.call(
+            "set_agent_cursor_motion", {"session": session, **human_motion}
+        )
+        cursor_state, _ = client.call("get_agent_cursor_state", {"session": session})
+        readback_motion = cursor_state.get("motion", {})
+        require_cursor_motion(
+            configured_motion.get("motion", {}), human_motion, "Primary cursor motion response"
+        )
+        require_cursor_motion(readback_motion, human_motion, "Primary cursor motion state")
+        report["cursorMotion"] = readback_motion
+        report["steps"].append("primary_human_cursor_motion_verified")
 
         apps_before, _ = client.call("list_apps", {})
         existing_calculator_pids = {
@@ -854,6 +915,22 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             raise RuntimeError(f"Primary final desktop state was malformed: {final_desktop_state}")
         original_real_cursor = None
         report["steps"].append("primary_real_pointer_restored_and_reobserved")
+
+        restorable_motion = numeric_cursor_motion(original_cursor_motion)
+        client.call(
+            "set_agent_cursor_motion",
+            {"session": session, **restorable_motion},
+        )
+        restored_cursor_state, _ = client.call(
+            "get_agent_cursor_state", {"session": session}
+        )
+        require_cursor_motion(
+            restored_cursor_state.get("motion", {}),
+            restorable_motion,
+            "Primary cursor motion restoration",
+        )
+        original_cursor_motion = None
+        report["steps"].append("primary_cursor_motion_restored")
         return report
     finally:
         if original_real_cursor is not None:
@@ -868,6 +945,17 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             except Exception:
                 pass
         if session_started:
+            if original_cursor_motion is not None:
+                try:
+                    client.call(
+                        "set_agent_cursor_motion",
+                        {
+                            "session": session,
+                            **numeric_cursor_motion(original_cursor_motion),
+                        },
+                    )
+                except Exception:
+                    pass
             try:
                 client.call("end_session", {"session": session})
             except Exception:
