@@ -374,6 +374,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("The call has no `session` field", skill)
         self.assertIn("same pid to be `active:true` in a fresh `list_apps`", skill)
         self.assertIn("brief front -> act -> restore route", skill)
+        self.assertIn('element_token,action:"pick"', skill)
+        self.assertIn("`press`\n(default), `show_menu`, `pick`, `confirm`, `cancel`, and `open`", skill)
+        self.assertIn("Never\nreuse the pre-open menu token", skill)
         self.assertIn("[browser-workflow.md](references/browser-workflow.md)", skill)
         self.assertIn("[recording-workflow.md](references/recording-workflow.md)", skill)
         self.assertIn("without moving the real OS pointer", (
@@ -551,6 +554,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_local_recording_started"',
             '"primary_local_trajectory_evidence_verified"',
             '"primary_local_recording_stopped"',
+            '"primary_two_snapshot_native_menu_verified"',
             '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',

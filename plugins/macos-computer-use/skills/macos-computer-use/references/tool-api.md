@@ -29,6 +29,7 @@ Common flow:
 | Snapshot desktop | `get_desktop_state({session})` in a desktop-scoped session |
 | AX click | `click({session, pid, window_id, element_index})` |
 | Pixel click | `click({session, pid, window_id, x, y})` |
+| Native menu opener | `click({session, pid, window_id, element_token, action:"pick"})`, then refresh and press the returned menu item |
 | Double-click | `double_click({session, pid, window_id, element_token})` or fresh x/y |
 | Context click | `right_click({session, pid, window_id, element_token})` or fresh x/y |
 | Drag | `drag({session, pid, window_id, from_x, from_y, to_x, to_y, delivery_mode:"foreground"})` after the macOS background-unavailable response |
@@ -105,6 +106,12 @@ indexes and opaque `element_token` handles are cached against one
 the token when the live response and action schema advertise it; otherwise use
 the index. Most input tools accept `delivery_mode:"background"`
 (default) or `"foreground"` (last resort).
+
+Primary `click.action` maps `press`, `show_menu`, `pick`, `confirm`, `cancel`,
+and `open` to the corresponding advertised AX operation. Native app menus are
+frontmost-only and use two fresh snapshots: `pick` the returned menu-bar item,
+then act on a newly returned open-menu item. Do not carry a closed-menu token
+into the open state.
 
 Pinned 0.13.1 action responses expose a structured delivery verdict. Interpret
 `effect:"confirmed"` plus `verified:true` as an AX post-condition read-back;

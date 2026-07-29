@@ -92,7 +92,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.7"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.8"},
             },
         )
         self.notify("notifications/initialized")
@@ -705,6 +705,48 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             {"session": session, "pid": pid, "window_id": window_id},
         )
         require_image(content, "primary initial window state")
+
+        menu_bar_item = primary_element(state.get("elements", []), "AXMenuBarItem", "Smoke")
+        if "AXPick" not in menu_bar_item.get("actions", []):
+            raise RuntimeError(f"Primary fixture menu bar item did not advertise AXPick: {menu_bar_item}")
+        opened_menu, _ = client.call(
+            "click",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                **primary_element_target(menu_bar_item),
+                "action": "pick",
+            },
+        )
+        require_action_verdict(opened_menu, "primary native menu pick")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary open native menu state")
+        menu_item = primary_element(state.get("elements", []), "AXMenuItem", "Mark menu")
+        if "AXPress" not in menu_item.get("actions", []):
+            raise RuntimeError(f"Primary fixture menu item did not advertise AXPress: {menu_item}")
+        selected_menu_item, _ = client.call(
+            "click",
+            {
+                "session": session,
+                "pid": pid,
+                "window_id": window_id,
+                **primary_element_target(menu_item),
+                "action": "press",
+            },
+        )
+        require_action_verdict(selected_menu_item, "primary native menu command")
+        state, content = client.call(
+            "get_window_state",
+            {"session": session, "pid": pid, "window_id": window_id},
+        )
+        require_image(content, "primary state after native menu command")
+        if "Menu: picked" not in state.get("tree_markdown", ""):
+            raise RuntimeError("Primary two-snapshot AX menu command did not reach the fixture")
+        report["steps"].append("primary_two_snapshot_native_menu_verified")
 
         recording_state, _ = client.call("get_recording_state", {})
         if recording_state.get("enabled") is not False:

@@ -141,6 +141,10 @@ root/data template variables.
   verifies the returned activation path, the app's fresh `active` readback, and
   the same re-listed window before any further input; one-off foreground input
   keeps the normal front-act-restore route.
+- Drive native app menus semantically with a fresh frontmost menu-bar item,
+  `pick` to open it, a second snapshot for the new menu item, and a final visible
+  verification. The live gate proves this two-snapshot AX route on the
+  disposable fixture instead of guessing at hidden menu children.
 - Give every declared primary session its own colored semantic cursor overlay.
   Click, drag, scroll, text, key, navigation, and app actions animate visibly
   without moving the user's real pointer; the cursor can be hidden and read

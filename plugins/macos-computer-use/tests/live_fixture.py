@@ -14,13 +14,14 @@ WINDOW_TITLE = "ZCode Computer Use Live Smoke"
 
 
 class FixtureHandler(NSObject):
-    def initWithField_label_sliderLabel_(self, field, label, slider_label):
+    def initWithField_label_sliderLabel_menuLabel_(self, field, label, slider_label, menu_label):
         self = objc.super(FixtureHandler, self).init()
         if self is None:
             return None
         self.field = field
         self.label = label
         self.slider_label = slider_label
+        self.menu_label = menu_label
         return self
 
     @objc.IBAction
@@ -30,6 +31,10 @@ class FixtureHandler(NSObject):
     @objc.IBAction
     def sliderChanged_(self, sender) -> None:
         self.slider_label.setStringValue_(f"Slider: {int(round(sender.doubleValue()))}")
+
+    @objc.IBAction
+    def menuPicked_(self, _sender) -> None:
+        self.menu_label.setStringValue_("Menu: picked")
 
 class ScrollProbeView(AppKit.NSView):
     def initWithFrame_statusLabel_(self, frame, status_label):
@@ -138,6 +143,8 @@ def main() -> int:
     slider_result.setAccessibilityLabel_("Smoke slider result")
     result = label(AppKit.NSMakeRect(40, 45, 190, 24), "Waiting")
     result.setAccessibilityLabel_("Smoke result")
+    menu_result = label(AppKit.NSMakeRect(40, 75, 190, 24), "Menu: waiting")
+    menu_result.setAccessibilityLabel_("Smoke menu result")
     scroll_result = label(AppKit.NSMakeRect(240, 45, 170, 24), "Scrolled: 0")
     scroll_result.setAccessibilityLabel_("Smoke scroll result")
     scroll_probe = ScrollProbeView.alloc().initWithFrame_statusLabel_(
@@ -151,12 +158,27 @@ def main() -> int:
         gesture_result,
     )
 
-    handler = FixtureHandler.alloc().initWithField_label_sliderLabel_(field, result, slider_result)
+    handler = FixtureHandler.alloc().initWithField_label_sliderLabel_menuLabel_(
+        field, result, slider_result, menu_result
+    )
     button.setTarget_(handler)
     button.setAction_("submit:")
     button.setKeyEquivalent_(" ")
     slider.setTarget_(handler)
     slider.setAction_("sliderChanged:")
+    main_menu = AppKit.NSMenu.alloc().initWithTitle_("Main")
+    smoke_menu_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "Smoke", None, ""
+    )
+    smoke_menu = AppKit.NSMenu.alloc().initWithTitle_("Smoke")
+    mark_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "Mark menu", "menuPicked:", ""
+    )
+    mark_item.setTarget_(handler)
+    smoke_menu.addItem_(mark_item)
+    smoke_menu_item.setSubmenu_(smoke_menu)
+    main_menu.addItem_(smoke_menu_item)
+    app.setMainMenu_(main_menu)
     for control in (
         prompt,
         field,
@@ -164,6 +186,7 @@ def main() -> int:
         slider,
         slider_result,
         result,
+        menu_result,
         scroll_result,
         scroll_probe,
         hotkey_result,

@@ -258,6 +258,18 @@ stay in the background, prefer its in-window control or an advertised AX action
 because a background app's global menu command can silently target something
 else.
 
+For an explicitly requested native app-menu command, bind and persistently
+front the exact returned window, verify its pid is `active:true`, then take a
+fresh window AX snapshot. Closed menu children are intentionally absent: select
+the fresh `AXMenuBarItem` with
+`click({session,pid,window_id,element_token,action:"pick"})`, re-observe the
+opened menu, and press the newly returned `AXMenuItem`; re-observe again to
+verify the command's visible result. If abandoning the open menu, send Escape
+to that exact window and refresh. The pinned primary action names are `press`
+(default), `show_menu`, `pick`, `confirm`, `cancel`, and `open`; use a non-default
+name only when the fresh element advertises its corresponding AX action. Never
+reuse the pre-open menu token or choose a background app's global menu.
+
 ## Delivery ladder
 
 Use the smallest reliable rung and change it only after refreshed state or the
