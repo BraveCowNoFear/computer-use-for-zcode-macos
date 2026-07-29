@@ -299,6 +299,10 @@ Its schema-v1 health report is now response-pinned as well: all eight macOS
 checks remain in canonical order, every entry obeys the exact status/hint/data
 shape, `overall` agrees with the check statuses, and an include-only probe
 returns the other seven checks as explicit skips without touching TCC.
+Configuration responses are pinned end to end too: the seven-field read shape,
+release identity/default PiP fields, both accepted image-cap setter shapes,
+exact session-scoped acknowledgement, peer-connection isolation, restoration,
+and the no-mutation structured error for retired `capture_scope` are verified.
 The fresh-session semantic cursor is also response-pinned: its complete state,
 embedded `cua.default` theme identity, nine human-like motion values, idle
 or in-flight bounded visual semantics, idempotent theme/motion setters, enabled

@@ -349,6 +349,8 @@ class RepositoryContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn('--tcc-status-file "$tcc_status"', workflow)
+        self.assertIn('--env "HOME=$unrelated_home"', workflow)
+        self.assertIn('test ! -e "$unrelated_home/.cua-driver/config.json"', workflow)
         self.assertIn('value["accessibility"] and value["screen_recording"]', workflow)
         self.assertIn('plugins/macos-computer-use/scripts/live-smoke.sh', workflow)
         self.assertIn('--backend fallback || fallback_live_result=$?', workflow)
@@ -389,6 +391,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('{"include": ["binary_version"]}', mcp_runtime)
         self.assertIn("require_health_report(", mcp_runtime)
         self.assertIn('client.call("check_permissions", {"prompt": False})', mcp_runtime)
+        self.assertIn('{"key": "capture_scope", "value": "desktop"}', mcp_runtime)
+        self.assertIn(
+            '{"key": "max_image_dimension", "value": config_original}',
+            mcp_runtime,
+        )
+        self.assertIn("(session-scoped; persisted default unchanged)", mcp_runtime)
         self.assertIn('client.call("get_accessibility_tree")', mcp_runtime)
         self.assertIn("APP_ENTRY_FIELDS = {", mcp_runtime)
         self.assertIn("WINDOW_ENTRY_FIELDS = {", mcp_runtime)
@@ -657,6 +665,54 @@ class RepositoryContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "overall disagreed"):
             module.require_health_report(
                 "wrong overall health", dict(report, overall="ok")
+            )
+
+    def test_primary_config_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_config_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        config = {
+            "version": "0.13.1",
+            "source_sha": None,
+            "platform": "macos",
+            "max_image_dimension": 1568,
+            "agent_cursor": {"enabled": True},
+            "experimental_pip": False,
+            "experimental_pip_geometry": None,
+        }
+        self.assertEqual(module.require_config("config", config), config)
+        self.assertEqual(
+            module.require_set_config(
+                "set config",
+                {
+                    "version": "0.13.1",
+                    "platform": "macos",
+                    "max_image_dimension": 0,
+                },
+                0,
+            )["max_image_dimension"],
+            0,
+        )
+        with self.assertRaisesRegex(RuntimeError, "runtime identity"):
+            module.require_config(
+                "drifted config",
+                dict(config, agent_cursor={"enabled": True, "theme": "extra"}),
+            )
+        with self.assertRaisesRegex(RuntimeError, "response drifted"):
+            module.require_set_config(
+                "drifted set config",
+                {
+                    "version": "0.13.1",
+                    "platform": "macos",
+                    "max_image_dimension": 1,
+                },
+                0,
             )
 
     def test_primary_cursor_state_validators_reject_drift(self):

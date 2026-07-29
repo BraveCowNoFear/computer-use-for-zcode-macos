@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.20"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.21"},
             },
         )
         expected = {
@@ -568,7 +568,7 @@ def require_health_report(
     return by_name
 
 
-def require_config(name: str, value: Any) -> int:
+def require_config(name: str, value: Any) -> dict[str, Any]:
     config = require_object(
         name,
         value,
@@ -582,15 +582,35 @@ def require_config(name: str, value: Any) -> int:
             "experimental_pip_geometry",
         },
     )
-    if config["version"] != "0.13.1" or config["platform"] != "macos":
+    if (
+        config["version"] != "0.13.1"
+        or config["source_sha"] is not None
+        or config["platform"] != "macos"
+        or config["agent_cursor"] != {"enabled": True}
+        or config["experimental_pip"] is not False
+        or config["experimental_pip_geometry"] is not None
+    ):
         fail(f"{name} returned the wrong runtime identity: {config}")
     dimension = config["max_image_dimension"]
     if type(dimension) is not int or dimension < 0:
         fail(f"{name}.max_image_dimension is not a non-negative integer")
-    cursor = config["agent_cursor"]
-    if not isinstance(cursor, dict) or type(cursor.get("enabled")) is not bool:
-        fail(f"{name}.agent_cursor omitted the enabled boolean")
-    return dimension
+    return config
+
+
+def require_set_config(
+    name: str, value: Any, expected_dimension: int
+) -> dict[str, Any]:
+    result = require_object(
+        name, value, {"version", "platform", "max_image_dimension"}
+    )
+    expected = {
+        "version": "0.13.1",
+        "platform": "macos",
+        "max_image_dimension": expected_dimension,
+    }
+    if result != expected:
+        fail(f"{name} response drifted: {result}")
+    return result
 
 
 RECORDING_STATE_FIELDS = {
@@ -1462,35 +1482,95 @@ def main() -> int:
         if any(type(cursor[key]) is not int for key in ("x", "y")):
             fail("get_cursor_position did not return exact integer coordinates")
 
-        config_original = require_config("get_config", client.call("get_config")[0])
-        peer_original = require_config("peer get_config", peer.call("get_config")[0])
-        if peer_original != config_original:
+        config_value, config_content = client.call("get_config")
+        require_text_content(
+            "get_config", config_content, "cua-driver-rs configuration"
+        )
+        config_snapshot = require_config("get_config", config_value)
+        config_original = config_snapshot["max_image_dimension"]
+
+        peer_value, peer_content = peer.call("get_config")
+        require_text_content(
+            "peer get_config", peer_content, "cua-driver-rs configuration"
+        )
+        peer_snapshot = require_config("peer get_config", peer_value)
+        if peer_snapshot != config_snapshot:
             fail("fresh MCP peers began with different image configuration")
+
+        retired, retired_content = peer.call_error(
+            "set_config", {"key": "capture_scope", "value": "desktop"}
+        )
+        expected_retired = {
+            "code": "config_key_retired",
+            "key": "capture_scope",
+            "replacement": "start_session.capture_scope",
+        }
+        if retired != expected_retired:
+            fail(f"set_config retired-key payload drifted: {retired}")
+        require_text_content(
+            "set_config retired key",
+            retired_content,
+            "config key 'capture_scope' is retired; pass "
+            "capture_scope=auto|window|desktop to start_session",
+        )
+        if require_config(
+            "post-retired-key get_config", peer.call("get_config")[0]
+        ) != peer_snapshot:
+            fail("retired set_config key mutated peer configuration")
+
+        keyed, keyed_content = peer.call(
+            "set_config",
+            {"key": "max_image_dimension", "value": config_original},
+        )
+        require_set_config("key/value set_config", keyed, config_original)
+        require_text_content(
+            "key/value set_config",
+            keyed_content,
+            f"Config updated: max_image_dimension={config_original} "
+            "(session-scoped; persisted default unchanged)",
+        )
+        if require_config(
+            "key/value get_config", peer.call("get_config")[0]
+        ) != peer_snapshot:
+            fail("idempotent key/value set_config changed peer configuration")
+
         config_probe = 0 if config_original != 0 else 1024
-        changed, _ = client.call(
+        changed, changed_content = client.call(
             "set_config", {"max_image_dimension": config_probe}
         )
         config_changed = True
-        changed = require_object(
-            "set_config", changed, {"version", "platform", "max_image_dimension"}
+        require_set_config("set_config", changed, config_probe)
+        require_text_content(
+            "set_config",
+            changed_content,
+            f"Config updated: max_image_dimension={config_probe} "
+            "(session-scoped; persisted default unchanged)",
         )
-        if changed.get("max_image_dimension") != config_probe:
-            fail(f"set_config did not return the requested value: {changed}")
-        if require_config("changed get_config", client.call("get_config")[0]) != config_probe:
+        changed_snapshot = require_config(
+            "changed get_config", client.call("get_config")[0]
+        )
+        if changed_snapshot != dict(
+            config_snapshot, max_image_dimension=config_probe
+        ):
             fail("set_config was not visible on the same MCP connection")
-        if require_config("isolated peer get_config", peer.call("get_config")[0]) != config_original:
+        if require_config(
+            "isolated peer get_config", peer.call("get_config")[0]
+        ) != peer_snapshot:
             fail("set_config leaked across MCP connection identities")
-        restored, _ = client.call(
+        restored, restored_content = client.call(
             "set_config", {"max_image_dimension": config_original}
         )
-        if require_object(
+        require_set_config("restored set_config", restored, config_original)
+        require_text_content(
             "restored set_config",
-            restored,
-            {"version", "platform", "max_image_dimension"},
-        ).get("max_image_dimension") != config_original:
-            fail("set_config did not restore the original image configuration")
+            restored_content,
+            f"Config updated: max_image_dimension={config_original} "
+            "(session-scoped; persisted default unchanged)",
+        )
         config_changed = False
-        if require_config("restored get_config", client.call("get_config")[0]) != config_original:
+        if require_config(
+            "restored get_config", client.call("get_config")[0]
+        ) != config_snapshot:
             fail("restored configuration was not visible on the same connection")
 
         started, _ = client.call(

@@ -302,6 +302,13 @@ connection must retain its own effective value. An anonymous CLI/direct
 `set_config` instead changes the daemon-global value and persists it. Do not
 use `set_config` for `capture_mode` or `capture_scope`; every window state
 already returns pixels plus AX, and scope belongs to `start_session`.
+The pinned release returns all seven `get_config` fields: version, nullable
+source SHA, platform, effective image dimension, the exact
+`agent_cursor:{enabled}` object, PiP boolean, and nullable PiP geometry. A
+successful MCP `set_config` returns only version/platform/effective dimension
+and is connection-scoped; `{key:"max_image_dimension",value:N}` is equivalent
+to the direct field. A `capture_scope` key is a structured retired-key error,
+not a reason to retry globally or persist a replacement setting.
 
 For a small or visually dense primary target, call
 `zoom({pid,window_id,x1,y1,x2,y2})` with a bounded region from the exact fresh

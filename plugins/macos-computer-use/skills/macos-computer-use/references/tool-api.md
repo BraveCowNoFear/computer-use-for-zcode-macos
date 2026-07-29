@@ -86,6 +86,16 @@ non-empty local diagnostic object. `overall` is computed from statuses:
 `failed` for a core failure, otherwise `degraded` for any failure, otherwise
 `ok` (skips do not degrade it).
 
+Pinned `get_config` has exactly `version`, nullable `source_sha`, `platform`,
+non-negative `max_image_dimension`, `agent_cursor:{enabled}`, boolean
+`experimental_pip`, and nullable `experimental_pip_geometry`. The public MCP
+schema has no session field: the daemon injects a connection identity, so
+`set_config` image-dimension changes and their exact three-field response are
+private to that connection and do not change the persisted default. The
+`{key,value}` shape is equivalent. `key:"capture_scope"` returns
+`config_key_retired` with replacement `start_session.capture_scope` and must
+leave configuration unchanged.
+
 For isolated app lifecycles, snapshot existing pids before launch, require a
 new positive pid plus a window owned by that pid, and clean up only that exact
 process. Prefer pid/window-bound Command-Q and verify exit; `kill_app` is the

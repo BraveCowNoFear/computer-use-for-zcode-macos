@@ -105,6 +105,7 @@ jobs:
             --env CUA_DRIVER_RS_PERMISSIONS_GATE=0 \
             --env CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1 \
             --env "CUA_DRIVER_TELEMETRY_HOME=$data/cua-telemetry" \
+            --env "HOME=$unrelated_home" \
             "$product_app" --args \
             serve --socket "$socket" \
             --no-permissions-gate \
@@ -131,6 +132,7 @@ jobs:
           tcc_status="$RUNNER_TEMP/cua-signed-tcc-${{ matrix.architecture }}.json"
           python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py \
             "$product_binary" "$socket" --tcc-status-file "$tcc_status"
+          test ! -e "$unrelated_home/.cua-driver/config.json"
           prompt_refusal="$(printf '%s' '{"prompt":true}' | "$product_binary" call check_permissions --socket "$socket" 2>&1 || true)"
           grep -F "os_permission_prompt_requires_trusted_host" <<<"$prompt_refusal"
           cleanup_policy_proof
