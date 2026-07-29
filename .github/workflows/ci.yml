@@ -128,11 +128,21 @@ jobs:
           grep -F "managed policy: configured=false, active=false, valid=true" <<<"$status"
           grep -F "session policy: configured=false, approved_at_startup=false, valid=true" <<<"$status"
           python plugins/macos-computer-use/scripts/verify-cua-runtime-discovery.py "$product_binary" "$socket"
-          python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py "$product_binary" "$socket"
+          tcc_status="$RUNNER_TEMP/cua-signed-tcc-${{ matrix.architecture }}.json"
+          python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py \
+            "$product_binary" "$socket" --tcc-status-file "$tcc_status"
           prompt_refusal="$(printf '%s' '{"prompt":true}' | "$product_binary" call check_permissions --socket "$socket" 2>&1 || true)"
           grep -F "os_permission_prompt_requires_trusted_host" <<<"$prompt_refusal"
           cleanup_policy_proof
           trap - EXIT
+          if python -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if value["accessibility"] and value["screen_recording"] else 1)' "$tcc_status"; then
+            live_result=0
+            MACOS_CUA_DATA_DIR="$data" /bin/bash plugins/macos-computer-use/scripts/live-smoke.sh || live_result=$?
+            "$product_binary" stop --socket "/tmp/zcode-cua-${UID}/v0.13.1.sock" >/dev/null 2>&1 || true
+            test "$live_result" = 0
+          else
+            echo "Signed CuaDriver TCC grants are unavailable on this hosted runner; full GUI smoke remains a logged-in-Mac gate."
+          fi
 
   fallback-python-compat:
     name: fallback CPython ${{ matrix.python }}

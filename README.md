@@ -274,7 +274,9 @@ Every mandatory MCP
 signed binary's direct `describe` contract, and a strict window session must
 start, read back, and end cleanly without TCC.
 A real background click/type/screenshot loop requires an unlocked interactive
-Mac with TCC grants, which hosted CI runners do not provide.
+Mac with TCC grants. Hosted runners do not guarantee those grants, so each
+macOS job now records the signed driver's exact TCC readback and automatically
+runs the disposable full GUI smoke only when both grants are genuinely present.
 
 On such a Mac, run the disposable end-to-end gate below. It creates its own
 temporary AppKit window, verifies signed-driver identity plus background

@@ -273,7 +273,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.5"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.6"},
             },
         )
         expected = {
@@ -367,12 +367,16 @@ def process_command(pid: int) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in {3, 5} or (
+        len(sys.argv) == 5 and sys.argv[3] != "--tcc-status-file"
+    ):
         raise SystemExit(
-            "usage: verify-cua-mcp-runtime.py /path/to/cua-driver /path/to/socket"
+            "usage: verify-cua-mcp-runtime.py /path/to/cua-driver /path/to/socket "
+            "[--tcc-status-file /path/to/report.json]"
         )
     binary = Path(sys.argv[1]).resolve()
     socket = sys.argv[2]
+    tcc_status_path = Path(sys.argv[4]).resolve() if len(sys.argv) == 5 else None
     scripts = Path(__file__).resolve().parent
     required = load_contracts(scripts / "verify-cua-native-schema.py") | load_contracts(
         scripts / "verify-cua-browser-schema.py"
@@ -577,6 +581,20 @@ def main() -> int:
             health_checks["tcc_screen_recording"].get("status") == "pass"
         ) != permissions["screen_recording"]:
             fail("health_report and check_permissions disagreed on Screen Recording")
+        signed_tcc = {
+            "accessibility": permissions["accessibility"],
+            "screen_recording": permissions["screen_recording"],
+            "attribution": permissions["source"]["attribution"],
+            "bundle_id": permissions["source"]["bundle_id"],
+        }
+        print(
+            "Signed CuaDriver TCC state: "
+            + json.dumps(signed_tcc, sort_keys=True, separators=(",", ":"))
+        )
+        if tcc_status_path is not None:
+            tcc_status_path.write_text(
+                json.dumps(signed_tcc, sort_keys=True) + "\n", encoding="utf-8"
+            )
 
         try:
             client.call("page", {"action": "execute_javascript"})

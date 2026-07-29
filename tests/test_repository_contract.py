@@ -345,9 +345,13 @@ class RepositoryContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            'python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py "$product_binary" "$socket"',
+            'python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py',
             workflow,
         )
+        self.assertIn('--tcc-status-file "$tcc_status"', workflow)
+        self.assertIn('value["accessibility"] and value["screen_recording"]', workflow)
+        self.assertIn('plugins/macos-computer-use/scripts/live-smoke.sh', workflow)
+        self.assertIn('stop --socket "/tmp/zcode-cua-${UID}/v0.13.1.sock"', workflow)
         self.assertIn('"$product_app" --args', workflow)
         self.assertIn("--no-permissions-gate", workflow)
         mcp_runtime = (
@@ -364,6 +368,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"code": -32602', mcp_runtime)
         self.assertIn('"Invalid params: missing tool name"', mcp_runtime)
         self.assertIn('self.notify("zcode/unknown-notification")', mcp_runtime)
+        self.assertIn('"Signed CuaDriver TCC state: "', mcp_runtime)
+        self.assertIn('"--tcc-status-file"', mcp_runtime)
         self.assertIn('dump_docs(binary)', mcp_runtime)
         self.assertIn('"capability_version", "schema_version"', mcp_runtime)
         self.assertIn('"tools/list.description drifted from dump-docs', mcp_runtime)
