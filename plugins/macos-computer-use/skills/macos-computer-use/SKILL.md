@@ -27,6 +27,9 @@ permissions. Ordinary primary-backend tasks do not need that reference.
 Load [browser-workflow.md](references/browser-workflow.md) whenever the target
 is supported Chromium/Electron page content; it defines exact native binding,
 semantic refs, typed actions, invalidation, setup, and verification.
+Load [recording-workflow.md](references/recording-workflow.md) only when the
+user explicitly requests a local action trajectory, screen recording, or replay.
+Recording is never enabled as a side effect of ordinary Computer Use.
 
 ## Start a primary session
 

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import select
+import shutil
 import subprocess
 import sys
 import time
@@ -91,7 +92,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.6"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.11.7"},
             },
         )
         self.notify("notifications/initialized")
@@ -390,6 +391,7 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
     original_cursor_theme: dict[str, str] | None = None
     original_real_cursor: dict[str, Any] | None = None
     isolated_app_pid: int | None = None
+    recording_dir: Path | None = None
     report: dict[str, Any] = {"sessionLabel": session, "steps": []}
     try:
         initialized = client.initialize()
@@ -423,6 +425,10 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             "double_click",
             "right_click",
             "zoom",
+            "start_recording",
+            "stop_recording",
+            "get_recording_state",
+            "replay_trajectory",
         }
         missing = sorted(required - names)
         if missing:
@@ -700,6 +706,38 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         )
         require_image(content, "primary initial window state")
 
+        recording_state, _ = client.call("get_recording_state", {})
+        if recording_state.get("enabled") is not False:
+            raise RuntimeError(
+                f"Primary live smoke refuses to replace an active recording: {recording_state}"
+            )
+        recording_dir = (
+            DATA_DIR.resolve() / f"live-smoke-recording-{uuid.uuid4().hex}"
+        )
+        started_recording, _ = client.call(
+            "start_recording",
+            {"output_dir": str(recording_dir), "record_video": False},
+        )
+        started_output = started_recording.get("output_dir")
+        if (
+            started_recording.get("enabled") is not True
+            or started_recording.get("recording") is not True
+            or started_recording.get("next_turn") != 1
+            or started_recording.get("video_active") is not False
+            or not isinstance(started_output, str)
+            or Path(started_output).resolve() != recording_dir
+        ):
+            raise RuntimeError(f"Primary trajectory recording did not start exactly: {started_recording}")
+        recording_state, _ = client.call("get_recording_state", {})
+        if (
+            recording_state.get("enabled") is not True
+            or recording_state.get("next_turn") != 1
+            or not isinstance(recording_state.get("output_dir"), str)
+            or Path(recording_state["output_dir"]).resolve() != recording_dir
+        ):
+            raise RuntimeError(f"Primary trajectory state did not read back: {recording_state}")
+        report["steps"].append("primary_local_recording_started")
+
         gesture_point = primary_screenshot_point(
             state,
             FIXTURE_GESTURE_PROBE_CENTER_X,
@@ -724,6 +762,47 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         if "Gesture: right" not in state.get("tree_markdown", ""):
             raise RuntimeError("Primary right_click did not reach the fixture gesture probe")
         report["steps"].append("primary_background_right_click_verified")
+
+        recording_state, _ = client.call("get_recording_state", {})
+        live_output = recording_state.get("output_dir")
+        if (
+            recording_state.get("enabled") is not True
+            or not isinstance(live_output, str)
+            or Path(live_output).resolve() != recording_dir
+            or recording_state.get("next_turn") != 2
+        ):
+            raise RuntimeError(
+                f"Primary recorder ownership changed before stop; refusing unconditional stop: {recording_state}"
+            )
+        stopped_recording, _ = client.call("stop_recording", {})
+        if stopped_recording.get("enabled") is not False:
+            raise RuntimeError(f"Primary trajectory recording did not stop: {stopped_recording}")
+        recording_state, _ = client.call("get_recording_state", {})
+        if recording_state.get("enabled") is not False:
+            raise RuntimeError(f"Primary recorder remained enabled after stop: {recording_state}")
+        turn_dir = recording_dir / "turn-00001"
+        required_artifacts = (
+            turn_dir / "action.json",
+            turn_dir / "evidence.json",
+            turn_dir / "before.png",
+            turn_dir / "after.png",
+            recording_dir / "session.json",
+        )
+        missing_artifacts = [
+            str(path) for path in required_artifacts if not path.is_file() or path.stat().st_size <= 0
+        ]
+        if missing_artifacts:
+            raise RuntimeError(f"Primary trajectory omitted evidence: {missing_artifacts}")
+        recorded_action = json.loads((turn_dir / "action.json").read_text(encoding="utf-8"))
+        recorded_arguments = recorded_action.get("arguments", {})
+        if (
+            recorded_action.get("tool") != "right_click"
+            or recorded_arguments.get("pid") != pid
+            or recorded_arguments.get("window_id") != window_id
+        ):
+            raise RuntimeError(f"Primary trajectory recorded the wrong exact action: {recorded_action}")
+        report["steps"].append("primary_local_trajectory_evidence_verified")
+        report["steps"].append("primary_local_recording_stopped")
 
         gesture_point = primary_screenshot_point(
             state,
@@ -1140,6 +1219,8 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             except Exception:
                 pass
         client.close()
+        if recording_dir is not None:
+            shutil.rmtree(recording_dir, ignore_errors=True)
 
 
 def run_fallback() -> dict[str, Any]:

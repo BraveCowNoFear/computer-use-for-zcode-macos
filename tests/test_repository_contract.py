@@ -182,6 +182,13 @@ class RepositoryContractTests(unittest.TestCase):
             "browser_download",
         ):
             self.assertRegex(launcher, rf"\b{browser_tool}\b")
+        for recording_tool in (
+            "start_recording",
+            "stop_recording",
+            "get_recording_state",
+            "replay_trajectory",
+        ):
+            self.assertRegex(launcher, rf"\b{recording_tool}\b")
         self.assertIn('"$BIN" permissions grant', launcher)
         self.assertIn('default_daemon_was_running', launcher)
         self.assertIn("CUA_DRIVER_RS_TELEMETRY_ENABLED=0", launcher)
@@ -368,6 +375,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("same pid to be `active:true` in a fresh `list_apps`", skill)
         self.assertIn("brief front -> act -> restore route", skill)
         self.assertIn("[browser-workflow.md](references/browser-workflow.md)", skill)
+        self.assertIn("[recording-workflow.md](references/recording-workflow.md)", skill)
         self.assertIn("without moving the real OS pointer", (
             PLUGIN / "skills" / "macos-computer-use" / "references" / "tool-api.md"
         ).read_text(encoding="utf-8"))
@@ -441,6 +449,28 @@ class RepositoryContractTests(unittest.TestCase):
         ):
             self.assertNotIn(prohibited, reference.lower())
 
+    def test_recording_reference_preserves_local_ownership_and_freshness(self):
+        reference = (
+            PLUGIN
+            / "skills"
+            / "macos-computer-use"
+            / "references"
+            / "recording-workflow.md"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "literal action arguments including typed text",
+            "Continue only when `enabled:false`",
+            "manual\n   `stop_recording({})` is unconditional",
+            "`start_recording({output_dir,record_video:false})`",
+            "does not make stale element tokens, pixels, pids, or window IDs reusable",
+            "live `output_dir` is still this run's directory",
+            "Element\nindices and tokens are snapshot-scoped and must not be replayed",
+            "`replay_trajectory({dir,delay_ms,stop_on_error:true})`",
+            "Never infer success from the replay count alone",
+        ):
+            self.assertIn(marker, reference)
+        self.assertIn("does not narrow Full Access", reference)
+
     def test_readmes_and_project_memory_exist(self):
         for path in (
             "README.md",
@@ -502,6 +532,10 @@ class RepositoryContractTests(unittest.TestCase):
             '"double_click"',
             '"right_click"',
             '"zoom"',
+            '"start_recording"',
+            '"stop_recording"',
+            '"get_recording_state"',
+            '"replay_trajectory"',
             "primary_element_target",
             "primary_screenshot_point",
             "require_cursor_action",
@@ -514,6 +548,9 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_cursor_theme_restored"',
             '"primary_cursor_motion_restored"',
             '"primary_zoom_bound_click_verified"',
+            '"primary_local_recording_started"',
+            '"primary_local_trajectory_evidence_verified"',
+            '"primary_local_recording_stopped"',
             '"primary_virtual_cursor_moved_without_real_pointer"',
             '"primary_background_right_click_verified"',
             '"primary_background_double_click_verified"',

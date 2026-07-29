@@ -162,6 +162,11 @@ root/data template variables.
   uploads, and downloads. Every mutation invalidates old refs and is followed
   by a fresh page snapshot; browser chrome, native pickers/dialogs, unsupported
   webviews, and dependency-refused routes stay on the native control ladder.
+- Record explicitly requested local action trajectories with ordered pre/post
+  screenshots, state, and arguments; refuse to replace another connection's
+  daemon-global recording, default video off, and finalize the exact owned
+  directory before inspecting evidence. Deliberate same-live-window replay is
+  available with error-stop and fresh visible verification.
 - Fall back to direct global mouse/keyboard events and clipboard operations.
 - Request fallback Accessibility and Screen Recording independently, map Retina
   pointer input through fresh screenshot IDs, and release held buttons on MCP

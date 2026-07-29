@@ -73,7 +73,8 @@ has_required_surface() {
     move_cursor list_apps list_windows bring_to_front \
     launch_app kill_app get_window_state get_desktop_state click double_click right_click press_key hotkey \
     type_text scroll set_value drag zoom browser_prepare get_browser_state browser_navigate \
-    browser_click browser_type browser_pointer browser_dialog browser_set_input_files browser_download; do
+    browser_click browser_type browser_pointer browser_dialog browser_set_input_files browser_download \
+    start_recording stop_recording get_recording_state replay_trajectory; do
     grep -Eq "^${required}(:|$)" <<< "$tools" || return 1
   done
 }
