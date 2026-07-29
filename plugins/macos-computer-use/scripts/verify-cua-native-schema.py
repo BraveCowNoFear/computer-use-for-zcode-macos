@@ -16,26 +16,31 @@ EXPECTED_VERSION = "0.13.1"
 
 CONTRACTS: dict[str, dict[str, Any]] = {
     "health_report": {
+        "additional_properties": False,
         "properties": {"include", "skip"},
         "required": set(),
         "types": {"include": "array", "skip": "array"},
         "item_types": {"include": "string", "skip": "string"},
     },
     "check_permissions": {
+        "additional_properties": False,
         "properties": {"prompt", "probe_direct_capture"},
         "required": set(),
         "types": {"prompt": "boolean", "probe_direct_capture": "boolean"},
         "defaults": {"prompt": False},
     },
     "get_accessibility_tree": {
+        "additional_properties": False,
         "properties": set(),
         "required": set(),
     },
     "get_config": {
+        "additional_properties": False,
         "properties": set(),
         "required": set(),
     },
     "set_config": {
+        "additional_properties": False,
         "properties": {
             "key",
             "value",
@@ -52,6 +57,7 @@ CONTRACTS: dict[str, dict[str, Any]] = {
         },
     },
     "launch_app": {
+        "additional_properties": False,
         "properties": {
             "bundle_id",
             "name",
@@ -72,9 +78,136 @@ CONTRACTS: dict[str, dict[str, Any]] = {
         "item_types": {"urls": "string", "additional_arguments": "string"},
     },
     "bring_to_front": {
+        "additional_properties": False,
         "properties": {"pid", "window_id"},
         "required": {"pid"},
         "types": {"pid": "integer", "window_id": "integer"},
+    },
+    "start_session": {
+        "additional_properties": True,
+        "properties": {"session", "capture_scope", "cursor_theme"},
+        "required": {"session"},
+        "types": {
+            "session": "string",
+            "capture_scope": "string",
+            "cursor_theme": ["object", "null"],
+        },
+        "enums": {"capture_scope": {"auto", "window", "desktop"}},
+        "defaults": {"capture_scope": "auto"},
+        "nested_properties": {"cursor_theme": {"theme_id", "reduced_motion"}},
+        "nested_required": {"cursor_theme": {"theme_id"}},
+        "nested_types": {
+            ("cursor_theme", "theme_id"): "string",
+            ("cursor_theme", "reduced_motion"): "string",
+        },
+        "nested_enums": {
+            ("cursor_theme", "reduced_motion"): {"auto", "on", "off"},
+        },
+        "nested_defaults": {("cursor_theme", "reduced_motion"): "auto"},
+    },
+    "get_session_state": {
+        "additional_properties": True,
+        "properties": {"session"},
+        "required": {"session"},
+        "types": {"session": "string"},
+    },
+    "escalate_session": {
+        "additional_properties": True,
+        "properties": {"session", "reason", "detail"},
+        "required": {"session", "reason"},
+        "types": {"session": "string", "reason": "string", "detail": "string"},
+        "enums": {
+            "reason": {
+                "ax_tree_pixel_mismatch",
+                "background_delivery_failed",
+                "foreground_ineffective",
+                "no_window_target",
+                "other",
+            },
+        },
+        "limits": {"detail": {"maxLength": 200}},
+    },
+    "end_session": {
+        "additional_properties": True,
+        "properties": {"session"},
+        "required": {"session"},
+        "types": {"session": "string"},
+    },
+    "get_agent_cursor_state": {
+        "additional_properties": False,
+        "properties": {"session"},
+        "required": {"session"},
+        "types": {"session": "string"},
+    },
+    "set_agent_cursor_enabled": {
+        "additional_properties": False,
+        "properties": {"session", "enabled"},
+        "required": {"session", "enabled"},
+        "types": {"session": "string", "enabled": "boolean"},
+    },
+    "set_agent_cursor_motion": {
+        "additional_properties": False,
+        "properties": {
+            "session",
+            "start_handle",
+            "end_handle",
+            "arc_size",
+            "arc_flow",
+            "spring",
+            "glide_duration_ms",
+            "dwell_after_click_ms",
+            "idle_hide_ms",
+            "turn_radius",
+        },
+        "required": {"session"},
+        "types": {
+            "session": "string",
+            "start_handle": ["number", "null"],
+            "end_handle": ["number", "null"],
+            "arc_size": ["number", "null"],
+            "arc_flow": ["number", "null"],
+            "spring": ["number", "null"],
+            "glide_duration_ms": ["number", "null"],
+            "dwell_after_click_ms": ["number", "null"],
+            "idle_hide_ms": ["number", "null"],
+            "turn_radius": ["number", "null"],
+        },
+    },
+    "set_agent_cursor_theme": {
+        "additional_properties": False,
+        "properties": {"session", "theme_id", "reduced_motion"},
+        "required": {"session", "theme_id"},
+        "types": {
+            "session": "string",
+            "theme_id": "string",
+            "reduced_motion": "string",
+        },
+        "enums": {"reduced_motion": {"auto", "on", "off"}},
+        "defaults": {"reduced_motion": "auto"},
+        "limits": {"theme_id": {"minLength": 1, "maxLength": 200}},
+    },
+    "start_recording": {
+        "additional_properties": False,
+        "properties": {"output_dir", "record_video"},
+        "required": {"output_dir"},
+        "types": {"output_dir": "string", "record_video": "boolean"},
+    },
+    "stop_recording": {
+        "additional_properties": False,
+        "properties": set(),
+        "required": set(),
+    },
+    "get_recording_state": {
+        "additional_properties": False,
+        "properties": set(),
+        "required": set(),
+    },
+    "replay_trajectory": {
+        "additional_properties": False,
+        "properties": {"dir", "delay_ms", "stop_on_error"},
+        "required": {"dir"},
+        "types": {"dir": "string", "delay_ms": "integer", "stop_on_error": "boolean"},
+        "limits": {"delay_ms": {"minimum": 0, "maximum": 10000}},
     },
 }
 
@@ -113,12 +246,18 @@ def describe(binary: Path, name: str) -> dict[str, Any]:
         fail(f"{name} input_schema is not JSON: {error}")
     if schema.get("type") != "object":
         fail(f"{name} no longer advertises an object schema")
-    if schema.get("additionalProperties") is not False:
-        fail(f"{name} request schema is no longer closed")
     return schema
 
 
 def verify_schema(name: str, schema: dict[str, Any], contract: dict[str, Any]) -> None:
+    actual_additional = schema.get("additionalProperties")
+    expected_additional = contract["additional_properties"]
+    if actual_additional is not expected_additional:
+        fail(
+            f"{name} additionalProperties drifted: expected {expected_additional}, "
+            f"got {actual_additional!r}"
+        )
+
     properties = schema.get("properties")
     if not isinstance(properties, dict):
         fail(f"{name} omitted properties")
@@ -140,8 +279,17 @@ def verify_schema(name: str, schema: dict[str, Any], contract: dict[str, Any]) -
 
     for field, expected in contract.get("types", {}).items():
         actual = properties[field].get("type")
-        if actual != expected:
+        if isinstance(expected, list):
+            matches = isinstance(actual, list) and set(actual) == set(expected)
+        else:
+            matches = actual == expected
+        if not matches:
             fail(f"{name}.{field} type drifted: {actual!r}")
+
+    for field, expected in contract.get("enums", {}).items():
+        actual = set(properties[field].get("enum", []))
+        if actual != expected:
+            fail(f"{name}.{field} enum drifted: {sorted(actual)}")
 
     for field, expected in contract.get("item_types", {}).items():
         actual = properties[field].get("items", {}).get("type")
@@ -152,6 +300,39 @@ def verify_schema(name: str, schema: dict[str, Any], contract: dict[str, Any]) -
         actual = properties[field].get("default")
         if actual != expected:
             fail(f"{name}.{field} default drifted: {actual!r}")
+
+    for field, expected in contract.get("limits", {}).items():
+        for key, value in expected.items():
+            actual = properties[field].get(key)
+            if actual != value:
+                fail(f"{name}.{field}.{key} drifted: {actual!r}")
+
+    for field, expected in contract.get("nested_properties", {}).items():
+        actual = set(properties[field].get("properties", {}))
+        if actual != expected:
+            fail(f"{name}.{field} properties drifted: {sorted(actual)}")
+
+    for field, expected in contract.get("nested_required", {}).items():
+        actual = set(properties[field].get("required", []))
+        if actual != expected:
+            fail(f"{name}.{field} required fields drifted: {sorted(actual)}")
+
+    for (field, child), expected in contract.get("nested_types", {}).items():
+        actual = properties[field].get("properties", {}).get(child, {}).get("type")
+        if actual != expected:
+            fail(f"{name}.{field}.{child} type drifted: {actual!r}")
+
+    for (field, child), expected in contract.get("nested_enums", {}).items():
+        actual = set(
+            properties[field].get("properties", {}).get(child, {}).get("enum", [])
+        )
+        if actual != expected:
+            fail(f"{name}.{field}.{child} enum drifted: {sorted(actual)}")
+
+    for (field, child), expected in contract.get("nested_defaults", {}).items():
+        actual = properties[field].get("properties", {}).get(child, {}).get("default")
+        if actual != expected:
+            fail(f"{name}.{field}.{child} default drifted: {actual!r}")
 
 
 def main() -> int:

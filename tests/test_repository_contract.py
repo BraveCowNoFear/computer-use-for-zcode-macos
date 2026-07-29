@@ -268,6 +268,18 @@ class RepositoryContractTests(unittest.TestCase):
             "set_config",
             "launch_app",
             "bring_to_front",
+            "start_session",
+            "get_session_state",
+            "escalate_session",
+            "end_session",
+            "get_agent_cursor_state",
+            "set_agent_cursor_enabled",
+            "set_agent_cursor_motion",
+            "set_agent_cursor_theme",
+            "start_recording",
+            "stop_recording",
+            "get_recording_state",
+            "replay_trajectory",
         ):
             self.assertIn(f'"{tool}"', native_verifier)
         self.assertIn(
@@ -395,6 +407,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("`get_config({})`", skill)
         self.assertIn("`set_config({max_image_dimension:0})`", skill)
         self.assertIn("`get_window_state({pid,window_id})` snapshot without", skill)
+        self.assertIn("`cursor_theme:{theme_id,reduced_motion}`", skill)
         self.assertIn("`get_accessibility_tree` for a fast broad inventory", skill)
         self.assertIn("An anonymous CLI/direct\n`set_config` instead changes", skill)
         self.assertIn("Preserve pre-existing pids before an isolated launch", skill)
@@ -604,6 +617,7 @@ class RepositoryContractTests(unittest.TestCase):
             '"primary_background_file_url_launch_verified"',
             '"primary_exact_file_url_window_closed"',
             '"primary_connection_image_config_isolated_and_restored"',
+            '"primary_initial_cursor_theme_verified"',
             '"primary_lightweight_desktop_discovery_verified"',
             '"primary_session_cursor_animated"',
             '"desktop_type_text"',

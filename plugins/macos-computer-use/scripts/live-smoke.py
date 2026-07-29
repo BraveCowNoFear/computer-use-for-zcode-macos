@@ -94,7 +94,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-live-smoke", "version": "0.13.0"},
+                "clientInfo": {"name": "zcode-live-smoke", "version": "0.13.1"},
             },
         )
         self.notify("notifications/initialized")
@@ -527,7 +527,17 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
         report["permissionAttribution"] = attribution
         report["steps"].append("primary_permissions_ready")
 
-        client.call("start_session", {"session": session, "capture_scope": "auto"})
+        client.call(
+            "start_session",
+            {
+                "session": session,
+                "capture_scope": "auto",
+                "cursor_theme": {
+                    "theme_id": "cua.default",
+                    "reduced_motion": "auto",
+                },
+            },
+        )
         session_started = True
         initial_config, _ = client.call("get_config", {})
         original_max_dimension = initial_config.get("max_image_dimension")
@@ -610,14 +620,15 @@ def run_primary(fixture_pid: int) -> dict[str, Any]:
             or cursor_enabled.get("enabled") is not True
             or cursor_state.get("session") != session
             or cursor_state.get("enabled") is not True
-            or not isinstance(theme.get("id"), str)
-            or not theme.get("id")
+            or theme.get("id") != "cua.default"
+            or theme.get("reduced_motion") != "auto"
             or not isinstance(initial_motion, dict)
         ):
             raise RuntimeError(f"Primary session cursor was not ready: {cursor_state}")
         original_cursor_motion = dict(initial_motion)
         original_cursor_theme = restorable_cursor_theme(theme)
         report["cursorTheme"] = theme["id"]
+        report["steps"].append("primary_initial_cursor_theme_verified")
         report["steps"].append("primary_session_cursor_ready")
 
         demo_theme = {

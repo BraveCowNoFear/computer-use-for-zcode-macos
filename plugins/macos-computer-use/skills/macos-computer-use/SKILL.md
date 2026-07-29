@@ -63,7 +63,11 @@ Recording is never enabled as a side effect of ordinary Computer Use.
 3. Call `start_session` with a unique, task-oriented `session`, for example
    `mail-triage-a1b2`. Keep it at most 28 visible characters so the cursor badge
    stays readable, add a short uniqueness suffix for concurrent runs, and never
-   put secrets or full user content in the label.
+   put secrets or full user content in the label. When the user explicitly wants
+   a locally installed cursor theme or reduced-motion mode, include
+   `cursor_theme:{theme_id,reduced_motion}` in this first call so the driver
+   applies it before the cursor becomes visible; otherwise omit it and keep the
+   embedded default.
 4. Choose `capture_scope` deliberately:
    - `window` for one app/window and maximum background behavior.
    - `auto` for a normal multi-step app task that might later need the desktop.

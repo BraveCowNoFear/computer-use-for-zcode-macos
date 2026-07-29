@@ -95,6 +95,8 @@ root/data template variables.
 - Discover and launch native apps and select exact returned windows.
 - Take a fast content-free inventory of running apps and visible windows before
   binding one returned pid/window to the full screenshot-plus-AX loop.
+- Atomically select a locally installed cursor theme and reduced-motion mode in
+  `start_session`, so the run never flashes the default theme first.
 - Temporarily opt one MCP connection into uncapped native-size window PNGs for
   pixel-perfect verification, prove a peer connection retains its own
   effective setting, and restore without changing the persisted global default.
@@ -229,8 +231,9 @@ running and cleans up only a temporary grant daemon it started itself.
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
-AI signer identity, parses all nine typed-browser request schemas from that
-signed binary, and runs the real plugin-owned first-install launcher.
+AI signer identity, parses all nine typed-browser and nineteen native
+lifecycle/configuration request schemas from that signed binary, and runs the
+real plugin-owned first-install launcher.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

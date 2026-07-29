@@ -17,7 +17,7 @@ Common flow:
 | Read connection-effective image cap | `get_config({})` |
 | Temporarily request native-size PNGs | `set_config({max_image_dimension:0})`; restore the prior value immediately on the same MCP connection |
 | Permission status | `check_permissions({prompt:false})` |
-| Begin task | `start_session({session, capture_scope})` |
+| Begin task | `start_session({session, capture_scope, cursor_theme?})`; the optional nested value is `{theme_id,reduced_motion}` and avoids a default-theme flash |
 | Inspect visible session cursor | `get_agent_cursor_state({session})` |
 | Hide/show session cursor | `set_agent_cursor_enabled({session, enabled})` |
 | Select installed cursor artwork | `set_agent_cursor_theme({session, theme_id, reduced_motion})` |
