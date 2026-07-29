@@ -239,7 +239,8 @@ observation/action/lifecycle/configuration request schemas from that signed
 binary—covering every mandatory primary tool—and runs the real plugin-owned
 first-install launcher. The unrestricted live daemon must also execute
 permission-free app/window/screen/cursor discovery and terminate only a
-disposable CI-owned process before the job passes.
+disposable CI-owned process through the same stdio MCP proxy ZCode uses before
+the job passes.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 

@@ -312,8 +312,16 @@ class RepositoryContractTests(unittest.TestCase):
             'python plugins/macos-computer-use/scripts/verify-cua-runtime-discovery.py "$product_binary" "$socket"',
             workflow,
         )
-        self.assertIn('call kill_app --socket "$socket"', workflow)
-        self.assertIn('! /bin/kill -0 "$kill_probe_pid"', workflow)
+        self.assertIn(
+            'python plugins/macos-computer-use/scripts/verify-cua-mcp-runtime.py "$product_binary" "$socket"',
+            workflow,
+        )
+        mcp_runtime = (
+            PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('client.request("tools/list")', mcp_runtime)
+        self.assertIn('"name": "kill_app"', mcp_runtime)
+        self.assertIn('["/bin/sleep", "60"]', mcp_runtime)
 
     def test_every_required_primary_tool_has_one_pinned_schema(self):
         launcher = (PLUGIN / "scripts" / "run-cua-driver.sh").read_text(
@@ -605,6 +613,7 @@ class RepositoryContractTests(unittest.TestCase):
             PLUGIN / "scripts" / "verify-cua-native-schema.py",
             PLUGIN / "scripts" / "verify-cua-browser-schema.py",
             PLUGIN / "scripts" / "verify-cua-runtime-discovery.py",
+            PLUGIN / "scripts" / "verify-cua-mcp-runtime.py",
             PLUGIN / "tests" / "live_fixture.py",
         ):
             compile(path.read_text(encoding="utf-8"), str(path), "exec")
