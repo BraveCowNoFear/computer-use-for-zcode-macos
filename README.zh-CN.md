@@ -223,9 +223,10 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 会话 target 统一返回精确结构化 `browser_binding_stale`，并证明本地上传/下载探针没有变化；随后只把
 一次性 Chrome/Edge 用户目录当作已证明的 Chromium 可执行文件，让 `browser_prepare` 启动另一个独立的
 driver-owned 隔离浏览器，精确绑定其原生窗口，并通过 `bring_to_front` 只激活这个一次性窗口，等待新的
-前台 App 回读后再只导航到回环测试页，从语义快照取得 action ref，完成一次
-DOM-event 点击与一次 trusted 覆盖输入，每次变更后重新快照并证明计数器/输入值；结束会话必须只关闭驱动
-浏览器，源浏览器保持存活直到单独的自有清理；再通过 ZCode
+前台 App 回读后尝试只导航到回环测试页；依赖可导航时继续从语义快照取得 action ref，完成一次 DOM-event
+点击与一次 trusted 覆盖输入，每次变更后重新快照并证明计数器/输入值。当前签名 0.13.1 macOS 构建会在
+产生任何回环请求前返回精确的 20 秒 CDP `Page.navigate` 超时；兼容分支只有在独立测试页状态证明零副作用后
+才通过。两条分支结束会话时都必须只关闭驱动浏览器，源浏览器保持存活直到单独的自有清理；再通过 ZCode
 实际使用的 stdio MCP 代理只终止一个 CI 自己创建的临时进程；冷启动 App 的清理还会
 同时等待进程与最终一致的 App 清单移除该 pid。App 运行摘要、窗口数量摘要、整数光标
 位置文字以及主显示器点/缩放文字都必须由同一份结构化返回精确生成。stdio 门禁还会拒绝畸形、重复、缺失或

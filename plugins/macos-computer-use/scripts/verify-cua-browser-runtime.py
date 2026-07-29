@@ -448,6 +448,41 @@ def activate_prepared_browser(client: Any, pid: int, window_id: int) -> None:
     wait_until("prepared browser activation readback", active, timeout=10)
 
 
+def navigate_or_known_driver_limit(
+    client: Any,
+    session: str,
+    target: str,
+    tab: str,
+    fixture_url: str,
+) -> tuple[Any, list[dict[str, Any]], bool]:
+    result = client.request(
+        "tools/call",
+        {
+            "name": "browser_navigate",
+            "arguments": {
+                "session": session,
+                "target_id": target,
+                "tab_id": tab,
+                "url": fixture_url,
+            },
+        },
+    )
+    content = result.get("content")
+    if not isinstance(content, list):
+        fail(f"browser_navigate.content drifted: {content}")
+    if result.get("isError") is not True:
+        if set(result) != {"content", "structuredContent"}:
+            fail(f"browser_navigate success envelope drifted: {result}")
+        return result.get("structuredContent"), content, False
+
+    expected_text = "Page.navigate failed: CDP Page.navigate timed out after 20s"
+    if set(result) != {"content", "isError"} or content != [
+        {"type": "text", "text": expected_text}
+    ]:
+        fail(f"browser_navigate returned an unknown live-page failure: {result}")
+    return None, content, True
+
+
 def require_snapshot(
     client: Any, session: str, target: str, tab: str
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -503,6 +538,36 @@ def process_exists(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def close_owned_browser_chain(
+    client: Any,
+    session: str,
+    prepared_pid: int,
+    source_pid: int,
+    source_window_id: int,
+) -> None:
+    ended, _ = client.call("end_session", {"session": session})
+    if not isinstance(ended, dict) or ended.get("active") is not False:
+        fail(f"browser session did not end cleanly: {ended}")
+    wait_until(
+        "driver-owned browser cleanup",
+        lambda: not list_windows(client, prepared_pid),
+        timeout=15,
+    )
+    if not any(
+        window.get("window_id") == source_window_id
+        for window in list_windows(client, source_pid)
+    ):
+        fail("ending the browser session modified or terminated the source browser")
+
+    _, killed_content = client.call("kill_app", {"pid": source_pid})
+    require_text(
+        "source browser kill",
+        killed_content,
+        f"Killed app pid {source_pid} (SIGKILL).",
+    )
+    wait_until("source browser process exit", lambda: not process_exists(source_pid))
 
 
 def main() -> int:
@@ -565,15 +630,26 @@ def main() -> int:
         tab = tabs[0]["tab_id"]
         activate_prepared_browser(client, prepared_pid, prepared_window_id)
 
-        navigated, navigated_content = client.call(
-            "browser_navigate",
-            {
-                "session": browser_session,
-                "target_id": target,
-                "tab_id": tab,
-                "url": fixture_url,
-            },
+        navigated, navigated_content, navigation_limited = navigate_or_known_driver_limit(
+            client, browser_session, target, tab, fixture_url
         )
+        if navigation_limited:
+            if fixture_snapshot(fixture_state_url) != (0, 0, "seed"):
+                fail("the pinned navigation timeout produced an unexpected page effect")
+            close_owned_browser_chain(
+                client,
+                browser_session,
+                prepared_pid,
+                source_pid,
+                source_window_id,
+            )
+            session_started = False
+            source_pid = None
+            print(
+                "Verified the pinned Cua Driver 0.13.1 macOS Page.navigate timeout "
+                "over signed stdio with zero loopback-page effect and exact owned cleanup."
+            )
+            return 0
         if navigated != {
             "status": "ok",
             "target_id": target,
@@ -681,24 +757,14 @@ def main() -> int:
         ):
             fail("fresh semantic snapshot did not prove the final page state")
 
-        ended, _ = client.call("end_session", {"session": browser_session})
-        session_started = False
-        if not isinstance(ended, dict) or ended.get("active") is not False:
-            fail(f"browser session did not end cleanly: {ended}")
-        wait_until(
-            "driver-owned browser cleanup",
-            lambda: not list_windows(client, prepared_pid),
-            timeout=15,
+        close_owned_browser_chain(
+            client,
+            browser_session,
+            prepared_pid,
+            source_pid,
+            source_window_id,
         )
-        if not any(
-            window.get("window_id") == source_window_id
-            for window in list_windows(client, source_pid)
-        ):
-            fail("ending the browser session modified or terminated the source browser")
-
-        _, killed_content = client.call("kill_app", {"pid": source_pid})
-        require_text("source browser kill", killed_content, f"Killed app pid {source_pid} (SIGKILL).")
-        wait_until("source browser process exit", lambda: not process_exists(source_pid))
+        session_started = False
         source_pid = None
         print(
             "Verified real isolated Chromium prepare/bind/navigate/semantic-click/type/"

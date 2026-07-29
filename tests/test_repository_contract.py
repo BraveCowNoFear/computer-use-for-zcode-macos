@@ -530,6 +530,9 @@ class RepositoryContractTests(unittest.TestCase):
             'tabs[0].get("active") in {True, False, None}',
             'client.call(\n        "bring_to_front",',
             "prepared browser activation readback",
+            "navigate_or_known_driver_limit",
+            "Page.navigate failed: CDP Page.navigate timed out after 20s",
+            "fixture_snapshot(fixture_state_url) != (0, 0, \"seed\")",
             'protocol_version = "HTTP/1.1"',
             "ProxyHandler({})",
             "server.shutdown()",
@@ -1669,10 +1672,11 @@ class RepositoryContractTests(unittest.TestCase):
             "do not forge private approval fields",
             "invokes all nine typed tools through the same stdio",
             "local upload/download fixtures must remain\nunchanged",
-            "positive, fully local isolated-profile chain",
+            "forward-compatible positive branch",
             "fresh `semantic_v2` action refs",
             "tri-state `active` may still be `null`",
             "waits for a fresh active-app readback",
+            "any other error or\npage effect fails the gate",
         ):
             self.assertIn(marker, reference)
         for prohibited in (

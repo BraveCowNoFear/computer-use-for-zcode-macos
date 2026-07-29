@@ -284,14 +284,17 @@ deliberately unknown session target must all return the exact structured
 fixtures,
 then use a disposable installed Chrome/Edge profile only as a proven Chromium
 executable and require `browser_prepare` to launch a distinct driver-owned
-isolated browser. The gate binds that new native window exactly, navigates only
-and explicitly fronts only that disposable window through `bring_to_front`,
-waits for a fresh active-app readback, navigates only to a loopback fixture,
-obtains semantic action refs, performs one DOM-event
-click and one trusted replace-type, re-snapshots after each mutation, proves
-the visible counter/input values, ends the session, and verifies that only the
-driver browser closes while the source browser remains until its separate
-owned cleanup,
+isolated browser. The gate binds that new native window exactly and explicitly
+fronts only that disposable window through `bring_to_front`,
+waits for a fresh active-app readback, and attempts to navigate only to a
+loopback fixture. When the pinned Cua Driver can navigate, the gate obtains
+semantic action refs, performs one DOM-event click and one trusted replace-type,
+re-snapshots after each mutation, and proves the visible counter/input values.
+The current signed 0.13.1 macOS build instead returns its exact 20-second CDP
+`Page.navigate` timeout before making any loopback request; that compatibility
+branch passes only after the independent fixture oracle proves zero page effect.
+Both branches end the session and verify that only the driver browser closes
+while the source browser remains until its separate owned cleanup,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page
 mutation reaches normal pid/window validation instead of the upstream

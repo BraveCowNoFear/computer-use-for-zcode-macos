@@ -200,17 +200,24 @@ proves real transport, argument, host-proof, and
 tool dispatch without requiring TCC or touching a person's browser profile;
 it does not substitute for the logged-in Mac live-page gate described above.
 
-The next signed-primary gate is a positive, fully local isolated-profile chain.
+The next signed-primary gate is a fully local isolated-profile compatibility
+chain with a forward-compatible positive branch.
 It launches an installed Chrome/Edge binary with a disposable source profile,
 then requires `browser_prepare({allow_launch:true,profile:{mode:"isolated_new"}})`
 to return a different driver-owned pid and exact side-effect/endpoint proof.
 Only the prepared window is bound. The gate calls `bring_to_front` on that
 exact disposable pid/window and waits for a fresh active-app readback before
-it navigates to a loopback fixture, obtains fresh `semantic_v2` action refs,
-applies a DOM-event click and trusted replace-type, and re-snapshots after each
-mutation to prove the counter and input value. The disposable browser has
-exactly one returned tab; its tri-state `active` may still be `null` at the
-initial binding because the empty tab has no unique title proof.
+it attempts to navigate to a loopback fixture. When navigation succeeds, it
+obtains fresh `semantic_v2` action refs, applies a DOM-event click and trusted
+replace-type, and re-snapshots after each mutation to prove the counter and
+input value. The pinned signed Cua Driver 0.13.1 currently returns the exact
+20-second CDP `Page.navigate` timeout on both hosted macOS architectures before
+the fixture receives a request. That known-dependency branch is accepted only
+when the independent fixture state remains exactly clean; any other error or
+page effect fails the gate. The positive branch will run automatically when
+the dependency recovers. The disposable browser has exactly one returned tab;
+its tri-state `active` may still be `null` at the initial binding because the
+empty tab has no unique title proof.
 `end_session` must close the prepared windows while the source
 window remains; the verifier then kills only that owned source pid and removes
 both temporary fixtures. No TCC grant, external page, personal browser profile,
