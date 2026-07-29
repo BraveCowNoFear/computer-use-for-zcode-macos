@@ -528,6 +528,8 @@ class RepositoryContractTests(unittest.TestCase):
             "driver-owned browser cleanup",
             "exact driver-owned browser binding diagnostics",
             'tabs[0].get("active") in {True, False, None}',
+            'client.call(\n        "bring_to_front",',
+            "prepared browser activation readback",
             'protocol_version = "HTTP/1.1"',
             "ProxyHandler({})",
             "server.shutdown()",
@@ -1669,7 +1671,8 @@ class RepositoryContractTests(unittest.TestCase):
             "local upload/download fixtures must remain\nunchanged",
             "positive, fully local isolated-profile chain",
             "fresh `semantic_v2` action refs",
-            "tri-state `active` may remain `null`",
+            "tri-state `active` may still be `null`",
+            "waits for a fresh active-app readback",
         ):
             self.assertIn(marker, reference)
         for prohibited in (

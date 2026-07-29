@@ -222,7 +222,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 不启动 setup 拒绝，其余状态、导航、点击、输入、指针、对话框、上传和下载调用必须针对故意不存在的
 会话 target 统一返回精确结构化 `browser_binding_stale`，并证明本地上传/下载探针没有变化；随后只把
 一次性 Chrome/Edge 用户目录当作已证明的 Chromium 可执行文件，让 `browser_prepare` 启动另一个独立的
-driver-owned 隔离浏览器，精确绑定其原生窗口，只导航到回环测试页，从语义快照取得 action ref，完成一次
+driver-owned 隔离浏览器，精确绑定其原生窗口，并通过 `bring_to_front` 只激活这个一次性窗口，等待新的
+前台 App 回读后再只导航到回环测试页，从语义快照取得 action ref，完成一次
 DOM-event 点击与一次 trusted 覆盖输入，每次变更后重新快照并证明计数器/输入值；结束会话必须只关闭驱动
 浏览器，源浏览器保持存活直到单独的自有清理；再通过 ZCode
 实际使用的 stdio MCP 代理只终止一个 CI 自己创建的临时进程；冷启动 App 的清理还会

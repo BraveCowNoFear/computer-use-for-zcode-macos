@@ -285,7 +285,9 @@ fixtures,
 then use a disposable installed Chrome/Edge profile only as a proven Chromium
 executable and require `browser_prepare` to launch a distinct driver-owned
 isolated browser. The gate binds that new native window exactly, navigates only
-to a loopback fixture, obtains semantic action refs, performs one DOM-event
+and explicitly fronts only that disposable window through `bring_to_front`,
+waits for a fresh active-app readback, navigates only to a loopback fixture,
+obtains semantic action refs, performs one DOM-event
 click and one trusted replace-type, re-snapshots after each mutation, proves
 the visible counter/input values, ends the session, and verifies that only the
 driver browser closes while the source browser remains until its separate

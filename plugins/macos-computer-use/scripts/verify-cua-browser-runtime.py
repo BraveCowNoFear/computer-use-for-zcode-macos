@@ -415,6 +415,39 @@ def wait_for_binding(
     return selected
 
 
+def activate_prepared_browser(client: Any, pid: int, window_id: int) -> None:
+    activated, content = client.call(
+        "bring_to_front", {"pid": pid, "window_id": window_id}
+    )
+    value = require_fields(
+        "prepared browser activation",
+        activated,
+        {"pid", "window_id", "activated", "path"},
+    )
+    if (
+        value["pid"] != pid
+        or value["window_id"] != window_id
+        or value["activated"] is not True
+        or value["path"] not in {"skylight", "cocoa"}
+    ):
+        fail(f"prepared browser activation drifted: {value}")
+    require_text(
+        "prepared browser activation",
+        content,
+        f"Brought pid {pid} to the foreground.",
+    )
+
+    def active() -> bool:
+        apps, _ = client.call("list_apps", {})
+        return isinstance(apps, dict) and any(
+            app.get("pid") == pid and app.get("active") is True
+            for app in apps.get("apps", [])
+            if isinstance(app, dict)
+        )
+
+    wait_until("prepared browser activation readback", active, timeout=10)
+
+
 def require_snapshot(
     client: Any, session: str, target: str, tab: str
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -524,10 +557,13 @@ def main() -> int:
             },
         )
         prepared_pid = require_prepare(prepared_value, prepared_content, source_pid)
-        _, bound = wait_for_binding(client, browser_session, prepared_pid, product)
+        prepared_window_id, bound = wait_for_binding(
+            client, browser_session, prepared_pid, product
+        )
         target = bound["target_id"]
         tabs = bound["tabs"]
         tab = tabs[0]["tab_id"]
+        activate_prepared_browser(client, prepared_pid, prepared_window_id)
 
         navigated, navigated_content = client.call(
             "browser_navigate",

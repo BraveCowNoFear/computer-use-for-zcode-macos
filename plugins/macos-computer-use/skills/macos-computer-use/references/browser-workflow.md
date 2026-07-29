@@ -204,12 +204,14 @@ The next signed-primary gate is a positive, fully local isolated-profile chain.
 It launches an installed Chrome/Edge binary with a disposable source profile,
 then requires `browser_prepare({allow_launch:true,profile:{mode:"isolated_new"}})`
 to return a different driver-owned pid and exact side-effect/endpoint proof.
-Only the prepared window is bound. It navigates to a loopback fixture, obtains
-fresh `semantic_v2` action refs, applies a DOM-event click and trusted
-replace-type, and re-snapshots after each mutation to prove the counter and
-input value. The disposable browser has exactly one returned tab; its
-tri-state `active` may remain `null` because the gate never activates or
-foregrounds the window. `end_session` must close the prepared windows while the source
+Only the prepared window is bound. The gate calls `bring_to_front` on that
+exact disposable pid/window and waits for a fresh active-app readback before
+it navigates to a loopback fixture, obtains fresh `semantic_v2` action refs,
+applies a DOM-event click and trusted replace-type, and re-snapshots after each
+mutation to prove the counter and input value. The disposable browser has
+exactly one returned tab; its tri-state `active` may still be `null` at the
+initial binding because the empty tab has no unique title proof.
+`end_session` must close the prepared windows while the source
 window remains; the verifier then kills only that owned source pid and removes
 both temporary fixtures. No TCC grant, external page, personal browser profile,
 or physical input is involved.
