@@ -273,6 +273,9 @@ manual stop from the prior connection is unconditional,
 then record one session-cursor toggle, restore it, replay that authentic local
 turn through the public `replay_trajectory` dispatcher, prove the toggle was
 re-applied, and restore it again without TCC or physical input,
+execute `install_ffmpeg` only in its non-running no-confirm preview form, and
+validate the explicit read-only `check_for_update` release state/text without
+sending any captured automation data,
 and terminate only a disposable CI-owned process through the same stdio MCP
 proxy ZCode uses before the job passes. That proxy must prove legacy page
 mutation reaches normal pid/window validation instead of the upstream

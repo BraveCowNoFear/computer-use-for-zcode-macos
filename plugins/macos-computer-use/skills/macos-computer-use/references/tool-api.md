@@ -285,6 +285,12 @@ repin it. The launcher disables periodic update checking, so an ordinary GUI
 task makes no such request. This call receives no screenshot, AX tree,
 clipboard data, or input payload.
 
+The signed-primary CI gate explicitly exercises this advisory outside ordinary
+GUI work. It pins the nine-field release state, ISO-8601 check time, version/link
+consistency, and exact available/up-to-date/failure summary. A network failure
+is still a well-formed read-only result, not a reason to alter the audited
+runtime. This verifier call sends no captured automation data.
+
 `check_permissions({prompt:false})` is the read-only MCP inspection call.
 Pinned 0.13.1 refuses public `prompt:true` calls before platform dispatch in
 every permission mode. This is a macOS TCC boundary, not a plugin action-risk

@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.29"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.30"},
             },
         )
         expected = {
@@ -345,6 +345,108 @@ def require_text_content(
     if value != expected:
         fail(f"{name} text content drifted: {value}")
     return value
+
+
+def require_ffmpeg_preview(name: str, value: Any, content: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("ran") is not False:
+        fail(f"{name} did not remain a non-running preview: {value}")
+    if value.get("installed") is True:
+        result = require_object(name, value, {"installed", "ran", "path"})
+        path = result["path"]
+        if (
+            not isinstance(path, str)
+            or not path
+            or Path(path).name != "ffmpeg"
+            or shutil.which(path) is None
+        ):
+            fail(f"{name} returned an unresolved existing ffmpeg path: {path!r}")
+        require_text_content(
+            name,
+            content,
+            f"✅ ffmpeg already available ({path}). Nothing to install.",
+        )
+        return result
+    if value.get("installed") is False:
+        result = require_object(
+            name, value, {"installed", "ran", "manager", "command"}
+        )
+        if result["manager"] != "brew" or result["command"] != "brew install ffmpeg":
+            fail(f"{name} returned the wrong macOS install preview: {result}")
+        require_text_content(
+            name,
+            content,
+            "ffmpeg is not installed. To install it via brew, re-call "
+            "install_ffmpeg with confirm=true.\n\n"
+            "Command that will run:\n  brew install ffmpeg",
+        )
+        return result
+    fail(f"{name}.installed is not boolean: {value}")
+
+
+UPDATE_STATE_FIELDS = {
+    "current_version",
+    "latest_version",
+    "update_available",
+    "source",
+    "checked_at",
+    "cache_hit",
+    "install_command",
+    "release_notes_url",
+    "error",
+}
+
+
+def require_update_state(name: str, value: Any, content: Any) -> dict[str, Any]:
+    state = require_object(name, value, UPDATE_STATE_FIELDS)
+    if (
+        state["current_version"] != "0.13.1"
+        or state["source"] != "github_releases"
+        or type(state["update_available"]) is not bool
+        or type(state["cache_hit"]) is not bool
+        or not isinstance(state["checked_at"], str)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", state["checked_at"])
+        is None
+    ):
+        fail(f"{name} returned malformed update identity/state: {state}")
+    latest = state["latest_version"]
+    error = state["error"]
+    if latest is not None and (
+        not isinstance(latest, str)
+        or re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", latest) is None
+    ):
+        fail(f"{name}.latest_version is neither semver nor null: {latest!r}")
+    if error is not None and (not isinstance(error, str) or not error):
+        fail(f"{name}.error is neither a non-empty string nor null: {error!r}")
+    if error is not None:
+        if (
+            latest is not None
+            or state["update_available"] is not False
+            or state["install_command"] is not None
+            or state["release_notes_url"] is not None
+        ):
+            fail(f"{name} returned inconsistent failed-update state: {state}")
+        summary = f"Update check failed: {error}"
+    elif state["update_available"]:
+        if latest is None:
+            fail(f"{name} reported an update without a latest version")
+        if (
+            state["install_command"]
+            != "curl -fsSL https://cua.ai/driver/install.sh | bash"
+            or state["release_notes_url"]
+            != f"https://github.com/trycua/cua/releases/tag/cua-driver-rs-v{latest}"
+        ):
+            fail(f"{name} returned inconsistent update links: {state}")
+        summary = f"Update available: cua-driver {latest} (you have 0.13.1)."
+    else:
+        if (
+            latest is None
+            or state["install_command"] is not None
+            or state["release_notes_url"] is not None
+        ):
+            fail(f"{name} returned inconsistent up-to-date state: {state}")
+        summary = "Up to date (cua-driver 0.13.1)."
+    require_text_content(name, content, summary)
+    return state
 
 
 HEALTH_CHECK_NAMES = (
@@ -1483,6 +1585,12 @@ def main() -> int:
             if advertised[name]["annotations"] != expected:
                 fail(f"tools/list service annotations drifted for {name}")
 
+        ffmpeg_value, ffmpeg_content = client.call("install_ffmpeg")
+        require_ffmpeg_preview("install_ffmpeg preview", ffmpeg_value, ffmpeg_content)
+
+        update_value, update_content = client.call("check_for_update")
+        require_update_state("check_for_update", update_value, update_content)
+
         filtered_health, _ = client.call(
             "health_report", {"include": ["binary_version"]}
         )
@@ -2439,7 +2547,7 @@ def main() -> int:
             shutil.rmtree(directory, ignore_errors=True)
 
     print(
-        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory and recorder/replay responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
+        "Verified exact MCP handshake/errors, unrestricted legacy page mutation routing, permission-free desktop inventory, recorder/replay, and non-running service-helper responses, primary diagnostics, complete schemas, connection isolation, idempotent/conflict/revival native session lifecycle, app/cursor control, and process control over stdio MCP."
     )
     return 0
 

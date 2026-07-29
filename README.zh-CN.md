@@ -216,7 +216,8 @@ python3 -m unittest discover -s plugins/macos-computer-use/tests -v
 `session.json` 的前提下完成自有无视频录制的启动、双连接读回与停止，真实证明第二条
 连接会接管全局 owner、旧连接的手动停止仍会无条件结束它；随后录制一次会话语义光标开关、
 恢复状态，再通过公开 `replay_trajectory` 调度器重放这条真实本地轨迹，证明状态被重新应用并最终恢复，
-整个过程不需要 TCC 或物理输入；再通过 ZCode
+整个过程不需要 TCC 或物理输入；`install_ffmpeg` 只执行无 `confirm`、绝不运行安装器的预览形态，
+显式只读 `check_for_update` 则只校验公开 release 状态与文字且不发送任何自动化捕获内容；再通过 ZCode
 实际使用的 stdio MCP 代理只终止一个 CI 自己创建的临时进程；冷启动 App 的清理还会
 同时等待进程与最终一致的 App 清单移除该 pid。App 运行摘要、窗口数量摘要、整数光标
 位置文字以及主显示器点/缩放文字都必须由同一份结构化返回精确生成。stdio 门禁还会拒绝畸形、重复、缺失或

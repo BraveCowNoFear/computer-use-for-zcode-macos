@@ -382,6 +382,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"tools/list.risk drifted', mcp_runtime)
         self.assertIn('"check_for_update": {', mcp_runtime)
         self.assertIn('"install_ffmpeg": {', mcp_runtime)
+        self.assertIn('client.call("install_ffmpeg")', mcp_runtime)
+        self.assertIn('client.call("check_for_update")', mcp_runtime)
+        self.assertIn("def require_ffmpeg_preview(", mcp_runtime)
+        self.assertIn("def require_update_state(", mcp_runtime)
         self.assertIn("if advertised_names != required:", mcp_runtime)
         self.assertIn('"tools/list surface drifted: "', mcp_runtime)
         self.assertIn('"tools/list returned duplicate tool names:', mcp_runtime)
@@ -1110,6 +1114,112 @@ class RepositoryContractTests(unittest.TestCase):
                 session=session,
             )
 
+    def test_primary_service_helper_validators_reject_drift(self):
+        path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
+        spec = importlib.util.spec_from_file_location(
+            "zcode_primary_service_helper_contract", path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        ffmpeg_preview = {
+            "installed": False,
+            "ran": False,
+            "manager": "brew",
+            "command": "brew install ffmpeg",
+        }
+        ffmpeg_content = [
+            {
+                "type": "text",
+                "text": (
+                    "ffmpeg is not installed. To install it via brew, re-call "
+                    "install_ffmpeg with confirm=true.\n\n"
+                    "Command that will run:\n  brew install ffmpeg"
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_ffmpeg_preview(
+                "ffmpeg preview", ffmpeg_preview, ffmpeg_content
+            ),
+            ffmpeg_preview,
+        )
+        with self.assertRaisesRegex(RuntimeError, "non-running preview"):
+            module.require_ffmpeg_preview(
+                "drifted ffmpeg preview",
+                dict(ffmpeg_preview, ran=True),
+                ffmpeg_content,
+            )
+
+        up_to_date = {
+            "current_version": "0.13.1",
+            "latest_version": "0.13.1",
+            "update_available": False,
+            "source": "github_releases",
+            "checked_at": "2026-07-29T12:00:00Z",
+            "cache_hit": False,
+            "install_command": None,
+            "release_notes_url": None,
+            "error": None,
+        }
+        up_to_date_content = [
+            {"type": "text", "text": "Up to date (cua-driver 0.13.1)."}
+        ]
+        self.assertEqual(
+            module.require_update_state(
+                "up-to-date check", up_to_date, up_to_date_content
+            ),
+            up_to_date,
+        )
+
+        available = dict(
+            up_to_date,
+            latest_version="0.13.2",
+            update_available=True,
+            cache_hit=True,
+            install_command="curl -fsSL https://cua.ai/driver/install.sh | bash",
+            release_notes_url=(
+                "https://github.com/trycua/cua/releases/tag/"
+                "cua-driver-rs-v0.13.2"
+            ),
+        )
+        available_content = [
+            {
+                "type": "text",
+                "text": (
+                    "Update available: cua-driver 0.13.2 "
+                    "(you have 0.13.1)."
+                ),
+            }
+        ]
+        self.assertEqual(
+            module.require_update_state(
+                "available update", available, available_content
+            ),
+            available,
+        )
+
+        failed = dict(
+            up_to_date,
+            latest_version=None,
+            error="network unavailable",
+        )
+        failed_content = [
+            {"type": "text", "text": "Update check failed: network unavailable"}
+        ]
+        self.assertEqual(
+            module.require_update_state("failed update", failed, failed_content),
+            failed,
+        )
+        with self.assertRaisesRegex(RuntimeError, "inconsistent failed-update state"):
+            module.require_update_state(
+                "drifted failed update",
+                dict(failed, latest_version="0.13.1"),
+                failed_content,
+            )
+
     def test_primary_session_lifecycle_validators_reject_drift(self):
         path = PLUGIN / "scripts" / "verify-cua-mcp-runtime.py"
         spec = importlib.util.spec_from_file_location(
@@ -1536,9 +1646,21 @@ class RepositoryContractTests(unittest.TestCase):
             "`evidence.json` classifies each requested capture phase",
             "`app_state.json`/`screenshot.png` are compatibility aliases",
             "Click-family actions may also produce `click.png`",
+            "must never run a package manager",
+            "rejects any response claiming an installer ran",
         ):
             self.assertIn(marker, reference)
         self.assertIn("does not narrow Full Access", reference)
+
+        tool_api = (
+            PLUGIN
+            / "skills"
+            / "macos-computer-use"
+            / "references"
+            / "tool-api.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("pins the nine-field release state", tool_api)
+        self.assertIn("sends no captured automation data", tool_api)
 
     def test_readmes_and_project_memory_exist(self):
         for path in (

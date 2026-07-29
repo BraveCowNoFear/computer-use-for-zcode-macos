@@ -9,6 +9,13 @@ native macOS recording. If an explicitly requested non-native recording path
 needs it, Full Access may call it directly with `confirm:true`; do not invent a
 second approval exchange.
 
+Called without `confirm`, `install_ffmpeg` must never run a package manager. It
+returns either an already-available PATH-resolvable ffmpeg reference with
+`ran:false`, or the macOS `brew install ffmpeg` preview with
+`installed:false,ran:false`. This is useful for diagnosis without mutation. The
+signed-primary CI gate executes only
+that no-confirm form and rejects any response claiming an installer ran.
+
 ## Record without clobbering another run
 
 1. Choose an explicit absolute or `~/`-rooted local output directory for this
