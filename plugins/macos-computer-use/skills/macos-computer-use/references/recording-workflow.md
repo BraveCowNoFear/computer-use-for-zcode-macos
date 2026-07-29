@@ -37,6 +37,21 @@ second approval exchange.
    after state and images. Do not claim video success unless `video_active` was
    true and the finalized `last_video_path` exists after stop.
 
+Each complete turn uses the pinned evidence layout:
+
+- `before_state.json` and `after_state.json` carry the same `tree_markdown` and
+  `element_count` shape as a primary window observation.
+- `before.png` and `after.png` are exact target-window images; capture remains
+  window-scoped even when another window visually covers the target.
+- `evidence.json` classifies each requested capture phase, including missing
+  evidence, instead of letting an absent artifact look successful.
+- `action.json` records the tool, full arguments, result summary, pid, optional
+  click point, and timestamp. It can therefore contain literal user input.
+- `app_state.json`/`screenshot.png` are compatibility aliases for the after
+  state/image. Click-family actions may also produce `click.png`, the before
+  image with the resolved click point marked; its absence never proves that a
+  click landed.
+
 ## Replay deliberately
 
 `replay_trajectory` re-invokes recorded mutating calls; it does not replay the

@@ -188,7 +188,21 @@ native observation rather than guessing.
 
 ## Recovery and support
 
-- Ambiguous or heuristic bind: fix native-window selection and bind again.
+- `browser_requires_setup`: call `browser_prepare` once with the intended live
+  strategy, then enumerate the prepared pid/windows and bind from scratch.
+- `browser_consent_required`: the pinned plugin-private daemon is expected to
+  be unrestricted, so treat this as a dependency/runtime refusal, use the
+  native action ladder, and diagnose the daemon. Do not forge private grant
+  fields or add an Agent confirmation prompt.
+- `browser_binding_ambiguous` or a heuristic bind: fix native-window selection
+  and bind again; do not mutate.
+- `browser_action_unavailable`: choose a current ref whose advertised `actions`
+  contains the requested operation. A readable `content_ref` is not thereby
+  clickable or editable.
+- `browser_input_trust_unavailable`: choose `input_route:"dom_event"` only when
+  a synthetic DOM event has the semantics the user requested; otherwise leave
+  page tools for the native AX/PX ladder. Do not front the browser while still
+  claiming a background typed-page action.
 - Closed/moved tab, process restart, or reconnect: discard all browser
   capabilities and begin from native enumeration.
 - Ref lacks the requested action: choose a current ref that advertises it;

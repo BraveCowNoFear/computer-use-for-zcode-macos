@@ -197,9 +197,14 @@ it is a delivery fallback, not a plugin approval boundary.
 Every action uses a fresh point-in-time loop:
 
 1. Request only the signal needed for the next decision. For normal visual work
-   use `include_screenshot:true,include_text:false`; for an AX-indexed action use
-   `include_screenshot:false,include_text:true`. Request both only when the next
-   decision genuinely needs pixel/AX disambiguation or dual verification.
+   the primary `get_window_state({session,pid,window_id})` already returns both
+   its AX `tree_markdown` and screenshot. Pass `include_screenshot:false` only
+   for an AX-only turn; primary `get_window_state` has no `include_text` field.
+   Its accepted `capture_mode` is a compatibility-only no-op, so never pass
+   `vision` to try to suppress AX or `ax` to try to suppress pixels. On the
+   direct fallback, the different `get_window_state` schema accepts its own
+   `include_screenshot` and `include_text` booleans; request one or both there
+   according to the next decision.
 2. Ground exactly one action in that response. When an element includes an
    opaque `element_token`, prefer it over `element_index`; otherwise use the
    index. Both are bound to the exact pid/window snapshot and become stale on
@@ -222,6 +227,17 @@ Every action uses a fresh point-in-time loop:
    If an older response omits these fields, decide only from the refreshed state.
 5. Immediately call `get_window_state` again and verify the visible or AX
    result before continuing.
+
+The primary response exposes `tree_markdown` plus `element_count`. A captured
+image reports `screenshot_width`, `screenshot_height`, and
+`screenshot_mime_type`; successful window mapping additionally reports
+`window_bounds`, `screenshot_scale`, and `screenshot_frame_valid:true`. Use
+returned geometry rather than the size of a UI thumbnail, and do not dispatch
+a window-pixel action when `screenshot_frame_valid:false`. For a
+context-constrained local client, an explicit task-owned `screenshot_out_file`
+writes the image locally, omits the MCP image block, and returns
+`screenshot_file_path`; ordinary ZCode image blocks should stay inline. This
+output option changes only transport, never freshness or coordinates.
 
 Treat the refreshed screenshot as the final truth for visible outcomes. AX can
 briefly echo a requested value before Electron, Catalyst, or a custom-drawn app

@@ -606,7 +606,15 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("only when exactly one candidate remains", skill)
         self.assertIn("Input timeout means outcome unknown", skill)
         self.assertIn("Request only the signal needed", skill)
-        self.assertIn("include_screenshot:true,include_text:false", skill)
+        self.assertIn("primary `get_window_state` has no `include_text` field", skill)
+        self.assertIn("accepted `capture_mode` is a compatibility-only no-op", skill)
+        self.assertIn("direct fallback, the different `get_window_state` schema", skill)
+        self.assertIn("`tree_markdown` plus `element_count`", skill)
+        self.assertIn("`screenshot_width`, `screenshot_height`, and\n`screenshot_mime_type`", skill)
+        self.assertIn("`window_bounds`, `screenshot_scale`, and `screenshot_frame_valid:true`", skill)
+        self.assertIn("task-owned `screenshot_out_file`\nwrites the image locally", skill)
+        self.assertIn("and returns\n`screenshot_file_path`", skill)
+        self.assertNotIn("use `include_screenshot:true,include_text:false`", skill)
         self.assertIn("always pass its fresh\n`screenshotId`", skill)
         self.assertIn("omitting it changes the coordinate space", skill)
         self.assertIn('`effect:"confirmed"` with `verified:true`', skill)
@@ -649,6 +657,11 @@ class RepositoryContractTests(unittest.TestCase):
             "pixel_to_css_scale_x",
             "pixel_to_css_scale_y",
             "browser_ref_stale",
+            "browser_requires_setup",
+            "browser_consent_required",
+            "browser_binding_ambiguous",
+            "browser_action_unavailable",
+            "browser_input_trust_unavailable",
             'input_route:"dom_event"',
             "replace:true",
             "browser_set_input_files",
@@ -689,6 +702,11 @@ class RepositoryContractTests(unittest.TestCase):
             "Element\nindices and tokens are snapshot-scoped and must not be replayed",
             "`replay_trajectory({dir,delay_ms,stop_on_error:true})`",
             "Never infer success from the replay count alone",
+            "`before_state.json` and `after_state.json` carry the same `tree_markdown`",
+            "`before.png` and `after.png` are exact target-window images",
+            "`evidence.json` classifies each requested capture phase",
+            "`app_state.json`/`screenshot.png` are compatibility aliases",
+            "Click-family actions may also produce `click.png`",
         ):
             self.assertIn(marker, reference)
         self.assertIn("does not narrow Full Access", reference)

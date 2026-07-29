@@ -110,6 +110,10 @@ root/data template variables.
 - Temporarily opt one MCP connection into uncapped native-size window PNGs for
   pixel-perfect verification, prove a peer connection retains its own
   effective setting, and restore without changing the persisted global default.
+- Consume the signed primary's real observation shape: AX `tree_markdown` and
+  screenshot arrive together by default, screenshot omission is the only
+  modality performance knob, and file output preserves returned image geometry
+  without pretending the compatibility-only `capture_mode` changes capture.
 - Hand an existing local file/folder or resource URL to an exact native app
   through `launch_app.urls`, with structured missing-path errors, returned
   pid/window binding, focus-suppression readback, fresh observation, and exact
@@ -285,6 +289,9 @@ native/browser contracts and requires every exact tool name to be discoverable
 through the Skill documentation. This keeps service helpers such as the
 diagnostic-only `get_screen_size` and explicit `check_for_update` advisory from
 being schema-visible but operationally hidden from ZCode agents.
+It also rejects the fallback-only `include_text` field in the primary workflow
+and locks the structured macOS browser recovery codes plus exact local
+trajectory evidence layout into the agent-facing references.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants. Hosted runners do not guarantee those grants, so each
 macOS job runs the disposable direct-fallback GUI smoke after its native TCC
