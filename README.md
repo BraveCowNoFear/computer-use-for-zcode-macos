@@ -234,9 +234,9 @@ running and cleans up only a temporary grant daemon it started itself.
 
 The contract and MCP transport tests run on Windows and macOS. The macOS CI job
 also imports the native fallback, verifies the pinned release archive and Cua
-AI signer identity, parses all nine typed-browser and nineteen native
-lifecycle/configuration request schemas from that signed binary, and runs the
-real plugin-owned first-install launcher.
+AI signer identity, parses all nine typed-browser and thirty-four native
+observation/action/lifecycle/configuration request schemas from that signed
+binary, and runs the real plugin-owned first-install launcher.
 A real background click/type/screenshot loop requires an unlocked interactive
 Mac with TCC grants, which hosted CI runners do not provide.
 
