@@ -138,6 +138,12 @@ MCP `isError:true`. An unknown exact bundle ID returns structured
 `{error:"FILE_NOT_FOUND",url,path}` and performs no launch. Handle the
 structured business error and retain the current process/window grounding;
 do not reinterpret it as daemon loss, a TCC denial, or an approval handoff.
+Success text is an exact projection of the structured result:
+`Launched {name} (pid {pid}) in background.`, followed when nonempty by the
+ordered quoted/`(no title)` window list and exact
+`get_window_state(pid: {pid}, window_id)` hint. It is presentation, not a
+second targeting surface; act from the structured pid/windows and refresh
+after any later state change.
 
 Pinned primary session state always contains `session`, `capture_scope`,
 `effective_scope`, `desktop_unlocked`, `escalation_reason`, and

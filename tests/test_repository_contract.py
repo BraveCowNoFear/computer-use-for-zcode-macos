@@ -567,6 +567,17 @@ class RepositoryContractTests(unittest.TestCase):
         module.require_launch_result(
             "launch",
             launched,
+            [
+                {
+                    "type": "text",
+                    "text": (
+                        "Launched Calculator (pid 321) in background.\n\n"
+                        "Windows:\n"
+                        '- "Calculator" [window_id: 456]\n'
+                        "→ Call get_window_state(pid: 321, window_id) to inspect."
+                    ),
+                }
+            ],
             "com.apple.calculator",
             "Calculator",
         )
@@ -574,6 +585,15 @@ class RepositoryContractTests(unittest.TestCase):
             module.require_launch_result(
                 "drifted launch",
                 dict(launched, windows=[dict(launch_window, pid=999)]),
+                [{"type": "text", "text": "unused"}],
+                "com.apple.calculator",
+                "Calculator",
+            )
+        with self.assertRaisesRegex(RuntimeError, "text content drifted"):
+            module.require_launch_result(
+                "drifted launch text",
+                launched,
+                [{"type": "text", "text": "wrong"}],
                 "com.apple.calculator",
                 "Calculator",
             )

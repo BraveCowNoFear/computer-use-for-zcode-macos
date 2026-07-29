@@ -212,9 +212,12 @@ the target and retry. Bind only a returned window that fresh state proves
 represents that exact target. The slow URL/file launch path tries to preserve
 the previous frontmost app and may return
 `self_activation_suppressed`; treat `false` or a missing field as a reason to
-refresh `list_apps`/windows, not as launch failure or permission denial. Use the
-typed `browser_navigate` route instead when navigating an already bound,
-supported browser page target.
+    refresh `list_apps`/windows, not as launch failure or permission denial. Use the
+    typed `browser_navigate` route instead when navigating an already bound,
+    supported browser page target.
+The success text mirrors the returned app name, pid, immediate windows, and
+window IDs, including `(no title)`; use it as a readable summary only. The
+structured launch object and a fresh exact inventory remain target authority.
 
 `bring_to_front({pid,window_id})` is an explicit persistent activation, not a
 normal input rung. Use it only when the requested outcome requires that exact

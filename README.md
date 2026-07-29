@@ -284,7 +284,8 @@ App and window discovery also pins the exact nine-field app
 record and its running-only summary, ten-field WindowServer record and count
 summary, integer cursor position and exact position text, and logical main-display
 geometry plus exact point/scale text. It cold-launches a stopped Calculator or TextEdit,
-validates the returned launch-window projection against a fresh full window
+requires the exact background-launch/window summary to be reconstructed from
+the structured result, validates that launch-window projection against a fresh full window
 inventory, kills only that owned pid, and waits for both the
 process and the eventually consistent app inventory to drop it. The public
 MCP `prompt:true` path must fail at the trusted-host
@@ -308,6 +309,9 @@ acknowledgement followed by observed process disappearance, and every nullable
 session-state field plus each exact lifecycle summary/error remains stable
 through idempotency, conflict, one-way escalation, end, the public daemon's
 post-end resurrection guard, and explicit lifecycle-exempt revival.
+Successful `launch_app` presentation is pinned too: its app name, positive pid,
+quoted or untitled returned windows, IDs, and next-step hint must exactly mirror
+the same structured payload without becoming an alternate source of authority.
 Its schema-v1 health report is now response-pinned as well: all eight macOS
 checks remain in canonical order, every entry obeys the exact status/hint/data
 shape, `overall` agrees with the check statuses, and an include-only probe

@@ -230,12 +230,15 @@ Driver `0.13.1` 身份以及 macOS 工作流说明；同一条真实连接还必
 再次启动可以用新 scope 复活同一 ID，随后再次干净结束。
 应用与窗口发现还会锁定九字段 App 记录及运行摘要、十字段 WindowServer 记录及数量摘要、
 整数光标坐标/文字和逻辑主屏幕几何/点缩放文字；冷启动返回的窗口投影必须在随后完整窗口清单中保持同一 pid/window
-身份，避免 Agent 把停止 App 的 pid 0 或 `list_apps` 中故意为空的 `windows` 当成可操作目标。
+身份；后台启动摘要还必须由同一结构化 App/pid/窗口结果精确生成，避免 Agent 把停止 App
+的 pid 0、`list_apps` 中故意为空的 `windows` 或文字中的猜测当成可操作目标。
 同一个签名主后端门禁还会锁定普通工具错误语义：`APP_NOT_INSTALLED` 与
 `FILE_NOT_FOUND` 必须作为结构化 MCP 错误返回且不得启动所选 App；成功的
 `kill_app` 仍是纯文本 SIGKILL 确认，随后必须观察到进程消失；会话在幂等启动、scope
 冲突、单向升级、结束、公开 daemon 的结束后防复活拦截与生命周期豁免的显式复活过程
 中的全部 nullable 字段、精确摘要和结构化错误也必须稳定。
+成功 `launch_app` 的 App 名、正 pid、有标题或无标题窗口、window ID 与后续提示也必须
+逐项匹配同一结构化返回；摘要只用于阅读，不能成为另一套目标权威。
 schema-v1 健康报告的响应也已锁定：八个 macOS 检查保持规范顺序，每项严格遵守
 status/hint/data 形状，`overall` 与各项状态一致；只 include 二进制版本时，其余七项
 必须显式 skip，且整个探针不触碰 TCC。

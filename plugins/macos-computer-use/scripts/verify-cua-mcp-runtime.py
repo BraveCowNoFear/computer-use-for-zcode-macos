@@ -275,7 +275,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.26"},
+                "clientInfo": {"name": "zcode-ci-mcp", "version": "0.17.27"},
             },
         )
         expected = {
@@ -1241,7 +1241,11 @@ def require_cursor_position(
 
 
 def require_launch_result(
-    name: str, value: Any, bundle_id: str, app_name: str
+    name: str,
+    value: Any,
+    content: Any,
+    bundle_id: str,
+    app_name: str,
 ) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) not in (
         {"pid", "bundle_id", "name", "windows"},
@@ -1266,6 +1270,16 @@ def require_launch_result(
         )
         if window["pid"] != value["pid"]:
             fail(f"{name} returned a window owned by another pid: {window}")
+    lines = [f"Launched {value['name']} (pid {value['pid']}) in background."]
+    if value["windows"]:
+        lines.extend(("", "Windows:"))
+        for window in value["windows"]:
+            title = f'"{window["title"]}"' if window["title"] else "(no title)"
+            lines.append(f"- {title} [window_id: {window['window_id']}]")
+        lines.append(
+            f"→ Call get_window_state(pid: {value['pid']}, window_id) to inspect."
+        )
+    require_text_content(name, content, "\n".join(lines))
     return value
 
 
@@ -1759,13 +1773,14 @@ def main() -> int:
         ):
             fail("launch_app FILE_NOT_FOUND mutated the stopped target lifecycle")
 
-        launched, _ = client.call(
+        launched, launched_content = client.call(
             "launch_app",
             {"bundle_id": owned_bundle_id},
         )
         launched = require_launch_result(
             f"launch_app {owned_app_name}",
             launched,
+            launched_content,
             owned_bundle_id,
             owned_app_name,
         )
