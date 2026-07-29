@@ -178,6 +178,9 @@ root/data template variables.
   uploads, and downloads. Every mutation invalidates old refs and is followed
   by a fresh page snapshot; browser chrome, native pickers/dialogs, unsupported
   webviews, and dependency-refused routes stay on the native control ladder.
+  Page mutations reuse the session's semantic cursor without moving the real
+  pointer or changing focus; it appears only for a safely mapped selected tab,
+  and never replaces the following snapshot as completion evidence.
 - Record explicitly requested local action trajectories with ordered pre/post
   screenshots, state, and arguments; refuse to replace another connection's
   daemon-global recording, default video off, and finalize the exact owned

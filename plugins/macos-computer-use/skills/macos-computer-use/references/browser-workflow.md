@@ -33,6 +33,24 @@ dependency refuses a preparation route because it cannot prove endpoint or
 window ownership, use native AX/pixels for that surface; do not weaken the bind
 or claim the dependency's internal boundary was bypassed.
 
+## Keep browser cursor feedback honest
+
+Ref- and coordinate-targeted browser mutations drive the same session-scoped
+semantic cursor overlay as native actions. `browser_click` and click-like
+pointer actions glide and pulse at the live page target; `browser_type` glides
+and pulses at the editable target; hover and scroll glide without inventing a
+click. This is presentation only: it does not move the physical pointer, change
+focus or z-order, replace CDP delivery, or prove that the requested page state
+changed. Always use the following fresh browser snapshot as completion evidence.
+
+The driver rechecks page visibility before drawing. An unselected tab remains
+addressable, but its cursor stays hidden; the selected tab is the only browser
+session whose cursor may be shown in that native window. Use one declared
+session per tab when a recording needs stable distinct colors. If a child-frame
+point cannot be mapped safely into the exact bound native window, accept the
+omitted overlay rather than substituting a guessed point. `browser_navigate`
+has no page target and therefore intentionally creates no cursor motion.
+
 ## Snapshot and capabilities
 
 Snapshot one returned tab with:
